@@ -1,31 +1,26 @@
 """模型 profile 和角色绑定配置声明。"""
 
-from aurora_config import ConfigSpec, ConfigTemplate, config_entries
-from aurora_core.discovery import Plugin
-from aurora_core.ids import Id
+from aurora_config import ConfigSpec, ConfigTemplate
+from aurora_core.ctx import StateKey
 
-from .config import BINDINGS, BINDINGS_SCHEMA, CONFIG, PROFILE_SCHEMA, check_bindings
+from .config import BINDINGS_SCHEMA, PROFILE_SCHEMA, check_bindings
+from .plugins.configuration._meta import BINDINGS, CONFIG, PROFILES, ROLES, configuration_plugin
 
 
-def plugin() -> Plugin:
-    return Plugin(
-        "aurora_model.configuration",
-        (
-            *config_entries(
-                Id("org.aurora.model:configs/profiles"),
-                ConfigSpec(CONFIG, ConfigTemplate("aurora_model", "plugin.config.tomls/profiles.toml"), PROFILE_SCHEMA),
-                provider="aurora_model.configuration",
+def plugin():
+    return configuration_plugin(
+        targets={
+            PROFILES: ConfigSpec(
+                CONFIG, ConfigTemplate("aurora_model", "plugin.config.tomls/profiles.toml"), PROFILE_SCHEMA
             ),
-            *config_entries(
-                Id("org.aurora.model:configs/bindings"),
-                ConfigSpec(
-                    BINDINGS,
-                    ConfigTemplate("aurora_model", "plugin.config.tomls/bindings.toml"),
-                    BINDINGS_SCHEMA,
-                    check=check_bindings,
-                ),
-                provider="aurora_model.configuration",
+            ROLES: ConfigSpec(
+                BINDINGS,
+                ConfigTemplate("aurora_model", "plugin.config.tomls/bindings.toml"),
+                BINDINGS_SCHEMA,
+                check=check_bindings,
             ),
-        ),
-        requires=("aurora_model", "aurora_config"),
+            CONFIG: StateKey(PROFILE_SCHEMA.validate, persistent=False),
+            BINDINGS: StateKey(BINDINGS_SCHEMA.validate, persistent=False),
+        },
+        components={},
     )

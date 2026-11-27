@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["owner", "instance_pattern", "location_field"],
+  "properties": {
+    "owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "instance_pattern": {
+      "type": "string",
+      "minLength": 1
+    },
+    "location_field": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tools": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "aurora-id"
+          },
+          "config": {
+            "type": "object",
+            "default": {}
+          }
+        }
+      }
+    },
+    "include": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "exclude": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

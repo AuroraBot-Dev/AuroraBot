@@ -153,7 +153,7 @@ def environment(tmp_path, monkeypatch):
                 input_state=state("input"),
                 output_state=state("output"),
                 owner="test",
-                resources={},
+                resources={"clients": clients},
                 config={},
             )
             executor.connect(TOOL, instance.plug)

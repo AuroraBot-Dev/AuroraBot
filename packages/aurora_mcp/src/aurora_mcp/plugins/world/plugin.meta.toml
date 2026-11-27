@@ -1,0 +1,44 @@
+schema_version = 2
+
+[plugins.world]
+entry_point = "aurora_mcp.world"
+title = "MCP 世界来源"
+summary = "MCP 世界来源的公开定义与真实实例导出"
+requires = [
+    "aurora_mcp",
+    "aurora_world.sources",
+]
+
+[definitions.WORLD_SOURCE]
+plugin = "world"
+id = "org.aurora.mcp:sources/resources"
+kind = "source"
+summary = "MCP 资源更新的世界来源工厂"
+contract = "source"
+
+[definitions.WORLD_SOURCE.register_to]
+id = "org.aurora.world:registries/sources"
+
+[definitions.WORLD_STATUS]
+plugin = "world"
+id = "org.aurora.mcp:state/world"
+kind = "state_key"
+summary = "MCP 世界来源的非持久观察状态"
+
+[components.source_resources]
+plugin = "world"
+inject = [
+    "ctx",
+]
+plugs = []
+slots = []
+inputs = [
+    "clients",
+]
+resources = [
+    "resources",
+]
+
+[contracts.source]
+format = "json-schema"
+file = "config.schema.json"

@@ -2,28 +2,29 @@
 
 import asyncio
 
-from aurora_control import ExecutionPlug, StateBinding, component_entries
-from aurora_core import Id, entry_from, hook_handler
+from aurora_control import ExecutionPlug, StateBinding
+from aurora_core import Id, plug
+from aurora_core.components import ComponentFactory, InstanceExport, plug_id
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
 from aurora_core.json_data import JsonValue
 from aurora_core.lifecycle import PREPARE, LifecycleComponent
-from aurora_core.registry import DefinitionRegistry, RegistryEntry
+from aurora_core.registry import DefinitionRegistry
 from aurora_core.storage import StorageService
 from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
 
 from .catalog import discover_tools, select_tools
 from .clients import MCPClients
 from .errors import MCPClientError
+from .plugins.tools._meta import COMPONENT, EXECUTE, TOOL_DEFINITIONS, tools_plugin
+from .plugins.tools._meta import PREPARE as CATALOG_PREPARE
 from .tool_execution import MCPTool
-
-COMPONENT = Id("org.aurora.mcp:components/tool")
 
 
 class _Factory:
-    def __init__(self, bridge: "MCPTools", connection_id: str, remote_name: str, timeout: float) -> None:
-        self.bridge, self.connection_id, self.remote_name = bridge, connection_id, remote_name
+    def __init__(self, connection_id: str, remote_name: str, timeout: float) -> None:
+        self.connection_id, self.remote_name = connection_id, remote_name
         self.timeout = timeout
 
     async def __call__(
@@ -38,12 +39,10 @@ class _Factory:
         resources,
         config: dict[str, JsonValue],
     ) -> ToolInstance:
-        if ctx is not self.bridge.ctx or not self.bridge.prepared:
-            raise ValueError("MCP 工具工厂只用于已完成发现的同一宿主")
         if config:
             raise ValueError("MCP 工具实例不接受额外配置；连接与远程名称由 MCP 声明选择")
         tool = MCPTool(
-            self.bridge.clients, self.connection_id, self.remote_name, self.timeout, ctx, input_state, output_state
+            resources["clients"], self.connection_id, self.remote_name, self.timeout, ctx, input_state, output_state
         )
         return ToolInstance(
             ExecutionPlug(
@@ -65,7 +64,7 @@ class MCPTools:
         registry: DefinitionRegistry,
         ctx: Context,
         hooks: HookConnections,
-        clients: MCPClients,
+        clients: MCPClients | None = None,
         *,
         instance_id: str = "aurora_mcp/tools",
     ) -> None:
@@ -77,18 +76,27 @@ class MCPTools:
         self._connected = False
         self._tool_ids: tuple[Id, ...] = ()
 
+    def definitions(self):
+        return [self.registry.get(identity).target.definition for identity in self.tool_ids]
+
     def component(self, *, depends_on: tuple[str, ...] = ()) -> LifecycleComponent:
         """声明客户端依赖，不访问网络；bot components 的 depends_on 应引用本组件。"""
         if self._connected or self.prepared:
             raise RuntimeError("MCP 工具桥已连接或完成准备")
-        entry = entry_from(self.prepare, provider="aurora_mcp.tools")
         self.hooks.connect(
-            PREPARE, entry.id, slot_instance=self.instance_id, handler_instance=self.instance_id, target=self.prepare
+            PREPARE,
+            plug_id(self.prepare),
+            slot_instance=self.instance_id,
+            handler_instance=self.instance_id,
+            target=self.prepare,
         )
         self._connected = True
         return LifecycleComponent(
             self.instance_id, depends_on=tuple(dict.fromkeys((self.clients.instance_id, *depends_on)))
         )
+
+    def bind(self, *, clients):
+        self.clients = clients
 
     @property
     def tool_ids(self) -> tuple[Id, ...]:
@@ -97,7 +105,7 @@ class MCPTools:
             raise RuntimeError("MCP 工具尚未完成发现")
         return self._tool_ids
 
-    @hook_handler("org.aurora.mcp:handlers/tools/prepare", slot=PREPARE)
+    @plug(CATALOG_PREPARE)
     async def prepare(self) -> None:
         if self.prepared:
             raise RuntimeError("MCP 工具已登记；工具集合变化须重建宿主")
@@ -121,29 +129,25 @@ class MCPTools:
                 spec = ToolSpec(
                     COMPONENT,
                     {"name": name, "description": remote.description or "", "parameters": remote.input_schema},
-                    factory=_Factory(self, connection_id, remote.name, server["timeout"]["execution"]),
+                    factory=_Factory(connection_id, remote.name, server["timeout"]["execution"]),
                 )
-                entries.append(
-                    RegistryEntry(
-                        Id(f"org.aurora.mcp:tools/{name}"),
-                        "tool",
-                        spec,
-                        "aurora_mcp.tools",
-                        register_to=TOOLS,
-                    )
-                )
+                entries.append(TOOL_DEFINITIONS.bind(name, spec))
         self.registry.register_many(entries)
         self._tool_ids = tuple(entry.id for entry in entries)
         self.prepared = True
 
 
 def plugin() -> Plugin:
-    """声明工具执行组件和发现入口；启用插件本身不创建连接或发现工具。"""
-    return Plugin(
-        "aurora_mcp.tools",
-        (
-            *component_entries(COMPONENT, MCPTool, MCPTool.execute, provider="aurora_mcp.tools"),
-            entry_from(MCPTools.prepare, provider="aurora_mcp.tools"),
-        ),
-        requires=("aurora_mcp", "aurora_tools"),
+    return tools_plugin(
+        targets={COMPONENT: MCPTool, EXECUTE: MCPTool.execute},
+        components={
+            "catalog": ComponentFactory(
+                MCPTools,
+                lambda instance: InstanceExport(
+                    plugs={CATALOG_PREPARE: instance.prepare}, resources={"catalog": instance}
+                ),
+                plugs=(MCPTools.prepare,),
+                bind=lambda instance, resources: instance.bind(**resources),
+            ),
+        },
     )

@@ -15,7 +15,13 @@ ASSEMBLY = Id("org.aurora.bot:assemblies/mcp")
 
 
 def assemble(
-    *, registry: DefinitionRegistry, ctx: Context, hooks: HookConnections, storage: StorageService, workspace_root: Path
+    *,
+    registry: DefinitionRegistry,
+    ctx: Context,
+    hooks: HookConnections,
+    storage: StorageService,
+    workspace_root: Path,
+    resolve_credential=None,
 ) -> tuple[LifecycleComponent, ...]:
     """同步连接声明；新增工具不写回 TOML，已显式选择的工具保留原实例身份。"""
     from aurora_mcp.clients import MCPClients
@@ -24,11 +30,18 @@ def assemble(
     from .assembly import DefaultAssembly
     from .assembly_config import ToolSelection
 
-    clients = MCPClients(ctx, hooks, workspace_root=workspace_root)
+    clients = MCPClients(
+        ctx, hooks, workspace_root=workspace_root, **({"resolve_env": resolve_credential} if resolve_credential else {})
+    )
     tools = MCPTools(registry, ctx, hooks, clients)
 
     def additions(existing: tuple[ToolSelection, ...]) -> list[ToolSelection]:
         selected = {item["tool"] for item in existing}
+        for item in existing:
+            if Id(item["tool"]) in tools.tool_ids:
+                bot.tool_resources[item["instance_id"]] = {"clients": clients}
+        for identity in tools.tool_ids:
+            bot.tool_resources[identity.local_path] = {"clients": clients}
         return [
             {"tool": str(identity), "instance_id": identity.local_path, "config": {}}
             for identity in tools.tool_ids

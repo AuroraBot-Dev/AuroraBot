@@ -302,7 +302,7 @@ async def declared_source(*, source_id, emit, config, resources):
     return await resources["workshop"].create_source(source_id=source_id, emit=emit, config=config, resources=resources)
 
 
-def assemble(*, registry, ctx, hooks, storage, workspace_root):
+def assemble(*, registry, ctx, hooks, storage, workspace_root, resolve_credential):
     entry = registry.get(INSPECT_TOOL)
     registry.replace(
         replace(

@@ -165,7 +165,7 @@ def test_run_applies_config_before_prepare_and_flushes_stop(tmp_path):
         started = asyncio.Event()
         observations = []
 
-        def factory(*, registry, ctx, hooks, storage, workspace_root):
+        def factory(*, registry, ctx, hooks, storage, workspace_root, resolve_credential):
             logging.getLogger(__name__).info("装配工厂日志")
 
             @hook_handler("dev.test:handlers/prepare", slot=PREPARE)

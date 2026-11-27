@@ -91,7 +91,7 @@ plugins = load_plugins(enabled=[
     'aurora_agent.model', 'aurora_agent.react', 'aurora_tools', 'aurora_agent.react_defaults',
 ])
 assert all(
-    entry.provider == ('aurora_tools' if plugin.name == 'aurora_tools' else 'aurora_agent')
+    entry.provider == plugin.name
     for plugin in plugins for entry in plugin.entries
 )
 source = sys.argv.pop(1)

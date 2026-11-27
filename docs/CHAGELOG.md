@@ -2,6 +2,16 @@
 
 ## 2026-11-27
 
+### 完成 W06 资源导出与工具集合装配
+
+- model 导出 Chat/Choice/Embedding 资源组件与 prepare/clean 方法；导出对象在客户端创建前后保持同一身份，供应商客户端只由资源所有者创建和关闭。模型 profile 通过显式状态引用和选择项提供，凭证通过宿主运行服务解析，不写入配置或 ctx；ModelCall 只借用模型资源。MCPClients、MCPTools 和世界桥导出客户端、目录及来源资源，来源仍通过直接协议执行。
+- ReAct 导出执行插头与六个阶段槽，ReActDefaults 导出三个真实阶段插头；默认阶段改用装配传入的状态地址，删除 connect 及其隐藏五条接线。ModelCall、ReAct 和工具执行器支持显式 options 或配置状态两种独立参数来源；新增同发行包内的 agent.configuration / tools.configuration 可选配置桥及模板。配置和组件参数共用纯契约来源，不维护两份字段约束；完整 Bot 配置拆解仍由 W07 完成。
+- aurora_tools 提供静态/动态 ToolCollection、成员创建、逆序关闭与带工具身份的执行插头；集合从明确目录按 include/exclude、实例名称及状态地址规则创建工具，借用资源由提供方管理。现有 Bot 路径也改用同一集合管理工具成员，删除重复的工厂调用和关闭逻辑；剩余产品选择策略及局部工厂替换随 W07 拆解，不新增总装配工厂。
+- host 接收 collection_connections，并注入按集合限定的 publish_members；集合 prepare 返回前完成实际接线，运行图记录真实成员导出和连接。清单补充可选资源、资源映射与可选状态角色，资源仍只按实例及导出名引用；不解释属性链、不补业务连接、不实现热加载。成员创建或接线失败时关闭已创建成员并传播异常，不跳过失败工具继续启动。
+- model、MCP、agent、tools 的公开定义全部归清单和生成目录；provider 使用所属插件全名。MCP 动态工具范围及登记信息也由清单生成，发现代码只提交成员名称与实现。发现和静态查询不创建客户端或调用目录服务；基础 agent/tools 无需配置包，配置桥按 config extra 安装。公开既有 ID 和业务快照地址保持不变；同步全部构造签名、资源消费者、回归夹具与锁文件，不留旧 ReActDefaults 接口。
+- 新增一条完整文件装配验收：假模型驱动真实 ReAct 五条阶段连接，静态工具与模拟 MCP 目录展开到执行器，只修改 infer 连接即可切换模型，并验证所有者各关闭一次。新增两种集合失败验收覆盖部分创建与发布失败后的逆序清理；扩展既有元信息对账到全部已迁移插件，sdist 隔离构建覆盖 config/control/agent/model/MCP/tools，不重复添加业务协议测试。
+- 验收：日常检查 9.30 秒、完整检查 30.87 秒；1229 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过和 39 条依赖警告。16 个 wheel 构建及干净环境安装通过；安装后的完整文件装配无需 Bot/CLI/world/供应商 SDK，Choice/Embedding 基础资源无需配置包，全部 W06 静态目录无需运行包即可读取。既有 control/tools/agent、模型各 extra、MCP 两个桥、world/memory/host/CLI 的独立运行与恢复保持通过。未增加 worker、超时或重试，未调用真实供应商；README、AGENTS 和其他手写文档继续暂缓统一更新。
+
 ### 完成 W05 世界与记忆能力解耦
 
 - world 拆为同包内的 aurora_world.records 与 aurora_world.sources；删除旧总入口，configuration/environment 和全部消费者显式选择新插件。records 独立拥有状态及归档，sources 借用 records；两者导出真实组件、生命周期方法和资源，配置选择也可通过版本 2 装配连接。来源仍使用直接生命周期协议，SourceFactory 接收应用提供的资源；MCP 与测试来源删除工厂替换机制，改为传入共享资源。

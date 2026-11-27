@@ -172,7 +172,7 @@ async def run(args: argparse.Namespace) -> None:
             if outcome.status != "completed":
                 raise RuntimeError(f"激活未完成：{outcome.status}，{outcome.error}")
             request = ExecutionRequest(handle.run_id)
-            result = assembly.defaults.model.output_state.get(ctx, request)
+            result = assembly.defaults.states["model_output"].get(ctx, request)
             assert isinstance(result, dict)
             print(f"内部输出: {result['text']}")
     finally:

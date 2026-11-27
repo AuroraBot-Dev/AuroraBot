@@ -35,7 +35,10 @@ def test_agent_and_tools_distributions_own_their_plugins_and_definitions():
         assert matches[0].value == f"{path}:plugin"
     tools = load_plugins(enabled=["aurora_tools"])[0]
     assert all(entry.id.namespace == "org.aurora.tools" and entry.provider == "aurora_tools" for entry in tools.entries)
-    assert {point.name for point in metadata.distribution("aurora-tools").entry_points} == {"aurora_tools"}
+    assert {point.name for point in metadata.distribution("aurora-tools").entry_points} == {
+        "aurora_tools",
+        "aurora_tools.configuration",
+    }
     assert not any(point.name == "aurora_agent.tools" for point in entries)
     tools_requirements = metadata.requires("aurora-tools")
     assert tools_requirements is not None
@@ -45,7 +48,7 @@ def test_agent_and_tools_distributions_own_their_plugins_and_definitions():
     )
     plugins = load_plugins(enabled=[*names, "aurora_tools"])
     assert all(
-        entry.id.namespace == "org.aurora.agent" and entry.provider == "aurora_agent"
+        entry.id.namespace == "org.aurora.agent" and entry.provider == plugin.name
         for plugin in plugins
         if plugin.name != "aurora_tools"
         for entry in plugin.entries

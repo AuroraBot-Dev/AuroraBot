@@ -1,0 +1,212 @@
+schema_version = 2
+
+[plugins.model]
+entry_point = "aurora_model"
+title = "模型协议与资源"
+summary = "模型协议与资源的公开定义与真实实例导出"
+requires = []
+
+[definitions.ADAPTERS]
+plugin = "model"
+id = "org.aurora.model:registries/adapters"
+kind = "registry"
+summary = "模型供应商工厂目录"
+
+[definitions.ADAPTERS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.EMBEDDING_CLIENT]
+plugin = "model"
+id = "org.aurora.model:services/embedding_client"
+kind = "service"
+summary = "文本向量协议"
+
+[definitions.EMBEDDING_CLIENT.register_to]
+id = "org.aurora.core:registries/services"
+
+[definitions.CHOICE_CLIENT]
+plugin = "model"
+id = "org.aurora.model:services/choice_client"
+kind = "service"
+summary = "有限选项决策协议"
+
+[definitions.CHOICE_CLIENT.register_to]
+id = "org.aurora.core:registries/services"
+
+[definitions.CHAT_CLIENT]
+plugin = "model"
+id = "org.aurora.model:services/chat_client"
+kind = "service"
+summary = "聊天客户端协议"
+
+[definitions.CHAT_CLIENT.register_to]
+id = "org.aurora.core:registries/services"
+
+[definitions.CHAT_REQUEST]
+plugin = "model"
+id = "org.aurora.model:schemas/chat/request"
+kind = "schema"
+summary = "聊天请求数据契约"
+
+[definitions.CHAT_REQUEST.register_to]
+id = "org.aurora.core:registries/schemas"
+
+[definitions.CHAT_RESPONSE]
+plugin = "model"
+id = "org.aurora.model:schemas/chat/response"
+kind = "schema"
+summary = "聊天响应数据契约"
+
+[definitions.CHAT_RESPONSE.register_to]
+id = "org.aurora.core:registries/schemas"
+
+[definitions.CHAT_CHUNK]
+plugin = "model"
+id = "org.aurora.model:schemas/chat/chunk"
+kind = "schema"
+summary = "聊天增量数据契约"
+
+[definitions.CHAT_CHUNK.register_to]
+id = "org.aurora.core:registries/schemas"
+
+[definitions.CHAT_CAPABILITIES]
+plugin = "model"
+id = "org.aurora.model:schemas/chat/capabilities"
+kind = "schema"
+summary = "聊天客户端能力声明"
+
+[definitions.CHAT_CAPABILITIES.register_to]
+id = "org.aurora.core:registries/schemas"
+
+[definitions.CHAT_PREPARE]
+plugin = "model"
+id = "org.aurora.model:handlers/chat/prepare"
+kind = "hook_handler"
+summary = "创建并检查模型客户端"
+
+[definitions.CHAT_PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CHAT_CLEAN]
+plugin = "model"
+id = "org.aurora.model:handlers/chat/clean"
+kind = "hook_handler"
+summary = "关闭自有模型客户端"
+
+[definitions.CHAT_CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CHOICE_PREPARE]
+plugin = "model"
+id = "org.aurora.model:handlers/choice/prepare"
+kind = "hook_handler"
+summary = "创建并检查模型客户端"
+
+[definitions.CHOICE_PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CHOICE_CLEAN]
+plugin = "model"
+id = "org.aurora.model:handlers/choice/clean"
+kind = "hook_handler"
+summary = "关闭自有模型客户端"
+
+[definitions.CHOICE_CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EMBEDDING_PREPARE]
+plugin = "model"
+id = "org.aurora.model:handlers/embedding/prepare"
+kind = "hook_handler"
+summary = "创建并检查模型客户端"
+
+[definitions.EMBEDDING_PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EMBEDDING_CLEAN]
+plugin = "model"
+id = "org.aurora.model:handlers/embedding/clean"
+kind = "hook_handler"
+summary = "关闭自有模型客户端"
+
+[definitions.EMBEDDING_CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.chat]
+plugin = "model"
+inject = [
+    "ctx",
+    "registry",
+    "resolve_credential",
+    "states",
+    "options",
+]
+plugs = [
+    "CHAT_PREPARE",
+    "CHAT_CLEAN",
+]
+slots = []
+resources = [
+    "model",
+]
+optional_inputs = [
+    "catalog",
+]
+options = "resource"
+optional_states = [
+    "profiles",
+]
+
+[components.choice]
+plugin = "model"
+inject = [
+    "ctx",
+    "registry",
+    "resolve_credential",
+    "states",
+    "options",
+]
+plugs = [
+    "CHOICE_PREPARE",
+    "CHOICE_CLEAN",
+]
+slots = []
+resources = [
+    "model",
+]
+optional_inputs = [
+    "catalog",
+]
+options = "resource"
+optional_states = [
+    "profiles",
+]
+
+[components.embedding]
+plugin = "model"
+inject = [
+    "ctx",
+    "registry",
+    "resolve_credential",
+    "states",
+    "options",
+]
+plugs = [
+    "EMBEDDING_PREPARE",
+    "EMBEDDING_CLEAN",
+]
+slots = []
+resources = [
+    "model",
+]
+optional_inputs = [
+    "catalog",
+]
+options = "resource"
+optional_states = [
+    "profiles",
+]
+
+[contracts.resource]
+format = "json-schema"
+export = "aurora_model.contracts:resource_options"

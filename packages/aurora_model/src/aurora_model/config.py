@@ -1,7 +1,9 @@
 """模型 profile 配置与角色引用；运行时工厂和凭证不进入 ctx。"""
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib.resources import files
 from typing import Any, Literal, NotRequired, TypedDict, cast, overload
 
 from aurora_config import ConfigSchema
@@ -18,10 +20,9 @@ from .contract import (
     ModelKind,
     ThinkingConfig,
 )
+from .contracts import profiles_schema
+from .plugins.configuration._meta import BINDINGS, CONFIG
 from .registry import ADAPTERS, ModelAdapter
-
-CONFIG = Id("org.aurora.model:state/config")
-BINDINGS = Id("org.aurora.model:state/bindings")
 
 
 class ModelProfile(TypedDict):
@@ -37,51 +38,9 @@ class ModelProfile(TypedDict):
     reasoning_effort: NotRequired[str]
 
 
-_TEXT = {"type": "string", "pattern": r"\S"}
-PROFILE_SCHEMA = ConfigSchema(
-    {
-        "type": "object",
-        "propertyNames": {"minLength": 1},
-        "additionalProperties": {
-            "type": "object",
-            "required": ["adapter", "model"],
-            "additionalProperties": False,
-            "properties": {
-                "adapter": {"type": "string", "format": "aurora-id"},
-                "model": _TEXT,
-                "base_url": _TEXT,
-                "credential": _TEXT,
-                "provider": _TEXT,
-                "thinking": {
-                    "type": "object",
-                    "required": ["type"],
-                    "additionalProperties": False,
-                    "properties": {
-                        "type": {"enum": ["enabled", "disabled"]},
-                        "budget_tokens": {"type": "integer", "minimum": 1024},
-                    },
-                },
-                "reasoning_effort": {"enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]},
-                "capabilities": {
-                    "type": "object",
-                    "required": ["streaming", "tool_calls"],
-                    "additionalProperties": False,
-                    "properties": {
-                        "streaming": {"type": "boolean"},
-                        "tool_calls": {"type": "boolean"},
-                        "file_input": {"type": "boolean"},
-                    },
-                },
-            },
-        },
-    }
-)
+PROFILE_SCHEMA = ConfigSchema(profiles_schema())
 BINDINGS_SCHEMA = ConfigSchema(
-    {
-        "type": "object",
-        "propertyNames": {"minLength": 1},
-        "additionalProperties": {"type": "string", "minLength": 1},
-    }
+    json.loads(files("aurora_model").joinpath("plugins/configuration/bindings.schema.json").read_text(encoding="utf-8"))
 )
 
 

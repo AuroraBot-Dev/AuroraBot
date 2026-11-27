@@ -11,11 +11,18 @@ from aurora_agent.compaction import CompactionRecorder, HistoryCompactor
 from aurora_agent.input_budget import ModelInputBudget
 from aurora_agent.model import ModelCall
 from aurora_agent.react import AgentBusyError, ReActAgent
-from aurora_agent.react_defaults import ReActContext, ReActDefaults
+from aurora_agent.react_defaults import (
+    BUILD_PROMPT_EXECUTE,
+    INTERPRET_RESPONSE_EXECUTE,
+    RECORD_OBSERVATION_EXECUTE,
+    ReActContext,
+    ReActDefaults,
+)
 from aurora_agent.runtime import AgentRuntime
 from aurora_config import ConfigSpec, ConfigTemplate, config_entries
 from aurora_control import ExecutionRequest, InstanceStateBinding, StateBinding
 from aurora_core import entry_from, hook_handler
+from aurora_core.components import InstanceExport
 from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnection, HookConnections
@@ -27,7 +34,8 @@ from aurora_model import ChatClient, require_capabilities
 from aurora_model.config import BINDINGS, resolve_model
 from aurora_model.config import CONFIG as MODEL_CONFIG
 from aurora_model.contract import ChoiceClient
-from aurora_tools.execution import TOOLS, ToolExecutor, ToolInstance, ToolSpec
+from aurora_tools.collection import ToolCollection
+from aurora_tools.execution import TOOLS, ToolExecutor, ToolSpec
 from aurora_world import WorldRecords
 from aurora_world.configuration import CONFIGURATION as WORLD_CONFIGURATION
 from aurora_world.configuration import configured_sources_component
@@ -115,7 +123,7 @@ class DefaultAssembly:
         self.defaults: ReActDefaults | None = None
         self.config: BotConfig | None = None
         self._specs: list[ToolSpec] = []
-        self._owned_tools: list[ToolInstance] = []
+        self.tool_collection: ToolCollection | None = None
         self._execution_connections: list[HookConnection] = []
         self._connected = False
         self._accepting = False
@@ -394,42 +402,57 @@ class DefaultAssembly:
             recorder=self.action_evidence,
         )
         self.defaults = ReActDefaults(
-            self.agent,
-            model,
-            tools,
-            context_state=self._fixed(MESSAGES),
+            self.agent.ctx,
+            instance_id=f"{self.agent.instance_id}/defaults",
+            states={
+                "context": self._fixed(MESSAGES),
+                "batch": self.agent.batch,
+                "decision": self.agent.decision,
+                "model_input": model.request_state,
+                "model_output": model.output_state,
+                "tool_input": tools.request_state,
+                "tool_output": tools.output_state,
+            },
             system_prompt=self.config["system_prompt"],
-            input_budget=budget,
-            compactor=(
-                HistoryCompactor(
-                    self.client,
-                    cast(ModelInputBudget, budget),
-                    summary_chars=management["summary_chars"],
-                    timeout=management["timeout_seconds"],
-                    recorder=self.compaction_recorder,
-                )
-                if management["enabled"]
-                else None
-            ),
-            tool_observation=(
-                partial(
-                    cast(ActionEvidence, self.action_evidence).observation, max_chars=management["tool_result_chars"]
-                )
-                if management["enabled"]
-                else None
-            ),
-            context_view=(
-                BusinessContextView(
-                    self.world_records,
-                    self.config["context_view"],
-                    notes=WorkNotes(self.ctx, identity) if self.config["notes"]["enabled"] else None,
-                    archive_enabled=self.config["archive"]["enabled"],
-                    actions=self.action_evidence,
-                )
-                if self.world_records is not None or self.config["notes"]["enabled"] or self.action_evidence is not None
-                else None
-            ),
         )
+        self.defaults.bind(
+            agent=self.agent,
+            tools=tools,
+            input_budget=budget,
+            compactor=HistoryCompactor(
+                self.client,
+                cast(ModelInputBudget, budget),
+                summary_chars=management["summary_chars"],
+                timeout=management["timeout_seconds"],
+                recorder=self.compaction_recorder,
+            )
+            if management["enabled"]
+            else None,
+            tool_observation=partial(
+                cast(ActionEvidence, self.action_evidence).observation, max_chars=management["tool_result_chars"]
+            )
+            if management["enabled"]
+            else None,
+            context_view=BusinessContextView(
+                self.world_records,
+                self.config["context_view"],
+                notes=WorkNotes(self.ctx, identity) if self.config["notes"]["enabled"] else None,
+                archive_enabled=self.config["archive"]["enabled"],
+                actions=self.action_evidence,
+            )
+            if self.world_records is not None or self.config["notes"]["enabled"] or self.action_evidence is not None
+            else None,
+        )
+        self.tool_collection = ToolCollection(
+            self.ctx,
+            self.registry,
+            self.storage,
+            instance_id=f"{identity}/tools",
+            states={},
+            options={"owner": identity},
+            publish_members=self._connect_tool_members,
+        )
+        members = {}
         for selection, spec in zip(self.config["tools"], self._specs, strict=True):
             assert spec.factory is not None
             instance_id = f"{identity}/tool/{selection['instance_id']}"
@@ -437,28 +460,23 @@ class DefaultAssembly:
                 self._work(f"tool/{selection['instance_id']}/input"),
                 self._work(f"tool/{selection['instance_id']}/output"),
             )
-            owned = await spec.factory(
-                ctx=self.ctx,
-                storage=self.storage,
+            port = await self.tool_collection.add(
+                Id(selection["tool"]),
+                spec,
                 instance_id=instance_id,
                 input_state=input_state,
                 output_state=output_state,
                 config=selection["config"],
-                owner=identity,
                 resources=self.tool_resources.get(selection["instance_id"], {}),
             )
-            if not isinstance(owned, ToolInstance):
-                raise TypeError("工具工厂必须返回 ToolInstance")
-            self._owned_tools.append(owned)
-            if (
-                owned.plug.instance_id != instance_id
-                or owned.plug.states.get("input") != input_state
-                or owned.plug.states.get("output") != output_state
-            ):
-                raise ValueError("工具工厂必须沿用装配分配的实例身份与工作地址")
-            link = tools.connect(Id(selection["tool"]), owned.plug)
-            self._execution_connections.append(link.connection)
-        self.defaults.connect()
+            members[instance_id] = InstanceExport(plugs={port.execute_id: port})
+        self.tool_collection.publish_members(members)
+        default_plugs = self.defaults.execution_plugs()
+        self.agent.slots["prepare"].connect(default_plugs[BUILD_PROMPT_EXECUTE], priority=10)
+        self.agent.slots["infer"].connect(model.plug)
+        self.agent.slots["infer"].connect(default_plugs[INTERPRET_RESPONSE_EXECUTE], priority=10)
+        self.agent.slots["act"].connect(tools.plug)
+        self.agent.slots["observe"].connect(default_plugs[RECORD_OBSERVATION_EXECUTE], priority=10)
         self._execution_connections.extend(
             link.connection
             for phase in ("prepare", "infer", "act", "observe")
@@ -475,6 +493,13 @@ class DefaultAssembly:
                     {**value, "status": "failed", "error": "InterruptedRun"},
                     location=dict(address.location),
                 )
+
+    def _connect_tool_members(self, members):
+        assert self.defaults is not None
+        for member in members.values():
+            for port in member.plugs.values():
+                link = self.defaults.tools.slot.connect(port)
+                self._execution_connections.append(link.connection)
 
     @hook_handler("org.aurora.bot:handlers/assembly/start_bot", slot=START)
     def start_bot(self) -> None:
@@ -534,14 +559,14 @@ class DefaultAssembly:
             context = {"messages": [], "guidance_sequence": 0, "pending": None}
         keep = set()
         if self._last_request is not None:
-            keep.add(self.defaults.model.output_state.address(request))
+            keep.add(self.defaults.states["model_output"].address(request))
         else:
             try:
                 previous = self.agent.runtime.get(self.ctx, request)
             except KeyError:
                 previous = None
             if isinstance(previous, dict) and isinstance(previous.get("run_id"), str):
-                keep.add(self.defaults.model.output_state.address(ExecutionRequest(previous["run_id"])))
+                keep.add(self.defaults.states["model_output"].address(ExecutionRequest(previous["run_id"])))
         if context["pending"] is not None:
             keep.add(self.defaults.tools.output_state.address(ExecutionRequest(context["pending"]["run_id"])))
         for address in self.ctx.list(key=WORK):
@@ -562,11 +587,9 @@ class DefaultAssembly:
     async def clean_bot(self) -> None:
         if self.self_control is not None:
             await self.self_control.close()
-        while self._owned_tools:
-            owned = self._owned_tools[-1]
-            if owned.aclose is not None:
-                await owned.aclose()
-            self._owned_tools.pop()
+        if self.tool_collection is not None:
+            await self.tool_collection.clean()
+            self.tool_collection = None
         if self.action_evidence is not None:
             self.action_evidence.close()
         for connection in self._execution_connections:
@@ -585,10 +608,18 @@ class DefaultAssembly:
 
 
 def assemble(
-    *, registry: DefinitionRegistry, ctx: Context, hooks: HookConnections, storage: StorageService, workspace_root: Path
+    *,
+    registry: DefinitionRegistry,
+    ctx: Context,
+    hooks: HookConnections,
+    storage: StorageService,
+    workspace_root: Path,
+    resolve_credential=environment_credential,
 ) -> tuple[LifecycleComponent, ...]:
     """宿主兼容的同步装配入口；读取配置和分配资源留到 prepare。"""
-    return DefaultAssembly(registry=registry, ctx=ctx, hooks=hooks, storage=storage).components()
+    return DefaultAssembly(
+        registry=registry, ctx=ctx, hooks=hooks, storage=storage, credential_resolver=resolve_credential
+    ).components()
 
 
 def plugin() -> Plugin:

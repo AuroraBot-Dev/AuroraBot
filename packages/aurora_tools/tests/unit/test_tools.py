@@ -338,3 +338,75 @@ def test_recorder_start_errors_are_not_tool_timeout_or_rejection(runtime, error)
         asyncio.run(executor.execute(request))
     assert failure.value.__cause__ is error and calls == []
     assert state(executor, ctx, request)["results"] == []
+
+
+@pytest.mark.parametrize("failure_at", ["create", "publish"])
+def test_collection_failure_releases_created_members_without_closing_borrowed_resources(runtime, failure_at):
+    from aurora_tools.collection import ToolCollection
+    from aurora_tools.execution import ToolInstance
+
+    registry, ctx, _ = runtime
+    created, closed = [], []
+    borrowed = object()
+
+    async def execute(request):
+        pass
+
+    async def factory(*, instance_id, input_state, output_state, resources, **kwargs):
+        assert resources["shared"] is borrowed
+        if failure_at == "create" and created:
+            raise RuntimeError("创建失败")
+        created.append(instance_id)
+
+        async def close():
+            closed.append(instance_id)
+
+        return ToolInstance(
+            ExecutionPlug(COMPONENT, execute, {"input": input_state, "output": output_state}, instance_id=instance_id),
+            close,
+        )
+
+    registry.register_many(component_entries(COMPONENT, factory, execute, provider="test"))
+    identities = [Id("dev.tools:tools/first"), Id("dev.tools:tools/second")]
+    for identity in identities:
+        registry.register(
+            RegistryEntry(
+                identity,
+                "tool",
+                ToolSpec(COMPONENT, {**DEFINITION, "name": identity.local_path}, factory=factory),
+                "test",
+                register_to=TOOLS,
+            )
+        )
+
+    def publish(members):
+        assert len(members) == 2
+        raise RuntimeError("接线失败")
+
+    collection = ToolCollection(
+        ctx,
+        registry,
+        None,
+        instance_id="collection",
+        states={
+            "input": StateBinding(STATE, (("part", "input"),)),
+            "output": StateBinding(STATE, (("part", "output"),)),
+        },
+        options={
+            "owner": "test",
+            "instance_pattern": "{collection}/{name}",
+            "location_field": "tool",
+            "tools": [{"id": str(identity), "config": {}} for identity in identities],
+        },
+        publish_members=publish,
+    )
+    collection.bind(tools={"shared": borrowed})
+
+    async def run():
+        with pytest.raises(RuntimeError, match="创建失败|接线失败"):
+            await collection.prepare()
+        await collection.clean()
+
+    asyncio.run(run())
+    assert closed == list(reversed(created))
+    assert len(created) == (1 if failure_at == "create" else 2)

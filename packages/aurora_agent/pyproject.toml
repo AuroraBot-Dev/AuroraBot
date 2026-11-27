@@ -10,7 +10,11 @@ dependencies = [
     "aurora-tools>=0.1.0",
 ]
 
+[project.optional-dependencies]
+config = ["aurora-config>=0.1.0"]
+
 [project.entry-points."aurora.plugins"]
+"aurora_agent.configuration" = "aurora_agent.plugins.configuration:plugin"
 "aurora_agent.model" = "aurora_agent.plugins.model:plugin"
 "aurora_agent.react" = "aurora_agent.react:plugin"
 "aurora_agent.react_defaults" = "aurora_agent.react_defaults:plugin"
@@ -31,3 +35,15 @@ include = ["src", "pyproject.toml", "plugin.meta.json", "hatch_build.py"]
 [[tool.aurora-meta-build.plugins]]
 manifest = "src/aurora_agent/plugins/model/plugin.meta.toml"
 module = "src/aurora_agent/plugins/model/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_agent/plugins/react/plugin.meta.toml"
+module = "src/aurora_agent/plugins/react/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_agent/plugins/defaults/plugin.meta.toml"
+module = "src/aurora_agent/plugins/defaults/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_agent/plugins/configuration/plugin.meta.toml"
+module = "src/aurora_agent/plugins/configuration/_meta.py"

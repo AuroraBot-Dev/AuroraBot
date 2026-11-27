@@ -2,11 +2,10 @@
 
 from dataclasses import dataclass
 
-from aurora_core.ids import Id
-
 from .contract import ModelFactory, ModelKind
+from .plugins.model._meta import ADAPTERS
 
-ADAPTERS = Id("org.aurora.model:registries/adapters")
+__all__ = ["ADAPTERS", "ModelAdapter"]
 
 
 @dataclass(frozen=True)

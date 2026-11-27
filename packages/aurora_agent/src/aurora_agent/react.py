@@ -12,9 +12,10 @@ from aurora_control import (
     InstanceStateBinding,
     LoopLimitExceeded,
     StateBinding,
-    component_entries,
     execution_slot_entry,
 )
+from aurora_core import plug as declare_plug
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
@@ -24,9 +25,15 @@ from aurora_core.json_data import JsonValue
 type Phase = Literal["prepare", "infer", "act", "observe", "finish", "error"]
 type Decision = Literal["act", "continue", "finish"]
 
-PHASE_IDS: dict[Phase, Id] = {
-    name: Id(f"org.aurora.agent:react/{name}") for name in ("prepare", "infer", "act", "observe", "finish", "error")
-}
+from .plugins.react._meta import ACT, CONFIGURE, ERROR, EXECUTE, FINISH, INFER, OBSERVE, PREPARE, REACT, react_plugin
+
+PHASE_IDS: dict[Phase, Id] = dict(
+    zip(
+        ("prepare", "infer", "act", "observe", "finish", "error"),
+        (PREPARE, INFER, ACT, OBSERVE, FINISH, ERROR),
+        strict=True,
+    )
+)
 
 
 class Guidance(TypedDict):
@@ -59,7 +66,7 @@ class ReActAgent:
     业务上下文和模型输出的保留由装配负责，本组件仅清理 batch/decision 临时地址。
     """
 
-    definition_id = Id("org.aurora.agent:handlers/react_agent")
+    definition_id = REACT
 
     def __init__(
         self,
@@ -84,6 +91,7 @@ class ReActAgent:
         self.batch = batch
         self.decision = decision
         self.max_iterations = max_iterations
+        self.configuration: InstanceStateBinding | None = None
         self._active = False
         self._finish_requested = False
         self.states = {"inbox": inbox, "progress": progress, "runtime": runtime, "batch": batch, "decision": decision}
@@ -103,6 +111,12 @@ class ReActAgent:
             )
             for phase, slot_id in PHASE_IDS.items()
         }
+
+    @declare_plug(CONFIGURE)
+    def configure(self):
+        if self.configuration is not None:
+            values = self.configuration.get(self.ctx, ExecutionRequest("config"))
+            self.max_iterations = values.get("max_iterations")
 
     @property
     def plug(self) -> ExecutionPlug:
@@ -200,6 +214,7 @@ class ReActAgent:
                 await self._phase("finish", request)
                 return
 
+    @declare_plug(EXECUTE)
     async def execute(self, request: ExecutionRequest) -> None:
         """串行执行一次激活；异常与取消传播，runtime 保留唯一终态及当前运行身份。"""
         if self._active:
@@ -243,12 +258,38 @@ class ReActAgent:
                 self.ctx.delete(address.key, location=dict(address.location))
 
 
+def _create(*, ctx, hooks, instance_id, states, options):
+    if "config" in states and options:
+        raise ValueError("ReAct 参数须选择配置状态或显式 options")
+    instance = ReActAgent(
+        ctx,
+        hooks,
+        instance_id=instance_id,
+        **{key: states[key] for key in ("inbox", "progress", "runtime", "batch", "decision")},
+        **options,
+    )
+    instance.configuration = states.get("config")
+    return instance
+
+
 def plugin() -> Plugin:
-    """登记 ReActAgent 与六个执行阶段；业务状态定义和阶段处理器由装配提供。"""
-    return Plugin(
-        "aurora_agent.react",
-        (
-            *component_entries(ReActAgent.definition_id, ReActAgent, ReActAgent.execute, provider="aurora_agent"),
-            *(execution_slot_entry(slot_id, provider="aurora_agent") for slot_id in PHASE_IDS.values()),
-        ),
+    return react_plugin(
+        targets={
+            REACT: ReActAgent,
+            **{
+                identity: execution_slot_entry(identity, provider="aurora_agent.react").target
+                for identity in PHASE_IDS.values()
+            },
+        },
+        components={
+            "react": ComponentFactory(
+                _create,
+                lambda instance: InstanceExport(
+                    plugs={EXECUTE: instance.plug, CONFIGURE: instance.configure},
+                    slots={PHASE_IDS[phase]: slot for phase, slot in instance.slots.items()},
+                    resources={"agent": instance},
+                ),
+                plugs=(ReActAgent.execute, ReActAgent.configure),
+            )
+        },
     )

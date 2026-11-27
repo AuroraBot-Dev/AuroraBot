@@ -1,5 +1,7 @@
 """MCP 世界来源的资源选择；复用 world 配置文件中的 sources.config。"""
 
+import json
+from importlib.resources import files
 from typing import cast
 from urllib.parse import urlsplit
 
@@ -20,34 +22,6 @@ def _check_resources(value: object) -> None:
 
 
 WORLD_CONFIG = ConfigSchema(
-    {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["connection_id", "resources"],
-        "properties": {
-            "connection_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
-            "resources": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 128,
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["uri"],
-                    "properties": {
-                        "uri": {"type": "string", "minLength": 1, "maxLength": 2048},
-                        "mode": {
-                            "type": "string",
-                            "enum": ["notification", "resource", "event"],
-                            "default": "resource",
-                        },
-                    },
-                },
-            },
-            "watch_tools": {"type": "boolean", "default": False},
-            "buffer_size": {"type": "integer", "minimum": 1, "maximum": 4096, "default": 64},
-            "max_content_bytes": {"type": "integer", "minimum": 1, "maximum": 16777216, "default": 1048576},
-        },
-    },
+    json.loads(files("aurora_mcp").joinpath("plugins/world/config.schema.json").read_text(encoding="utf-8")),
     check=_check_resources,
 )

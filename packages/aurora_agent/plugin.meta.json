@@ -6,8 +6,12 @@
     "description": "Aurora agent execution, model calls and default phases",
     "requires-python": ">=3.12",
     "dependencies": ["aurora-core>=0.1.0", "aurora-control>=0.1.0", "aurora-model>=0.1.0", "aurora-tools>=0.1.0"],
+    "optional-dependencies": {
+      "config": ["aurora-config>=0.1.0"]
+    },
     "entry-points": {
       "aurora.plugins": {
+        "aurora_agent.configuration": "aurora_agent.plugins.configuration:plugin",
         "aurora_agent.model": "aurora_agent.plugins.model:plugin",
         "aurora_agent.react": "aurora_agent.react:plugin",
         "aurora_agent.react_defaults": "aurora_agent.react_defaults:plugin"
@@ -20,7 +24,6 @@
       "plugins": {
         "model": {
           "entry_point": "aurora_agent.model",
-          "provider": "aurora_agent",
           "title": "模型调用",
           "summary": "读取请求状态，调用绑定的模型资源并更新输出状态",
           "requires": [],
@@ -47,6 +50,15 @@
               "local": "MODEL_CALL"
             }
           }
+        },
+        "CONFIGURE": {
+          "plugin": "model",
+          "id": "org.aurora.agent:handlers/model_call/configure",
+          "kind": "hook_handler",
+          "summary": "读取显式绑定的模型调用参数",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
         }
       },
       "components": {
@@ -54,17 +66,379 @@
           "plugin": "model",
           "summary": "模型客户端由资源绑定提供，组件不关闭借用的客户端",
           "inject": ["ctx", "instance_id", "states", "options"],
-          "plugs": ["EXECUTE"],
+          "plugs": ["EXECUTE", "CONFIGURE"],
           "slots": [],
           "states": ["input", "output"],
           "inputs": ["chat"],
-          "options": "model_options"
+          "options": "model_options",
+          "resources": ["model_call"],
+          "optional_states": ["config"]
         }
       },
       "contracts": {
         "model_options": {
           "format": "json-schema",
-          "file": "options.schema.json",
+          "export": "aurora_agent.parameters:model_call_options",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "streaming": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_agent/plugins/react/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "react": {
+          "entry_point": "aurora_agent.react",
+          "title": "ReAct 执行",
+          "summary": "ReAct 执行的公开定义与真实实例导出",
+          "requires": [],
+          "factory": "aurora_agent.react:plugin"
+        }
+      },
+      "definitions": {
+        "REACT": {
+          "plugin": "react",
+          "id": "org.aurora.agent:handlers/react_agent",
+          "kind": "component",
+          "summary": "可重复激活的 ReAct 组件"
+        },
+        "EXECUTE": {
+          "plugin": "react",
+          "id": "org.aurora.agent:handlers/react_agent/execute",
+          "kind": "hook_handler",
+          "summary": "执行实例的一次调用",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.agent:handlers/react_agent"
+            }
+          }
+        },
+        "PREPARE": {
+          "plugin": "react",
+          "id": "org.aurora.agent:react/prepare",
+          "kind": "hook_slot",
+          "summary": "准备阶段端口",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "INFER": {
+          "plugin": "react",
+          "id": "org.aurora.agent:react/infer",
+          "kind": "hook_slot",
+          "summary": "推理阶段执行槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "ACT": {
+          "plugin": "react",
+          "id": "org.aurora.agent:react/act",
+          "kind": "hook_slot",
+          "summary": "行动阶段执行槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "OBSERVE": {
+          "plugin": "react",
+          "id": "org.aurora.agent:react/observe",
+          "kind": "hook_slot",
+          "summary": "观察阶段执行槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "FINISH": {
+          "plugin": "react",
+          "id": "org.aurora.agent:react/finish",
+          "kind": "hook_slot",
+          "summary": "完成阶段执行槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "ERROR": {
+          "plugin": "react",
+          "id": "org.aurora.agent:react/error",
+          "kind": "hook_slot",
+          "summary": "错误阶段执行槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "CONFIGURE": {
+          "plugin": "react",
+          "id": "org.aurora.agent:handlers/react/configure",
+          "kind": "hook_handler",
+          "summary": "读取显式绑定的 ReAct 参数",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        }
+      },
+      "components": {
+        "react": {
+          "plugin": "react",
+          "inject": ["ctx", "hooks", "instance_id", "states", "options"],
+          "plugs": ["EXECUTE", "CONFIGURE"],
+          "slots": ["PREPARE", "INFER", "ACT", "OBSERVE", "FINISH", "ERROR"],
+          "states": ["inbox", "progress", "runtime", "batch", "decision"],
+          "resources": ["agent"],
+          "options": "options",
+          "optional_states": ["config"]
+        }
+      },
+      "contracts": {
+        "options": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:react_options",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_iterations": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_agent/plugins/defaults/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "defaults": {
+          "entry_point": "aurora_agent.react_defaults",
+          "title": "ReAct 默认阶段",
+          "summary": "ReAct 默认阶段的公开定义与真实实例导出",
+          "requires": ["aurora_agent.react", "aurora_agent.model", "aurora_tools"],
+          "factory": "aurora_agent.react_defaults:plugin"
+        }
+      },
+      "definitions": {
+        "BUILD_PROMPT": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/react/build_prompt",
+          "kind": "component",
+          "summary": "准备模型上下文的默认阶段"
+        },
+        "BUILD_PROMPT_EXECUTE": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/react/build_prompt/execute",
+          "kind": "hook_handler",
+          "summary": "把引导和历史写入模型请求状态",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.agent:handlers/react/build_prompt"
+            }
+          }
+        },
+        "INTERPRET_RESPONSE": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/react/interpret_response",
+          "kind": "component",
+          "summary": "解释模型响应的默认阶段"
+        },
+        "INTERPRET_RESPONSE_EXECUTE": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/react/interpret_response/execute",
+          "kind": "hook_handler",
+          "summary": "把模型响应转换为行动或完成决定",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.agent:handlers/react/interpret_response"
+            }
+          }
+        },
+        "RECORD_OBSERVATION": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/react/record_observation",
+          "kind": "component",
+          "summary": "接纳工具观察的默认阶段"
+        },
+        "RECORD_OBSERVATION_EXECUTE": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/react/record_observation/execute",
+          "kind": "hook_handler",
+          "summary": "把工具批次结果追加到上下文",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.agent:handlers/react/record_observation"
+            }
+          }
+        },
+        "CONFIGURE": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/react_defaults/configure",
+          "kind": "hook_handler",
+          "summary": "读取显式绑定的提示词参数",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        }
+      },
+      "components": {
+        "defaults": {
+          "plugin": "defaults",
+          "inject": ["ctx", "instance_id", "states", "options"],
+          "plugs": ["BUILD_PROMPT_EXECUTE", "INTERPRET_RESPONSE_EXECUTE", "RECORD_OBSERVATION_EXECUTE", "CONFIGURE"],
+          "slots": [],
+          "states": ["context", "batch", "decision", "model_input", "model_output", "tool_input", "tool_output"],
+          "inputs": ["agent", "tools"],
+          "optional_inputs": ["context_view", "input_budget", "compactor", "tool_observation"],
+          "resources": ["defaults"],
+          "options": "options",
+          "optional_states": ["config"]
+        }
+      },
+      "contracts": {
+        "options": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:react_defaults_options",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "system_prompt": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_agent/plugins/configuration/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "configuration": {
+          "entry_point": "aurora_agent.configuration",
+          "title": "执行参数配置",
+          "summary": "按实际消费者登记非持久配置；不创建业务实例",
+          "requires": ["aurora_config", "aurora_agent.react", "aurora_agent.model", "aurora_agent.react_defaults"],
+          "factory": "aurora_agent.plugins.configuration:plugin"
+        }
+      },
+      "definitions": {
+        "REACT": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:configs/react",
+          "kind": "config",
+          "summary": "react 的行为参数",
+          "contract": "react",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "REACT_STATE": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:state/react/config",
+          "kind": "state_key",
+          "summary": "react 的非持久配置状态"
+        },
+        "MODEL_CALL": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:configs/model_call",
+          "kind": "config",
+          "summary": "model_call 的行为参数",
+          "contract": "model_call",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "MODEL_CALL_STATE": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:state/model_call/config",
+          "kind": "state_key",
+          "summary": "model_call 的非持久配置状态"
+        },
+        "REACT_DEFAULTS": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:configs/react_defaults",
+          "kind": "config",
+          "summary": "react_defaults 的行为参数",
+          "contract": "react_defaults",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "REACT_DEFAULTS_STATE": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:state/react_defaults/config",
+          "kind": "state_key",
+          "summary": "react_defaults 的非持久配置状态"
+        },
+        "INPUT_BUDGET": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:configs/input_budget",
+          "kind": "config",
+          "summary": "input_budget 的行为参数",
+          "contract": "input_budget",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "INPUT_BUDGET_STATE": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:state/input_budget/config",
+          "kind": "state_key",
+          "summary": "input_budget 的非持久配置状态"
+        },
+        "COMPACTION": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:configs/compaction",
+          "kind": "config",
+          "summary": "compaction 的行为参数",
+          "contract": "compaction",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "COMPACTION_STATE": {
+          "plugin": "configuration",
+          "id": "org.aurora.agent:state/compaction/config",
+          "kind": "state_key",
+          "summary": "compaction 的非持久配置状态"
+        }
+      },
+      "contracts": {
+        "react": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:react",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_iterations": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "model_call": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:model_call",
           "content": {
             "type": "object",
             "additionalProperties": false,
@@ -72,6 +446,62 @@
               "streaming": {
                 "type": "boolean",
                 "default": true
+              }
+            }
+          }
+        },
+        "react_defaults": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:react_defaults",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "system_prompt": {
+                "type": "string",
+                "default": ""
+              }
+            }
+          }
+        },
+        "input_budget": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:input_budget",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_chars": {
+                "type": "integer",
+                "minimum": 1024,
+                "default": 128000
+              }
+            }
+          }
+        },
+        "compaction": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:compaction",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tool_result_chars": {
+                "type": "integer",
+                "minimum": 2048,
+                "maximum": 32000,
+                "default": 6000
+              },
+              "summary_chars": {
+                "type": "integer",
+                "minimum": 256,
+                "maximum": 16000,
+                "default": 6000
+              },
+              "timeout_seconds": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "default": 60.0
               }
             }
           }

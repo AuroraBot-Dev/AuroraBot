@@ -11,7 +11,13 @@ from aurora_agent.model import ModelCall
 from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import ReActAgent
 from aurora_agent.react import plugin as react_plugin
-from aurora_agent.react_defaults import ReActContext, ReActDefaults
+from aurora_agent.react_defaults import (
+    BUILD_PROMPT_EXECUTE,
+    INTERPRET_RESPONSE_EXECUTE,
+    RECORD_OBSERVATION_EXECUTE,
+    ReActContext,
+    ReActDefaults,
+)
 from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_agent.runtime import AgentRuntime
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, StateBinding, component_entries
@@ -146,9 +152,26 @@ async def run(args: argparse.Namespace) -> None:
     )
     tools.connect(tool_id, ExecutionPlug(ADD, add, {"input": tool_input, "output": tool_output}, instance_id="add"))
     defaults = ReActDefaults(
-        agent, model, tools, context_state=fixed("context"), system_prompt="根据环境自主选择行动；无需行动时可以结束。"
+        agent.ctx,
+        instance_id=f"{agent.instance_id}/defaults",
+        states={
+            "context": fixed("context"),
+            "batch": agent.batch,
+            "decision": agent.decision,
+            "model_input": model.request_state,
+            "model_output": model.output_state,
+            "tool_input": tools.request_state,
+            "tool_output": tools.output_state,
+        },
+        system_prompt="根据环境自主选择行动；无需行动时可以结束。",
     )
-    defaults.connect()
+    defaults.bind(agent=agent, tools=tools)
+    default_plugs = defaults.execution_plugs()
+    agent.slots["prepare"].connect(default_plugs[BUILD_PROMPT_EXECUTE], priority=10)
+    agent.slots["infer"].connect(model.plug)
+    agent.slots["infer"].connect(default_plugs[INTERPRET_RESPONSE_EXECUTE], priority=10)
+    agent.slots["act"].connect(tools.plug)
+    agent.slots["observe"].connect(default_plugs[RECORD_OBSERVATION_EXECUTE], priority=10)
 
     executing = False
 

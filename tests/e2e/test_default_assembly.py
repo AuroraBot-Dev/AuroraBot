@@ -368,7 +368,7 @@ def test_factory_creation_follows_restore_and_configure_and_start_does_not_activ
         assert cast(dict, other.defaults.context_state.get(other_ctx, request))["messages"] == messages
         assert other.agent.progress.get(other_ctx, request) == 1
         assert other.storage.get("dev.assembly", "last_close") == "main/tool/echo"
-        assert other.defaults.model.output_state.get(other_ctx, request)
+        assert other.defaults.states["model_output"].get(other_ctx, request)
         await restored.stop()
         # 没有新激活的启动/关闭保留最近模型结果。
         saved = json.loads((tmp_path / "framework" / "ctx.json").read_text(encoding="utf-8"))

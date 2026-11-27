@@ -177,7 +177,9 @@ async def run(
                     "tools": [{"tool": str(tool_id), "instance_id": "echo"}],
                 },
             )
-            assembly = DefaultAssembly(registry=registry, ctx=ctx, hooks=hooks, storage=storage)
+            assembly = DefaultAssembly(
+                registry=registry, ctx=ctx, hooks=hooks, storage=storage, tool_resources={"echo": {"clients": clients}}
+            )
             components[0:0] = assembly.components(depends_on=(bridge.instance_id,))
         host = Lifecycle(
             ctx, hooks, components, persistence=ContextPersistence(ctx, storage.snapshot_store()), storage=storage
@@ -222,7 +224,7 @@ async def run(
                     input_state=state("input"),
                     output_state=state("output"),
                     owner="test",
-                    resources={},
+                    resources={"clients": clients},
                     config={},
                 )
                 executor.connect(tool_id, tool.plug)

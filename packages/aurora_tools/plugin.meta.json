@@ -1,0 +1,261 @@
+{
+  "schema_version": 2,
+  "distribution": {
+    "name": "aurora-tools",
+    "version": "0.1.0",
+    "description": "Aurora tool contracts, definitions and execution",
+    "requires-python": ">=3.12",
+    "dependencies": ["aurora-core>=0.1.0", "aurora-control>=0.1.0", "jsonschema>=4.26.0", "referencing>=0.37.0"],
+    "optional-dependencies": {
+      "config": ["aurora-config>=0.1.0"]
+    },
+    "entry-points": {
+      "aurora.plugins": {
+        "aurora_tools.configuration": "aurora_tools.plugins.configuration:plugin",
+        "aurora_tools": "aurora_tools.execution:plugin"
+      }
+    }
+  },
+  "manifests": {
+    "src/aurora_tools/plugins/tools/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "tools": {
+          "entry_point": "aurora_tools",
+          "title": "工具执行与集合",
+          "summary": "工具执行与集合的公开定义与真实实例导出",
+          "requires": [],
+          "factory": "aurora_tools.execution:plugin"
+        }
+      },
+      "definitions": {
+        "TOOLS": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:registries/tools",
+          "kind": "registry",
+          "summary": "可供应用选择的工具定义目录",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "EXECUTOR": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:components/executor",
+          "kind": "component",
+          "summary": "顺序执行工具批次并保存结果的组件"
+        },
+        "EXECUTE": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:components/executor/execute",
+          "kind": "hook_handler",
+          "summary": "执行实例的一次调用",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.tools:components/executor"
+            }
+          }
+        },
+        "CHILDREN": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:components/executor/children",
+          "kind": "hook_slot",
+          "summary": "接收所选工具实例的执行槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "BEFORE_CALL": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:executor/before_call",
+          "kind": "hook_slot",
+          "summary": "每次工具调用前的执行槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "AFTER_CALL": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:executor/after_call",
+          "kind": "hook_slot",
+          "summary": "每次工具调用后的执行槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "CONFIGURE": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:handlers/executor/configure",
+          "kind": "hook_handler",
+          "summary": "读取显式绑定的执行超时",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "COLLECT": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:handlers/collection/prepare",
+          "kind": "hook_handler",
+          "summary": "创建工具成员并发布显式导出",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CLEAN": {
+          "plugin": "tools",
+          "id": "org.aurora.tools:handlers/collection/clean",
+          "kind": "hook_handler",
+          "summary": "逆序关闭集合拥有的工具实例",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        }
+      },
+      "components": {
+        "executor": {
+          "plugin": "tools",
+          "inject": ["ctx", "registry", "hooks", "instance_id", "states", "options"],
+          "plugs": ["EXECUTE", "CONFIGURE"],
+          "slots": ["CHILDREN", "BEFORE_CALL", "AFTER_CALL"],
+          "states": ["input", "output", "current"],
+          "optional_inputs": ["recorder"],
+          "resources": ["executor"],
+          "options": "executor",
+          "optional_states": ["config"]
+        },
+        "collection": {
+          "plugin": "tools",
+          "inject": ["ctx", "registry", "storage", "instance_id", "states", "options", "publish_members"],
+          "plugs": ["COLLECT", "CLEAN"],
+          "slots": [],
+          "states": ["input", "output"],
+          "optional_inputs": ["catalog"],
+          "resource_maps": ["tools"],
+          "resources": ["catalog"],
+          "options": "collection"
+        }
+      },
+      "contracts": {
+        "executor": {
+          "format": "json-schema",
+          "export": "aurora_tools.parameters:executor_options",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "timeout": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          }
+        },
+        "collection": {
+          "format": "json-schema",
+          "file": "collection.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["owner", "instance_pattern", "location_field"],
+            "properties": {
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              },
+              "instance_pattern": {
+                "type": "string",
+                "minLength": 1
+              },
+              "location_field": {
+                "type": "string",
+                "minLength": 1
+              },
+              "tools": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "type": "object",
+                  "required": ["id"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "aurora-id"
+                    },
+                    "config": {
+                      "type": "object",
+                      "default": {}
+                    }
+                  }
+                }
+              },
+              "include": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "exclude": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_tools/plugins/configuration/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "configuration": {
+          "entry_point": "aurora_tools.configuration",
+          "title": "执行参数配置",
+          "summary": "按实际消费者登记非持久配置；不创建业务实例",
+          "requires": ["aurora_config", "aurora_tools"],
+          "factory": "aurora_tools.plugins.configuration:plugin"
+        }
+      },
+      "definitions": {
+        "EXECUTOR": {
+          "plugin": "configuration",
+          "id": "org.aurora.tools:configs/executor",
+          "kind": "config",
+          "summary": "executor 的行为参数",
+          "contract": "executor",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "EXECUTOR_STATE": {
+          "plugin": "configuration",
+          "id": "org.aurora.tools:state/executor/config",
+          "kind": "state_key",
+          "summary": "executor 的非持久配置状态"
+        }
+      },
+      "contracts": {
+        "executor": {
+          "format": "json-schema",
+          "export": "aurora_tools.parameters:executor",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "timeout": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "default": 30.0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

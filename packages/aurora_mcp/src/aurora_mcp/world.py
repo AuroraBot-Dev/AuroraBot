@@ -6,15 +6,12 @@ import time
 from typing import cast
 from uuid import uuid4
 
-from aurora_core import Id
 from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
 from aurora_core.json_data import decode_json, encode_json
 from aurora_core.lifecycle import LifecycleComponent
-from aurora_core.registry import RegistryEntry
 from aurora_world import (
-    SOURCES,
     MessageConflictError,
     SourceEmit,
     SourceInstance,
@@ -29,10 +26,9 @@ from mcp.types import TextResourceContents
 
 from .clients import MCPClients
 from .configuration import PROTOCOL_VERSION
+from .plugins.world._meta import WORLD_SOURCE, WORLD_STATUS, world_plugin
 from .world_config import WORLD_CONFIG
 
-WORLD_SOURCE = Id("org.aurora.mcp:sources/resources")
-WORLD_STATUS = Id("org.aurora.mcp:state/world")
 logger = logging.getLogger(__name__)
 
 
@@ -300,13 +296,26 @@ def _validate_status(value: object) -> None:
     encode_json(value)
 
 
+class SourceResources:
+    """向来源选择导出稳定资源字典；客户端仍归 MCPClients 所有。"""
+
+    def __init__(self, ctx):
+        self.resources = {"ctx": ctx}
+
+    def bind(self, *, clients):
+        self.resources["clients"] = clients
+
+
 def plugin() -> Plugin:
-    """只声明来源和非持久诊断，发现不连接客户端或订阅服务。"""
-    return Plugin(
-        "aurora_mcp.world",
-        (
-            RegistryEntry(WORLD_SOURCE, "source", SourceSpec(create_source), "aurora_mcp.world", register_to=SOURCES),
-            RegistryEntry(WORLD_STATUS, "state_key", StateKey(_validate_status, persistent=False), "aurora_mcp.world"),
-        ),
-        requires=("aurora_mcp", "aurora_world.sources"),
+    from aurora_core.components import ComponentFactory, InstanceExport
+
+    return world_plugin(
+        targets={WORLD_SOURCE: SourceSpec(create_source), WORLD_STATUS: StateKey(_validate_status, persistent=False)},
+        components={
+            "source_resources": ComponentFactory(
+                SourceResources,
+                lambda instance: InstanceExport(resources={"resources": instance.resources}),
+                bind=lambda instance, resources: instance.bind(**resources),
+            )
+        },
     )

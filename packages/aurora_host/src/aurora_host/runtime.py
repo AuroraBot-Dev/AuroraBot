@@ -1,5 +1,6 @@
 """应用宿主拥有 ctx、连接、存储和生命周期，不解释命令或业务装配 ID。"""
 
+import os
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ class Host:
             "hooks": self.hooks,
             "storage": self.storage,
             "workspace_root": self.workspace_root,
+            "resolve_credential": os.environ.get,
         }
 
     @classmethod
@@ -60,7 +62,9 @@ class Host:
 
     def mount(self, components: Iterable[LifecycleComponent]) -> None:
         """程序化应用显式交付已经构造和连接的组件，与文件装配共用生命周期。"""
-        self.graph = RuntimeGraph(self.graph.instances, (*self.graph.components, *components), self.graph.connections)
+        self.graph = RuntimeGraph(
+            self.graph.instances, (*self.graph.components, *components), self.graph.connections, self.graph.members
+        )
 
     async def start(self, *, configure: Callable[[], object] | None = None) -> None:
         self.lifecycle = Lifecycle(

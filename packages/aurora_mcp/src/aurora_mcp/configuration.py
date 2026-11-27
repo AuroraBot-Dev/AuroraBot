@@ -1,21 +1,29 @@
 """MCP v2 声明；配置校验不访问环境变量、文件系统或网络。"""
 
+import json
+from importlib.resources import files
 from typing import cast
 from urllib.parse import urlsplit
 
 from aurora_config import ConfigSchema
-from aurora_core import Id
 
 from .credentials import check_environment, check_headers
+from .plugins.clients._meta import CLIENT_STATUS, CONFIG_STATE, CONFIGURATION
 
-CONFIGURATION = Id("org.aurora.mcp:configs/default")
-CONFIG_STATE = Id("org.aurora.mcp:state/config")
-CLIENT_STATUS = Id("org.aurora.mcp:state/clients")
+__all__ = [
+    "CAPABILITIES",
+    "CLIENT_STATUS",
+    "CONFIGURATION",
+    "CONFIG_STATE",
+    "MCP_CONFIG",
+    "PROTOCOL_VERSION",
+    "TIMEOUTS",
+    "configured_servers",
+    "validate_url",
+]
+
 PROTOCOL_VERSION = "2026-07-28"
 CAPABILITIES = ("tools", "resources", "prompts", "completions")
-SERVER_NAME = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}(?![\s\S])"
-TOOL_NAME = r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*(?![\s\S])"
-ENV_NAME = r"^[A-Za-z_][A-Za-z0-9_]*(?![\s\S])"
 TIMEOUTS = {"startup": 10, "catalog": 30, "execution": 30, "shutdown": 10}
 
 
@@ -74,100 +82,7 @@ def configured_servers(config: dict) -> dict[str, dict]:
     }
 
 
-def _timeout_schema() -> dict:
-    return {
-        "type": "object",
-        "additionalProperties": False,
-        "default": {},
-        "properties": {
-            key: {"type": "number", "exclusiveMinimum": 0, "maximum": maximum}
-            for key, maximum in {"startup": 300, "catalog": 3600, "execution": 43200, "shutdown": 300}.items()
-        },
-    }
-
-
 MCP_CONFIG = ConfigSchema(
-    {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["schema_version"],
-        "properties": {
-            "schema_version": {"type": "integer", "const": 2},
-            "timeout": _timeout_schema(),
-            "servers": {
-                "type": "object",
-                "default": {},
-                "propertyNames": {"pattern": SERVER_NAME},
-                "additionalProperties": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["type"],
-                    "properties": {
-                        "type": {"enum": ["remote", "local"]},
-                        "enabled": {"type": "boolean", "default": True},
-                        "protocol": {"enum": ["legacy", "auto", PROTOCOL_VERSION], "default": "legacy"},
-                        "required_capabilities": {
-                            "type": "array",
-                            "uniqueItems": True,
-                            "default": [],
-                            "items": {"enum": list(CAPABILITIES)},
-                        },
-                        "timeout": _timeout_schema(),
-                        "url": {"type": "string", "minLength": 1},
-                        "headers": {"type": "object", "additionalProperties": {"type": "string"}},
-                        "oauth": {},
-                        "command": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-                        "cwd": {"type": "string", "minLength": 1},
-                        "environment": {
-                            "type": "object",
-                            "propertyNames": {"pattern": ENV_NAME},
-                            "additionalProperties": {"type": "string"},
-                        },
-                        "tools": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "default": {},
-                            "properties": {
-                                "include": {
-                                    "type": "array",
-                                    "uniqueItems": True,
-                                    "default": ["*"],
-                                    "items": {"type": "string", "minLength": 1},
-                                },
-                                "exclude": {
-                                    "type": "array",
-                                    "uniqueItems": True,
-                                    "default": [],
-                                    "items": {"type": "string", "minLength": 1, "not": {"const": "*"}},
-                                },
-                                "aliases": {
-                                    "type": "object",
-                                    "default": {},
-                                    "propertyNames": {"minLength": 1, "not": {"const": "*"}},
-                                    "additionalProperties": {"type": "string", "pattern": TOOL_NAME, "maxLength": 64},
-                                },
-                            },
-                        },
-                    },
-                    "allOf": [
-                        {
-                            "if": {"properties": {"type": {"const": "remote"}}},
-                            "then": {
-                                "required": ["url"],
-                                "properties": {key: False for key in ("command", "cwd", "environment")},
-                            },
-                        },
-                        {
-                            "if": {"properties": {"type": {"const": "local"}}},
-                            "then": {
-                                "required": ["command"],
-                                "properties": {key: False for key in ("url", "headers", "oauth")},
-                            },
-                        },
-                    ],
-                },
-            },
-        },
-    },
+    json.loads(files("aurora_mcp").joinpath("plugins/clients/config.schema.json").read_text(encoding="utf-8")),
     check=_check_servers,
 )

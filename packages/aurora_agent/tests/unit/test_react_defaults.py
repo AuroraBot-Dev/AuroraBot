@@ -9,7 +9,13 @@ from aurora_agent.model import ModelCall
 from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import ReActAgent
 from aurora_agent.react import plugin as react_plugin
-from aurora_agent.react_defaults import ReActContext, ReActDefaults
+from aurora_agent.react_defaults import (
+    BUILD_PROMPT_EXECUTE,
+    INTERPRET_RESPONSE_EXECUTE,
+    RECORD_OBSERVATION_EXECUTE,
+    ReActContext,
+    ReActDefaults,
+)
 from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, StateBinding, component_entries
 from aurora_core.bootstrap import bootstrap
@@ -111,14 +117,26 @@ def factory():
         )
         tools.connect(identity, ExecutionPlug(COMPONENT, compute, {"input": tool_input, "output": tool_output}))
         defaults = ReActDefaults(
-            agent,
-            model,
-            tools,
-            context_state=fixed("context"),
+            agent.ctx,
+            instance_id=f"{agent.instance_id}/defaults",
+            states={
+                "context": fixed("context"),
+                "batch": agent.batch,
+                "decision": agent.decision,
+                "model_input": model.request_state,
+                "model_output": model.output_state,
+                "tool_input": tools.request_state,
+                "tool_output": tools.output_state,
+            },
             system_prompt="自主判断是否需要行动",
-            context_view=context_view,
         )
-        defaults.connect()
+        defaults.bind(agent=agent, tools=tools, context_view=context_view)
+        default_plugs = defaults.execution_plugs()
+        agent.slots["prepare"].connect(default_plugs[BUILD_PROMPT_EXECUTE], priority=10)
+        agent.slots["infer"].connect(model.plug)
+        agent.slots["infer"].connect(default_plugs[INTERPRET_RESPONSE_EXECUTE], priority=10)
+        agent.slots["act"].connect(tools.plug)
+        agent.slots["observe"].connect(default_plugs[RECORD_OBSERVATION_EXECUTE], priority=10)
         return ctx, agent, defaults, client, calls, entered, cleaned
 
     yield create
@@ -207,7 +225,7 @@ def test_guidance_during_stream_is_seen_without_discarding_tools(factory):
             injected.append(True)
             agent.inbox.set(ctx, request, [initial, steer])
 
-    ctx.subscribe(observe, key=STATE, location=dict(defaults.model.output_state.address(request).location))
+    ctx.subscribe(observe, key=STATE, location=dict(defaults.states["model_output"].address(request).location))
     asyncio.run(agent.execute(request))
     context = cast(ReActContext, defaults.context_state.get(ctx, request))
     assert context["guidance_sequence"] == agent.progress.get(ctx, request) == 2

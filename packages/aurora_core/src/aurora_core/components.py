@@ -43,6 +43,8 @@ class ComponentInstance:
 
     def bind(self, resources: Mapping[str, object]) -> None:
         selected = {name: resources[name] for name in self.declaration.inputs}
+        selected.update({name: resources[name] for name in self.declaration.optional_inputs if name in resources})
+        selected.update({name: resources.get(name, {}) for name in self.declaration.resource_maps})
         if self.factory.bind is not None:
             self.factory.bind(self.instance, selected)
 
@@ -94,6 +96,21 @@ class Definition:
 
 
 @dataclass(frozen=True)
+class DynamicDefinition:
+    """清单声明的动态身份范围；运行目录提供成员名称和实现。"""
+
+    id_root: str
+    kind: str
+    provider: str
+    register_to: Id
+
+    def bind(self, name: str, target: object) -> RegistryEntry:
+        return RegistryEntry(
+            Id(f"{self.id_root}/{name}"), self.kind, target, self.provider, register_to=self.register_to
+        )
+
+
+@dataclass(frozen=True)
 class ComponentDeclaration:
     """组件端口、状态角色、资源输入/输出和构造参数契约。"""
 
@@ -101,8 +118,11 @@ class ComponentDeclaration:
     plugs: tuple[Id, ...] = ()
     slots: tuple[Id, ...] = ()
     states: tuple[str, ...] = ()
+    optional_states: tuple[str, ...] = ()
     resources: tuple[str, ...] = ()
     inputs: tuple[str, ...] = ()
+    optional_inputs: tuple[str, ...] = ()
+    resource_maps: tuple[str, ...] = ()
     options: object | None = None
 
 
@@ -131,7 +151,9 @@ class PluginDeclaration:
                 if identity in implementations and implementations[identity] is not method:
                     raise ValueError(f"插头存在多个实现：{identity}")
                 implementations[identity] = method
-            if declaration.inputs and factory.bind is None:
+            if (
+                declaration.inputs or declaration.optional_inputs or declaration.resource_maps
+            ) and factory.bind is None:
                 raise ValueError(f"组件 {name} 声明了资源输入但没有 bind")
             exports[name] = ComponentExport(factory, declaration)
         if implementations.keys() != {definition.id for definition in self.definitions}:

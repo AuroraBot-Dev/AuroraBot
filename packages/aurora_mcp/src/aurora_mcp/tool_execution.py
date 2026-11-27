@@ -5,6 +5,7 @@ from typing import cast
 
 import httpx2
 from aurora_control import ExecutionRequest, StateBinding
+from aurora_core import plug
 from aurora_core.ctx import Context
 from aurora_core.json_data import JsonValue, encode_json
 from aurora_tools.contract import ToolCall
@@ -14,6 +15,7 @@ from mcp.types import CONNECTION_CLOSED, REQUEST_TIMEOUT, CallToolResult
 
 from .clients import MCPClients
 from .errors import MCPClientError
+from .plugins.tools._meta import EXECUTE
 
 
 class MCPTool:
@@ -37,6 +39,7 @@ class MCPTool:
     async def close(self) -> None:
         self.closed = True
 
+    @plug(EXECUTE)
     async def execute(self, request: ExecutionRequest) -> None:
         if self.closed:
             raise ToolExecutionError("mcp_unavailable", "MCP 工具实例已关闭，请求未提交")

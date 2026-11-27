@@ -42,8 +42,9 @@ class _SourceConfiguration:
         self._sources: WorldSources
         self.source_resources: Mapping[Id, Mapping[str, object]] = {}
 
-    def bind(self, *, sources: WorldSources) -> None:
+    def bind(self, *, sources: WorldSources, source_resources=None) -> None:
         self._sources = sources
+        self.source_resources = {Id(key): value for key, value in (source_resources or {}).items()}
 
     @plug(CONFIGURE)
     def configure(self) -> None:

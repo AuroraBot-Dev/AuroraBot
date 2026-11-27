@@ -19,7 +19,7 @@ from aurora_model import (
 from aurora_model.usage import usage_scope
 from aurora_tools.contract import ToolCall
 
-from .plugins.model._meta import EXECUTE, MODEL_CALL
+from .plugins.model._meta import CONFIGURE, EXECUTE, MODEL_CALL
 
 
 class ModelCallState(TypedDict):
@@ -62,10 +62,16 @@ class ModelCall:
         self.request_state = request_state
         self.output_state = output_state
         self.streaming = streaming
+        self.configuration = None
 
     def bind(self, client: ChatClient) -> None:
         """借用装配绑定的聊天资源，关闭职责留给资源所有者。"""
         self.client = client
+
+    @aurora.plug(CONFIGURE)
+    def configure(self):
+        if self.configuration is not None:
+            self.streaming = self.configuration.get(self.ctx, ExecutionRequest("config"))["streaming"]
 
     @property
     def plug(self) -> ExecutionPlug:

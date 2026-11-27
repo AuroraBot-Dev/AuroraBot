@@ -3,11 +3,9 @@
 from functools import partial
 
 from aurora_core.discovery import Plugin
-from aurora_core.ids import Id
-from aurora_core.registry import RegistryEntry
 
 from .contract import ModelConfig, ModelKind
-from .registry import ADAPTERS, ModelAdapter
+from .registry import ModelAdapter
 
 
 async def create_client(config: ModelConfig, *, api_key: str | None = None, kind: ModelKind = "chat"):
@@ -18,17 +16,12 @@ async def create_client(config: ModelConfig, *, api_key: str | None = None, kind
 
 
 def plugin() -> Plugin:
-    return Plugin(
-        "aurora_model.litellm",
-        tuple(
-            RegistryEntry(
-                Id(f"org.aurora.model:adapters/litellm/{kind}"),
-                "adapter",
-                ModelAdapter(kind, partial(create_client, kind=kind)),
-                "aurora_model.litellm",
-                register_to=ADAPTERS,
-            )
-            for kind in ("chat", "choice", "embedding")
-        ),
-        requires=("aurora_model",),
+    from .plugins.litellm._meta import CHAT, CHOICE, EMBEDDING, litellm_plugin
+
+    return litellm_plugin(
+        targets={
+            identity: ModelAdapter(kind, partial(create_client, kind=kind))
+            for identity, kind in ((CHAT, "chat"), (CHOICE, "choice"), (EMBEDDING, "embedding"))
+        },
+        components={},
     )

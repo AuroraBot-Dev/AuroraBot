@@ -29,7 +29,14 @@ configuration_plugin = PluginDeclaration(
     requires=("aurora_config", "aurora_world.records", "aurora_world.sources"),
     components={
         "configuration": ComponentDeclaration(
-            plugs=(CONFIGURE,), slots=(), inject=("ctx",), states=(), resources=(), inputs=("sources",), options=None
+            plugs=(CONFIGURE,),
+            slots=(),
+            inject=("ctx",),
+            states=(),
+            resources=(),
+            inputs=("sources",),
+            resource_maps=("source_resources",),
+            options=None,
         ),
     },
 ).bind

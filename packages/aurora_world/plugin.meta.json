@@ -214,7 +214,8 @@
           "plugs": ["CONFIGURE"],
           "slots": [],
           "inputs": ["sources"],
-          "resources": []
+          "resources": [],
+          "resource_maps": ["source_resources"]
         }
       },
       "contracts": {

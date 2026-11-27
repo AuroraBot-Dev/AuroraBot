@@ -49,6 +49,9 @@ inputs = [
     "sources",
 ]
 resources = []
+resource_maps = [
+    "source_resources",
+]
 
 [contracts.source_config]
 format = "json-schema"

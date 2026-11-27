@@ -232,13 +232,20 @@ dependencies = [
     { name = "aurora-tools" },
 ]
 
+[package.optional-dependencies]
+config = [
+    { name = "aurora-config" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "aurora-config", marker = "extra == 'config'", editable = "packages/aurora_config" },
     { name = "aurora-control", editable = "packages/aurora_control" },
     { name = "aurora-core", editable = "packages/aurora_core" },
     { name = "aurora-model", editable = "packages/aurora_model" },
     { name = "aurora-tools", editable = "packages/aurora_tools" },
 ]
+provides-extras = ["config"]
 
 [[package]]
 name = "aurora-api"
@@ -485,13 +492,20 @@ dependencies = [
     { name = "referencing" },
 ]
 
+[package.optional-dependencies]
+config = [
+    { name = "aurora-config" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "aurora-config", marker = "extra == 'config'", editable = "packages/aurora_config" },
     { name = "aurora-control", editable = "packages/aurora_control" },
     { name = "aurora-core", editable = "packages/aurora_core" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "referencing", specifier = ">=0.37.0" },
 ]
+provides-extras = ["config"]
 
 [[package]]
 name = "aurora-world"

@@ -47,11 +47,18 @@ def _module(manifest: dict) -> str:
         '"""由 aurora-meta 生成；公共声明的编辑来源为同目录 plugin.meta.toml。"""',
         "from aurora_core.components import "
         + ("ComponentDeclaration, " if manifest.get("components") else "")
-        + "Definition, PluginDeclaration",
+        + "Definition, "
+        + ("DynamicDefinition, " if manifest.get("dynamic") else "")
+        + "PluginDeclaration",
         "from aurora_core.ids import Id",
         "",
     ]
     lines.extend(f"{symbol} = Id({item['id']!r})" for symbol, item in definitions.items())
+    for symbol, declaration in manifest.get("dynamic", {}).items():
+        owner = manifest["plugins"][declaration["plugin"]]["entry_point"]
+        lines.append(
+            f"{symbol} = DynamicDefinition({declaration['id_root']!r}, {declaration['kind']!r}, {owner!r}, {reference(declaration['register_to'])})"
+        )
     for symbol, plugin in manifest["plugins"].items():
         name = plugin["entry_point"]
         lines.extend(["", f"{symbol}_plugin = PluginDeclaration(", f"    name={name!r},", "    definitions=("])
@@ -76,6 +83,11 @@ def _module(manifest: dict) -> str:
             fields = [f"{kind}={ports(component, kind)}" for kind in ("plugs", "slots")]
             fields += [
                 f"{kind}={tuple(component.get(kind, ()))!r}" for kind in ("inject", "states", "resources", "inputs")
+            ]
+            fields += [
+                f"{kind}={tuple(component[kind])!r}"
+                for kind in ("optional_inputs", "resource_maps", "optional_states")
+                if component.get(kind)
             ]
             fields.append(f"options={options!r}")
             lines.append(f"        {key!r}: ComponentDeclaration({', '.join(fields)}),")

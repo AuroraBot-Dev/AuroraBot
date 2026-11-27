@@ -5,7 +5,7 @@ import logging
 import math
 from collections.abc import Awaitable, Callable, Mapping
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, cast
 from uuid import uuid4
 
@@ -15,10 +15,10 @@ from aurora_control import (
     ExecutionRequest,
     ExecutionSlot,
     StateBinding,
-    component_entries,
     execution_slot_entry,
 )
-from aurora_core.bootstrap import REGISTRY_DIRECTORY
+from aurora_core import plug as declare_plug
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
@@ -30,10 +30,19 @@ from jsonschema import Draft202012Validator, ValidationError
 from referencing import Registry
 
 from .contract import ToolBatchRequest, ToolBatchState, ToolCall, ToolDefinition, ToolResult
+from .plugins.tools._meta import (
+    AFTER_CALL,
+    BEFORE_CALL,
+    CHILDREN,
+    CLEAN,
+    COLLECT,
+    CONFIGURE,
+    EXECUTE,
+    EXECUTOR,
+    TOOLS,
+    tools_plugin,
+)
 
-TOOLS = Id("org.aurora.tools:registries/tools")
-BEFORE_CALL = Id("org.aurora.tools:executor/before_call")
-AFTER_CALL = Id("org.aurora.tools:executor/after_call")
 _logger = logging.getLogger(__name__)
 
 
@@ -176,6 +185,37 @@ class ToolRejected(ValueError):
     """before_call 显式拒绝工具，原因作为观察交回 bot。"""
 
 
+@dataclass(frozen=True)
+class ToolPlug(ExecutionPlug):
+    """携带已登记工具身份的执行插头，身份与实例及组件定义分别保存。"""
+
+    tool_id: Id = field(kw_only=True)
+
+    @classmethod
+    def from_plug(cls, identity, port):
+        return cls(
+            port.definition_id,
+            port.execute,
+            port.states,
+            port.schema,
+            instance_id=port.instance_id,
+            port_id=port.execute_id,
+            tool_id=identity,
+        )
+
+
+class ToolSlot(ExecutionSlot):
+    def __init__(self, owner, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.owner = owner
+
+    def connect(self, plug: ExecutionPlug, *, priority: int = 0) -> ExecutionLink:
+        return self.owner._connect(cast(ToolPlug, plug), priority=priority)
+
+    def attach(self, plug, *, priority):
+        return super().connect(plug, priority=priority)
+
+
 class ToolExecutor:
     """按请求顺序执行已连接工具；普通失败和超时产生观察，取消传播并等待清理。
 
@@ -187,7 +227,7 @@ class ToolExecutor:
     工具不得留下未托管的后台任务；本组件不做自动重试或动作去重。
     """
 
-    definition_id = Id("org.aurora.tools:components/executor")
+    definition_id = EXECUTOR
 
     def __init__(
         self,
@@ -208,12 +248,13 @@ class ToolExecutor:
         self.instance_id = uuid4().hex if instance_id is None else instance_id
         self.request_state, self.output_state, self.current_state = request_state, output_state, current_state
         self.timeout = timeout
+        self.configuration = None
         self.recorder = recorder
         self.states = {"input": request_state, "output": output_state, "current": current_state}
         probe = ExecutionRequest("binding-check")
         if len({binding.address(probe) for binding in self.states.values()}) != 3:
             raise ValueError("工具批次输入、结果和当前调用地址不得重叠")
-        self.slot = ExecutionSlot(self.definition_id, hooks, instance_id=self.instance_id, states=self.states)
+        self.slot = ToolSlot(self, self.definition_id, hooks, instance_id=self.instance_id, states=self.states)
         self.before = ExecutionSlot(
             self.definition_id, hooks, instance_id=self.instance_id, slot_id=BEFORE_CALL, states=self.states
         )
@@ -223,13 +264,24 @@ class ToolExecutor:
         self._tools: dict[str, tuple[ToolSpec, ExecutionLink]] = {}
         self._active = False
 
+    def bind(self, *, recorder=None):
+        self.recorder = recorder
+
+    @declare_plug(CONFIGURE)
+    def configure(self):
+        if self.configuration is not None:
+            self.timeout = self.configuration.get(self.ctx, ExecutionRequest("config"))["timeout"]
+
     @property
     def plug(self) -> ExecutionPlug:
         return ExecutionPlug(self.definition_id, self.execute, self.states, instance_id=self.instance_id)
 
     def connect(self, identity: Id, plug: ExecutionPlug) -> ExecutionLink:
         """选择登记工具并绑定实例；模型名称在同一执行器内唯一。"""
-        entry = self.registry.get(identity)
+        return self.slot.connect(ToolPlug.from_plug(identity, plug))
+
+    def _connect(self, plug: ToolPlug, *, priority: int) -> ExecutionLink:
+        entry = self.registry.get(plug.tool_id)
         if entry.kind != "tool" or entry.register_to != TOOLS or not isinstance(entry.target, ToolSpec):
             raise ValueError("目标不是已登记工具")
         spec = entry.target
@@ -242,7 +294,7 @@ class ToolExecutor:
         name = spec.definition["name"]
         if name in self._tools:
             raise ValueError(f"工具名称重复：{name}")
-        link = self.slot.connect(plug)
+        link = self.slot.attach(plug, priority=priority)
         self._tools[name] = spec, link
         return link
 
@@ -307,6 +359,7 @@ class ToolExecutor:
                 address = link.plug.states[name].address(request)
                 self.ctx.delete(address.key, location=dict(address.location))
 
+    @declare_plug(EXECUTE)
     async def execute(self, request: ExecutionRequest) -> None:
         if self._active:
             raise RuntimeError("工具执行器正在运行")
@@ -359,15 +412,53 @@ class ToolExecutor:
             self.ctx.delete(address.key, location=dict(address.location))
 
 
+def _create(*, ctx, registry, hooks, instance_id, states, options):
+    if "config" in states and options:
+        raise ValueError("工具执行参数须选择配置状态或显式 options")
+    instance = ToolExecutor(
+        ctx,
+        registry,
+        hooks,
+        instance_id=instance_id,
+        request_state=states["input"],
+        output_state=states["output"],
+        current_state=states["current"],
+        timeout=options.get("timeout", 30),
+    )
+    instance.configuration = states.get("config")
+    return instance
+
+
 def plugin() -> Plugin:
-    return Plugin(
-        "aurora_tools",
-        (
-            RegistryEntry(TOOLS, "registry", ToolReceiver(), "aurora_tools", register_to=REGISTRY_DIRECTORY),
-            *component_entries(
-                ToolExecutor.definition_id, ToolExecutor, ToolExecutor.execute, provider="aurora_tools", children=True
+    from .collection import ToolCollection
+
+    return tools_plugin(
+        targets={
+            TOOLS: ToolReceiver(),
+            EXECUTOR: ToolExecutor,
+            **{
+                identity: execution_slot_entry(identity, provider="aurora_tools").target
+                for identity in (CHILDREN, BEFORE_CALL, AFTER_CALL)
+            },
+        },
+        components={
+            "executor": ComponentFactory(
+                _create,
+                lambda instance: InstanceExport(
+                    plugs={EXECUTE: instance.plug, CONFIGURE: instance.configure},
+                    slots={CHILDREN: instance.slot, BEFORE_CALL: instance.before, AFTER_CALL: instance.after},
+                    resources={"executor": instance},
+                ),
+                plugs=(ToolExecutor.execute, ToolExecutor.configure),
+                bind=lambda instance, resources: instance.bind(**resources),
             ),
-            execution_slot_entry(BEFORE_CALL, provider="aurora_tools"),
-            execution_slot_entry(AFTER_CALL, provider="aurora_tools"),
-        ),
+            "collection": ComponentFactory(
+                ToolCollection,
+                lambda instance: InstanceExport(
+                    plugs={COLLECT: instance.prepare, CLEAN: instance.clean}, resources={"catalog": instance}
+                ),
+                plugs=(ToolCollection.prepare, ToolCollection.clean),
+                bind=lambda instance, resources: instance.bind(**resources),
+            ),
+        },
     )

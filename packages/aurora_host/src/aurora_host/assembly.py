@@ -2,7 +2,7 @@
 
 import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, cast
@@ -10,7 +10,7 @@ from typing import Any, cast
 from aurora_config.schema import ConfigSchema
 from aurora_config.templates import read_toml
 from aurora_control import ExecutionPlug, ExecutionSlot, InstanceStateBinding, StateBinding
-from aurora_core.components import ComponentInstance
+from aurora_core.components import ComponentInstance, InstanceExport
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnection, HookConnections
@@ -24,6 +24,12 @@ _ENDPOINT = {
     "required": ["instance", "id"],
     "additionalProperties": False,
     "properties": {"instance": {"type": "string", "minLength": 1}, "id": {"type": "string", "format": "aurora-id"}},
+}
+_RESOURCE = {
+    "type": "object",
+    "required": ["instance", "export"],
+    "additionalProperties": False,
+    "properties": {"instance": {"type": "string"}, "export": {"type": "string"}},
 }
 ASSEMBLY_SCHEMA = ConfigSchema(
     {
@@ -47,10 +53,7 @@ ASSEMBLY_SCHEMA = ConfigSchema(
                             "type": "object",
                             "default": {},
                             "additionalProperties": {
-                                "type": "object",
-                                "required": ["instance", "export"],
-                                "additionalProperties": False,
-                                "properties": {"instance": {"type": "string"}, "export": {"type": "string"}},
+                                "oneOf": [_RESOURCE, {"type": "object", "additionalProperties": _RESOURCE}]
                             },
                         },
                         "states": {
@@ -72,6 +75,20 @@ ASSEMBLY_SCHEMA = ConfigSchema(
                             },
                         },
                         "depends_on": {"type": "array", "items": {"type": "string"}, "default": []},
+                    },
+                },
+            },
+            "collection_connections": {
+                "type": "array",
+                "default": [],
+                "items": {
+                    "type": "object",
+                    "required": ["collection", "slot"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "collection": {"type": "string"},
+                        "slot": _ENDPOINT,
+                        "priority": {"type": "integer", "default": 0},
                     },
                 },
             },
@@ -98,16 +115,33 @@ class AssemblyPlan:
     instances: Mapping[str, Any]
     connections: Sequence[Mapping[str, Any]]
 
+    collection_connections: Sequence[Mapping[str, Any]] = ()
+
     @classmethod
     def parse(cls, value: object) -> "AssemblyPlan":
         data = cast(dict[str, Any], ASSEMBLY_SCHEMA.parse(value))
-        return cls(tuple(data["plugins"]), data["instances"], data["connections"])
+        return cls(tuple(data["plugins"]), data["instances"], data["connections"], data["collection_connections"])
 
     def assemble(self, plugins: Sequence[Plugin], services: Mapping[str, Any]) -> "RuntimeGraph":
         """先创建并显式导出所有实例，再绑定资源、连接方法与执行端口。"""
         enabled = {plugin.name: plugin for plugin in plugins if plugin.name in self.plugins}
         instances = {}
         components = []
+        connections = []
+        members = {}
+
+        def publish(collection, exports):
+            members[collection] = exports
+            for rule in self.collection_connections:
+                if rule["collection"] != collection:
+                    continue
+                destination = rule["slot"]
+                slot = instances[destination["instance"]].exports.slots[Id(destination["id"])]
+                for member in exports.values():
+                    for plug in member.plugs.values():
+                        link = slot.connect(plug, priority=rule["priority"])
+                        connections.append(link.connection)
+
         for name, spec in self.instances.items():
             export = enabled[spec["plugin"]].components[spec["component"]]
             states = {
@@ -119,18 +153,29 @@ class AssemblyPlan:
             options = spec["options"]
             if export.declaration.options is not None:
                 options = ConfigSchema(export.declaration.options).parse(options)
-            component = export.create(services, instance_id=name, options=options, states=states)
+            component = export.create(
+                dict(services, publish_members=lambda members, owner=name: publish(owner, members)),
+                instance_id=name,
+                options=options,
+                states=states,
+            )
             instances[name] = component
             components.append(LifecycleComponent(name, tuple(spec["depends_on"]), component.exports.stop_accepting))
         for name, spec in self.instances.items():
             instances[name].bind(
                 {
-                    role: instances[reference["instance"]].exports.resources[reference["export"]]
+                    role: (
+                        {
+                            key: instances[item["instance"]].exports.resources[item["export"]]
+                            for key, item in reference.items()
+                        }
+                        if role in instances[name].declaration.resource_maps
+                        else instances[reference["instance"]].exports.resources[reference["export"]]
+                    )
                     for role, reference in spec["resources"].items()
                 }
             )
         hooks: HookConnections = services["hooks"]
-        connections = []
         for connection in self.connections:
             source, destination = connection["plug"], connection["slot"]
             identity, slot_id = Id(source["id"]), Id(destination["id"])
@@ -151,7 +196,7 @@ class AssemblyPlan:
                         priority=connection["priority"],
                     )
                 )
-        return RuntimeGraph(instances, tuple(components), tuple(connections))
+        return RuntimeGraph(instances, tuple(components), connections, members)
 
 
 @dataclass(frozen=True)
@@ -160,7 +205,8 @@ class RuntimeGraph:
 
     instances: Mapping[str, ComponentInstance]
     components: tuple[LifecycleComponent, ...]
-    connections: tuple[HookConnection, ...] = ()
+    connections: list[HookConnection] = field(default_factory=list)
+    members: dict[str, Mapping[str, InstanceExport]] = field(default_factory=dict)
 
 
 def read_assembly(path: Path) -> AssemblyPlan:
