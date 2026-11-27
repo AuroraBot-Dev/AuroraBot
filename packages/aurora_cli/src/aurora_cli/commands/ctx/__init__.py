@@ -2,8 +2,8 @@
 
 from typing import TextIO
 
+from aurora_core._meta import CTX_LIST
 from aurora_core.ctx import StateAddress
-from aurora_core.ids import Id
 from aurora_core.invocation import invoke_operation
 from aurora_core.json_data import encode_json
 
@@ -27,7 +27,7 @@ def render_result(output: TextIO, name: str, result: object) -> None:
 
 
 async def list_states(context: CommandContext, **filters: object) -> None:
-    result = await invoke_operation(context.registry, Id("org.aurora.core:operations/ctx/list"), **filters)
+    result = await invoke_operation(context.registry, CTX_LIST, **filters)
     render_result(context.output, "ctx/list", result)
 
 

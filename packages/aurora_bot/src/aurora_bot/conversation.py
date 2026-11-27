@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from aurora_agent.react import AgentBusyError
 from aurora_agent.runtime import Submission
-from aurora_core import Id
 from aurora_core.json_data import JsonValue
 
 from .attachments import message_content
@@ -16,7 +15,6 @@ from .operations import RunOperations
 from .plugins.conversation._meta import CONVERSATION, conversation_plugin
 
 __all__ = ["CONVERSATION", "ConversationEndpoint", "plugin"]
-ENDPOINTS = Id("org.aurora.api:registries/endpoints")
 
 
 class ConversationError(Exception):

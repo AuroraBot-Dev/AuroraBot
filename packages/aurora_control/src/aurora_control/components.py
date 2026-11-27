@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 import aurora_core as aurora
 from aurora_core.ctx import Context
+from aurora_core.declarations import plug_id
 
 from ._meta import (
     BRANCH,
@@ -41,7 +42,12 @@ class Controller:
     @property
     def plug(self) -> ExecutionPlug:
         return ExecutionPlug(
-            self.definition_id, self.execute, self.slot.states, self.slot.schema, instance_id=self.slot.instance_id
+            self.definition_id,
+            self.execute,
+            self.slot.states,
+            self.slot.schema,
+            instance_id=self.slot.instance_id,
+            port_id=plug_id(self.execute),
         )
 
     def _location(self, request: ExecutionRequest) -> dict[str, str]:

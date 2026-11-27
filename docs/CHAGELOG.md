@@ -2,6 +2,15 @@
 
 ## 2026-11-27
 
+### 完成 W08 完整预设与公共定义收口
+
+- 增加 world、memory、full 三份完整预设。world 独立于 MCP；memory 显式绑定 embedding、记忆存储、压缩记录器和 agent 压缩资源；full 在现有 Bot 世界/节律组合上选用笔记、动作证据、自身控制、归档读取、choice 和记忆。来源依赖运行入口与节律，运行入口依赖工具、模型及压缩资源，消费者先结束、资源所有者后关闭。现有 default/MCP/MCP-world/bot、config 最小预设及 onboarding 保持显式文件装配。
+- initialize 只合并调用方明确提供的附加插件，选择 world/memory 等预设时不再隐式带入 MCP 插件集。API、CLI、Bot 和通用声明辅助方法直接引用 core/CLI 的生成身份；公开控制插头使用装饰方法的生成 ID，不重复拼接具体公共端口。
+- 全部 29 个公开插件和 core/CLI 两个宿主目录共 225 个静态定义已纳入统一清单与目录。新增测试数据 tests/fixtures/metadata/baseline_ids.json 对原 145 个定义逐项记录：135 个对应当前拥有者和清单来源，10 个旧聚合定义删除并说明原因；此数据仅作验收，不被运行时读取或用于转换。契约检查同时核对全部 entry point 均有清单、ID 唯一及旧 ID 不残留。
+- 新增两条有独立价值的预设验收：七份发行预设和 onboarding 不启动资源即可装配；full 的真实来源触发 ReAct 调用记忆/笔记工具，重启读回数据且不自动重放，验证来源启动前依赖就绪、运行结束后资源关闭、embedding/choice/chat 各关闭一次和配置不入快照。原有业务协议测试不复制扩展组合矩阵。
+- 最终验收：日常检查 8.67 秒、完整检查 35.42 秒；1218 项 Python 测试通过，保留 1 项平台跳过和 39 条依赖警告，前端与原生终端检查通过。16 个 wheel 构建通过；Python 3.12 工作区外干净安装验证最小 Bot 无 world/MCP/memory/CLI/API/SDK 运行，以及完整预设的真实执行、恢复与资源关闭。control 无 agent/模型、tools 无 agent/模型、model 无 config/SDK、agent 无 Bot/宿主/SDK 的独立执行与恢复通过；core/CLI/API/Bot 静态目录和新预设均包含在 wheel 中。
+- W08 完成，W09 的目录/计划/实际图查询和正式使用说明仍待实施。公共 ID 和既有业务快照未新增变化；接口直接切换，不保留旧自动接线别名，不改写用户数据。未增加 worker、超时或重试，未调用真实供应商；README、AGENTS 和其他手写文档继续暂缓统一更新。
+
 ### 推进 W08：移除旧目标槽声明与提供方自动接线
 
 - 删除 hook_handler 固定目标槽装饰器、Declaration.slot、RegistryEntry.slot 及登记阶段的槽匹配检查。plug 只保存身份，程序化调用 entry_from 可显式登记该方法；槽接收判断仅发生在真实 connect 时。操作声明与登记接收方诊断保持原语义。

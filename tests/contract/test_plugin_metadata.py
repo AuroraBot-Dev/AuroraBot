@@ -279,3 +279,38 @@ def test_host_file_assembly_connects_real_ports_states_and_resource_owner(tmp_pa
         assert client.closed
 
     asyncio.run(run())
+
+
+def test_public_catalogs_cover_entry_points_and_account_for_original_definitions():
+    import tomllib
+
+    current, plugins = {}, set()
+    expected = set()
+    for project_file in (ROOT / "packages").glob("*/pyproject.toml"):
+        root = project_file.parent
+        project = tomllib.loads(project_file.read_text())
+        expected.update(project["project"].get("entry-points", {}).get("aurora.plugins", {}))
+        catalog = root / "plugin.meta.json"
+        if not catalog.exists():
+            continue
+        for path, manifest in json.loads(catalog.read_text())["manifests"].items():
+            plugins.update(owner["entry_point"] for owner in manifest.get("plugins", {}).values())
+            for definition in manifest["definitions"].values():
+                identity = definition["id"]
+                assert identity not in current
+                owner = (
+                    manifest["plugins"][definition["plugin"]]["entry_point"]
+                    if "plugins" in manifest
+                    else manifest["host"]["name"]
+                )
+                current[identity] = {"owner": owner, "manifest": (root / path).relative_to(ROOT).as_posix()}
+    assert plugins == expected
+    audit = json.loads((ROOT / "tests/fixtures/metadata/baseline_ids.json").read_text())["definitions"]
+    assert len({item["previous"] for item in audit}) == len(audit) == 145
+    for item in audit:
+        if "removed" in item:
+            assert item["removed"] and item["previous"] not in current
+        else:
+            assert current[item["current"]] == {"owner": item["owner"], "manifest": item["manifest"]}
+            if item["previous"] != item["current"]:
+                assert item["previous"] not in current

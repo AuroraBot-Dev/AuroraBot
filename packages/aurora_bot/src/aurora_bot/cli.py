@@ -5,6 +5,7 @@ from dataclasses import asdict
 from typing import Protocol, TextIO, cast
 
 from aurora_agent.runtime import RunHandle, Submission
+from aurora_core._meta import CTX_SUBSCRIBE, CTX_UNSUBSCRIBE
 from aurora_core.ctx import StateChange
 from aurora_core.ids import Id
 from aurora_core.invocation import invoke_operation
@@ -73,7 +74,7 @@ async def _follow(context: CommandContext, operation: Id, instance_id: str, **va
         ):
             changes.put_nowait(change)
 
-    subscription = await invoke_operation(context.registry, Id("org.aurora.core:operations/ctx/subscribe"), observe)
+    subscription = await invoke_operation(context.registry, CTX_SUBSCRIBE, observe)
     handle: RunHandle | None = None
     waiter = None
     try:
@@ -101,7 +102,7 @@ async def _follow(context: CommandContext, operation: Id, instance_id: str, **va
             _write(context, {"event": "result", "instance_id": instance_id, **asdict(result)})
         raise
     finally:
-        await invoke_operation(context.registry, Id("org.aurora.core:operations/ctx/unsubscribe"), subscription)
+        await invoke_operation(context.registry, CTX_UNSUBSCRIBE, subscription)
         if handle is not None and not handle.done:
             await invoke_operation(context.registry, RUN_CANCEL, handle.run_id, instance_id=instance_id)
         if waiter is not None:

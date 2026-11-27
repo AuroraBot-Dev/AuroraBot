@@ -27,7 +27,7 @@ def initialize(
     world: bool = False,
     preset: str | None = None,
     api: bool = False,
-    plugins: tuple[str, ...] = PLUGINS,
+    plugins: tuple[str, ...] = (),
     output: TextIO = sys.stdout,
 ) -> int:
     """只补缺失文件；已有宿主选择不覆盖，输出规范化差异及独立候选。"""

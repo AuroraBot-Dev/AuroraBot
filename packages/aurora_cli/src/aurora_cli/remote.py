@@ -7,14 +7,15 @@ from aurora_api.access import token_from_env
 from aurora_api.client import CtxClient
 from aurora_core.ids import Id
 
+from ._meta import CMD_CTX_DELETE, CMD_CTX_GET, CMD_CTX_LIST, CMD_CTX_SET, CMD_CTX_WATCH
 from .commands.ctx import write_json
 
 COMMANDS = {
-    Id("org.aurora.cli:commands/ctx/get"): "get",
-    Id("org.aurora.cli:commands/ctx/list"): "list",
-    Id("org.aurora.cli:commands/ctx/set"): "set",
-    Id("org.aurora.cli:commands/ctx/delete"): "delete",
-    Id("org.aurora.cli:commands/ctx/watch"): "watch",
+    CMD_CTX_GET: "get",
+    CMD_CTX_LIST: "list",
+    CMD_CTX_SET: "set",
+    CMD_CTX_DELETE: "delete",
+    CMD_CTX_WATCH: "watch",
 }
 
 

@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from uuid import uuid4
 
+from aurora_core._meta import HOOK_HANDLERS, HOOK_SLOTS
 from aurora_core.ctx import Context, StateAddress
 from aurora_core.hooks import HookConnection, HookConnections, HookSlot
 from aurora_core.ids import Id
@@ -33,7 +34,7 @@ def component_entries(
             "hook_handler",
             execute,
             provider,
-            register_to=Id("org.aurora.core:registries/hook_handlers"),
+            register_to=HOOK_HANDLERS,
             interface=definition_id,
         ),
     )
@@ -49,7 +50,7 @@ def execution_slot_entry(slot_id: Id, *, provider: str) -> RegistryEntry:
         "hook_slot",
         HookSlot(_accept_execution),
         provider,
-        register_to=Id("org.aurora.core:registries/hook_slots"),
+        register_to=HOOK_SLOTS,
     )
 
 
