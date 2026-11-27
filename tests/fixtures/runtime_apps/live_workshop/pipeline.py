@@ -3,10 +3,10 @@
 import asyncio
 from typing import cast
 
-from aurora_agent.tools import ToolInstance
 from aurora_control import Branch, ExecutionPlug, ExecutionSlot, Parallel, Serial, StateBinding, While
 from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
+from aurora_tools.execution import ToolInstance
 
 PIPELINE = Id("dev.example.workshop:state/pipeline")
 INSPECT = Id("dev.example.workshop:handlers/inspect")
@@ -18,7 +18,7 @@ async def declared(request):
     raise RuntimeError("请使用工具工厂创建的执行实例")
 
 
-async def create_inspector(*, registry, ctx, storage, instance_id, input_state, output_state, config):
+async def create_inspector(*, registry, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
     hooks = HookConnections(registry)
     counter = StateBinding(PIPELINE, (("part", "count"),))
     parity = StateBinding(PIPELINE, (("part", "parity"),))

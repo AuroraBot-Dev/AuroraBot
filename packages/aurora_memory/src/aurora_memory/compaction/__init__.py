@@ -1,0 +1,100 @@
+"""压缩材料同步落盘，摘要索引由宿主持有的可恢复队列异步处理。"""
+
+import asyncio
+import logging
+
+from aurora_agent.compaction import CompactionRecord
+from aurora_core import plug
+from aurora_core.components import ComponentFactory, InstanceExport
+from aurora_model.usage import usage_scope
+
+from .. import MemoryResource
+from ._meta import CLEAN, START, STOP, compaction_plugin
+
+logger = logging.getLogger(__name__)
+
+
+class CompactionMemory:
+    """数据库提交先于上下文替换；供应商失败只延后索引，不丢弃已归档材料。"""
+
+    def __init__(self, *, options):
+        self.memory: MemoryResource
+        self.index_timeout_seconds = options["index_timeout_seconds"]
+        self.retry_seconds = options["retry_seconds"]
+        self._wake = asyncio.Event()
+        self._task: asyncio.Task | None = None
+
+    def bind(self, *, memory: MemoryResource):
+        self.memory = memory
+
+    @property
+    def store(self):
+        return self.memory.store
+
+    def archive(self, record: CompactionRecord) -> None:
+        self.store.archive(record)
+
+    def remember(self, digest: str, text: str) -> None:
+        self.store.queue_summary(digest, text)
+        self._wake.set()
+
+    @plug(START)
+    def start(self) -> None:
+        if self._task is None:
+            self._wake.set()
+            self._task = asyncio.create_task(self._run(), name="compaction-memory")
+
+    async def _run(self) -> None:
+        while True:
+            try:
+                await asyncio.wait_for(self._wake.wait(), self.retry_seconds)
+            except TimeoutError:
+                pass
+            self._wake.clear()
+            try:
+                jobs = self.store.pending_compactions()
+                failed = False
+                for job in jobs:
+                    try:
+                        async with asyncio.timeout(self.index_timeout_seconds):
+                            with usage_scope("memory_compaction"):
+                                await self.store.index_compaction(job)
+                    except Exception as error:  # noqa: BLE001 — 后台索引失败保留队列，日志仅输出脱敏类型。
+                        failed = True
+                        self.store.defer_compaction(job["digest"])
+                        logger.warning("自动记忆索引延后，原文和摘要已落盘：%s", type(error).__name__)
+                if len(jobs) == 16 and not failed:
+                    self._wake.set()
+            except Exception as error:  # noqa: BLE001 — 数据库故障保留待处理记录，下一周期重试。
+                logger.error("自动记忆队列读取或提交失败：%s", type(error).__name__)
+
+    @plug(STOP)
+    async def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+
+    @plug(CLEAN)
+    async def clean(self):
+        await self.stop()
+
+
+def plugin():
+    return compaction_plugin(
+        targets={},
+        components={
+            "recorder": ComponentFactory(
+                CompactionMemory,
+                lambda instance: InstanceExport(
+                    plugs={START: instance.start, STOP: instance.stop, CLEAN: instance.clean},
+                    resources={"recorder": instance},
+                ),
+                plugs=(CompactionMemory.start, CompactionMemory.stop, CompactionMemory.clean),
+                bind=lambda instance, resources: instance.bind(**resources),
+            )
+        },
+    )

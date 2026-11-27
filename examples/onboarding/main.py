@@ -7,14 +7,16 @@ import logging
 from pathlib import Path
 
 from aurora_api.access import AccessPolicy, token_from_env
-from aurora_bot.assembly_config import AGENTS, MESSAGES, RUN, WORK
 from aurora_bot.conversation import CONVERSATION
+from aurora_bot.runtime import AGENTS, MESSAGES, RUN, WORK
 from aurora_cli.commander import run_cli
 from aurora_config import copy_missing
+from aurora_host import Host, read_assembly
+from aurora_host.configuration import select_assembly
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[2]
-TEMPLATES = Path(__file__).with_name("config.tomls")
+TEMPLATES = Path(__file__).with_name("plugin.config.tomls")
 
 
 def initialize(data_dir: Path) -> None:
@@ -68,7 +70,11 @@ async def run(argv: list[str] | None = None) -> int:
         if args.token_env is not None:
             arguments += ["--token-env", args.token_env]
         print(f"安装配置助手：http://127.0.0.1:{args.port}；连接后发送你的安装目标，Ctrl+C 关闭。", flush=True)
-    return await run_cli(arguments)
+    runtime = Host.create(read_assembly(select_assembly(data_dir)), (), data_dir, workspace_root=ROOT)
+    try:
+        return await run_cli(arguments, runtime=runtime)
+    finally:
+        await runtime.stop()
 
 
 def main() -> int:

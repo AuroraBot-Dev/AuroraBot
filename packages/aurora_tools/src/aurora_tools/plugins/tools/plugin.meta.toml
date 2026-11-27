@@ -1,0 +1,162 @@
+schema_version = 2
+
+[plugins.tools]
+entry_point = "aurora_tools"
+title = "工具执行与集合"
+summary = "工具执行与集合的公开定义与真实实例导出"
+requires = []
+
+[definitions.TOOLS]
+plugin = "tools"
+id = "org.aurora.tools:registries/tools"
+kind = "registry"
+summary = "可供应用选择的工具定义目录"
+
+[definitions.TOOLS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.EXECUTOR]
+plugin = "tools"
+id = "org.aurora.tools:components/executor"
+kind = "component"
+summary = "顺序执行工具批次并保存结果的组件"
+
+[definitions.EXECUTE]
+plugin = "tools"
+id = "org.aurora.tools:components/executor/execute"
+kind = "hook_handler"
+summary = "执行实例的一次调用"
+
+[definitions.EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EXECUTE.interface.definition]
+id = "org.aurora.tools:components/executor"
+
+[definitions.CHILDREN]
+plugin = "tools"
+id = "org.aurora.tools:components/executor/children"
+kind = "hook_slot"
+summary = "接收所选工具实例的执行槽"
+
+[definitions.CHILDREN.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.BEFORE_CALL]
+plugin = "tools"
+id = "org.aurora.tools:executor/before_call"
+kind = "hook_slot"
+summary = "每次工具调用前的执行槽"
+
+[definitions.BEFORE_CALL.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.AFTER_CALL]
+plugin = "tools"
+id = "org.aurora.tools:executor/after_call"
+kind = "hook_slot"
+summary = "每次工具调用后的执行槽"
+
+[definitions.AFTER_CALL.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.CONFIGURE]
+plugin = "tools"
+id = "org.aurora.tools:handlers/executor/configure"
+kind = "hook_handler"
+summary = "读取显式绑定的执行超时"
+
+[definitions.CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.COLLECT]
+plugin = "tools"
+id = "org.aurora.tools:handlers/collection/prepare"
+kind = "hook_handler"
+summary = "创建工具成员并发布显式导出"
+
+[definitions.COLLECT.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CLEAN]
+plugin = "tools"
+id = "org.aurora.tools:handlers/collection/clean"
+kind = "hook_handler"
+summary = "逆序关闭集合拥有的工具实例"
+
+[definitions.CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.executor]
+plugin = "tools"
+inject = [
+    "ctx",
+    "registry",
+    "hooks",
+    "instance_id",
+    "states",
+    "options",
+]
+plugs = [
+    "EXECUTE",
+    "CONFIGURE",
+]
+slots = [
+    "CHILDREN",
+    "BEFORE_CALL",
+    "AFTER_CALL",
+]
+states = [
+    "input",
+    "output",
+    "current",
+]
+optional_inputs = [
+    "recorder",
+]
+resources = [
+    "executor",
+]
+options = "executor"
+optional_states = [
+    "config",
+]
+
+[components.collection]
+plugin = "tools"
+inject = [
+    "ctx",
+    "registry",
+    "storage",
+    "instance_id",
+    "states",
+    "options",
+    "publish_members",
+]
+plugs = [
+    "COLLECT",
+    "CLEAN",
+]
+slots = []
+states = [
+    "input",
+    "output",
+]
+optional_inputs = [
+    "catalog",
+]
+resource_maps = [
+    "tools",
+]
+resources = [
+    "catalog",
+]
+options = "collection"
+
+[contracts.executor]
+format = "json-schema"
+export = "aurora_tools.parameters:executor_options"
+
+[contracts.collection]
+format = "json-schema"
+file = "collection.schema.json"

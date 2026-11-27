@@ -53,7 +53,7 @@ Initialization creates missing onboarding assistant files in the separate `build
 
 ### 2. Fill in the required configuration
 
-Set `provider`, `model`, and any required `base_url` in `build/onboarding/config/org.aurora.adapter/model/profiles.toml`. Set `AURORA_MODEL_API_KEY` in the root `.env`; `credential` contains only the environment variable name.
+Set `provider`, `model`, and any required `base_url` in `build/onboarding/config/org.aurora.model/profiles.toml`. Set `AURORA_MODEL_API_KEY` in the root `.env`; `credential` contains only the environment variable name.
 
 ### 3. Start from the terminal
 

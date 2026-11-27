@@ -1,0 +1,96 @@
+schema_version = 2
+
+[plugins.notes]
+entry_point = "aurora_bot.notes"
+title = "工作笔记"
+summary = "导出本能力的定义、端口和资源，由宿主显式装配"
+requires = [
+    "aurora_tools",
+]
+
+[definitions.NOTES]
+plugin = "notes"
+id = "org.aurora.bot:state/notes"
+kind = "state_key"
+summary = "本能力持有的状态"
+
+[definitions.COMPONENT]
+plugin = "notes"
+id = "org.aurora.bot:components/notes"
+kind = "component"
+summary = "工具执行组件"
+
+[definitions.EXECUTE]
+plugin = "notes"
+id = "org.aurora.bot:components/notes/execute"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EXECUTE.interface.definition]
+id = "org.aurora.bot:components/notes"
+
+[definitions.WRITE]
+plugin = "notes"
+id = "org.aurora.bot:tools/notes/write"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "write"
+
+[definitions.WRITE.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.READ]
+plugin = "notes"
+id = "org.aurora.bot:tools/notes/read"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "read"
+
+[definitions.READ.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.LIST]
+plugin = "notes"
+id = "org.aurora.bot:tools/notes/list"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "list"
+
+[definitions.LIST.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[components.notes]
+inject = [
+    "ctx",
+    "options",
+]
+plugs = []
+slots = []
+states = []
+optional_states = []
+inputs = []
+optional_inputs = []
+resources = [
+    "notes",
+]
+options = "owner"
+plugin = "notes"
+
+[contracts.write]
+format = "json"
+file = "write.schema.json"
+
+[contracts.read]
+format = "json"
+file = "read.schema.json"
+
+[contracts.list]
+format = "json"
+file = "list.schema.json"
+
+[contracts.owner]
+format = "json-schema"
+file = "owner.schema.json"

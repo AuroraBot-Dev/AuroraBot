@@ -14,26 +14,22 @@ from typing import cast
 
 import pytest
 import tomli_w
-from aurora_adapter.mcp import CLIENT_STATUS, MCPClients
-from aurora_adapter.mcp.bot import assemble
-from aurora_adapter.mcp.catalog import automatic_name
-from aurora_adapter.mcp.errors import MCPClientError
-from aurora_adapter.mcp.preset import initialize
-from aurora_adapter.mcp.tool_execution import MCPTool
-from aurora_adapter.mcp.world import WORLD_SOURCE, WORLD_STATUS, MCPWorldError, _ResourceSource
-from aurora_adapter.model.config import ADAPTERS, ModelAdapter
-from aurora_adapter.model.testing import FakeModel, FakeReply
+from aurora_bot.mcp_preset import initialize
 from aurora_bot.operations import RUN_CONTROL, RunOperations
-from aurora_config import configuration_component
 from aurora_core import Id
 from aurora_core.bootstrap import bootstrap
-from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
-from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import STOP, Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
-from aurora_core.storage import StorageService
+from aurora_host import AssemblyPlan, Host
+from aurora_mcp import CLIENT_STATUS, MCPClients
+from aurora_mcp.catalog import automatic_name
+from aurora_mcp.errors import MCPClientError
+from aurora_mcp.tool_execution import MCPTool
+from aurora_mcp.world import WORLD_SOURCE, WORLD_STATUS, MCPWorldError, _ResourceSource
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.testing import FakeModel, FakeReply
 from aurora_world import ENVIRONMENT, RECORDS, SOURCE_STATUS
 from aurora_world.environment import TIME
 from test_mcp_stdio import alive
@@ -96,9 +92,10 @@ async def services(root, transport):
 
 def setup(root, declarations, mode, monkeypatch, events):
     assert initialize(root, world=True, output=StringIO()) == 0
-    host_path = root / "config/host.toml"
+    host_path = root / "config/assembly.toml"
     host_config = tomllib.loads(host_path.read_text(encoding="utf-8"))
     host_config["plugins"].append("aurora_world.environment")
+    host_config["instances"]["chat"]["options"]["profile"] = "test"
     registry = bootstrap()
     install_lifecycle_slots(registry)
     register_plugins(registry, load_plugins(enabled=host_config["plugins"]))
@@ -128,11 +125,11 @@ def setup(root, declarations, mode, monkeypatch, events):
     if mode == "source_failure":
         declarations["server0"]["protocol"] = "legacy"
     values = {
-        "org.aurora.adapter/mcp.toml": {"schema_version": 2, "servers": declarations},
-        "org.aurora.adapter/model/profiles.toml": {"test": {"adapter": str(ADAPTER), "model": "fake"}},
-        "org.aurora.adapter/model/bindings.toml": {"reasoning": "test"},
-        "org.aurora.bot/config.toml": {"instance_id": "main", "model_role": "reasoning", "streaming": False},
-        "org.aurora.world/config.toml": {
+        "org.aurora.mcp/plugin.config.toml": {"schema_version": 2, "servers": declarations},
+        "org.aurora.model/profiles.toml": {"test": {"adapter": str(ADAPTER), "model": "fake"}},
+        "org.aurora.model/bindings.toml": {"reasoning": "test"},
+        "org.aurora.agent/model_call.toml": {"streaming": False},
+        "org.aurora.world/plugin.config.toml": {
             "sources": [
                 {"source": str(TIME), "source_id": "clock", "config": {}},
                 *[
@@ -151,8 +148,10 @@ def setup(root, declarations, mode, monkeypatch, events):
     }
     for relative, value in values.items():
         (root / "config" / relative).write_text(tomli_w.dumps(value), encoding="utf-8")
-    ctx, hooks, storage = Context(registry), HookConnections(registry), StorageService(root)
-    components = assemble(registry=registry, ctx=ctx, hooks=hooks, storage=storage, workspace_root=root)
+    application = Host(registry, root, workspace_root=root)
+    application.assemble(AssemblyPlan.parse(host_config), load_plugins(enabled=host_config["plugins"]))
+    ctx, hooks, storage = application.ctx, application.hooks, application.storage
+    components = application.graph.components
     store = storage.snapshot_store()
     original_save = store.save
 
@@ -168,7 +167,7 @@ def setup(root, declarations, mode, monkeypatch, events):
     host = Lifecycle(
         ctx,
         hooks,
-        [configuration_component(registry, ctx, hooks, storage), *components],
+        components,
         persistence=ContextPersistence(ctx, store, interval=60),
         storage=storage,
     )
@@ -232,11 +231,11 @@ def test_shared_product_closes_consumers_before_clients_and_snapshot(tmp_path, m
                     )
                 )
                 if mode == "source_stop":
-                    for connection in hooks.for_slot(STOP, "default/world"):
+                    for connection in hooks.for_slot(STOP, "sources"):
                         await hooks.invoke(connection)
                     assert cast(
                         dict,
-                        ctx.get(CLIENT_STATUS, location={"owner": "aurora_adapter/mcp", "connection_id": "server0"}),
+                        ctx.get(CLIENT_STATUS, location={"owner": "mcp_clients", "connection_id": "server0"}),
                     )["accepting"]
                     assert not (directory / "finished").exists()
                     (directory / "release").touch()
@@ -282,9 +281,7 @@ def test_shared_product_closes_consumers_before_clients_and_snapshot(tmp_path, m
                         )
                         assert cast(
                             dict,
-                            ctx.get(
-                                CLIENT_STATUS, location={"owner": "aurora_adapter/mcp", "connection_id": "server1"}
-                            ),
+                            ctx.get(CLIENT_STATUS, location={"owner": "mcp_clients", "connection_id": "server1"}),
                         )["accepting"]
                 if mode != "disconnect":
                     assert all(process.returncode is None for process in processes)
@@ -295,7 +292,9 @@ def test_shared_product_closes_consumers_before_clients_and_snapshot(tmp_path, m
             if mode != "disconnect" or transport == "mixed":
                 assert all(process.returncode is None for process in processes)
             assert operations.instances == () and all(model.closed for model in models)
-            assert all(record.address.key.namespace != "org.aurora.adapter" for record in store.load())
+            assert all(
+                record.address.key.namespace not in {"org.aurora.model", "org.aurora.mcp"} for record in store.load()
+            )
             assert any(record.address.key == RECORDS for record in store.load())
             assert all(path.read_bytes() == content for path, content in before.items())
             assert (tmp_path / "server0/calls").read_text(encoding="utf-8").splitlines() == ["probe"]

@@ -4,20 +4,22 @@ import asyncio
 from typing import Literal, NotRequired, TypedDict, cast
 from uuid import uuid4
 
-from aurora_adapter.model import (
+import aurora_core as aurora
+from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding
+from aurora_core.ctx import Context
+from aurora_core.declarations import plug_id
+from aurora_model import (
     ChatClient,
     ChatRequest,
     FinishReason,
     ReasoningBlock,
     ResponseBuffer,
-    ToolCall,
     require_capabilities,
 )
-from aurora_adapter.model.usage import usage_scope
-from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding, component_entries
-from aurora_core.ctx import Context
-from aurora_core.discovery import Plugin
-from aurora_core.ids import Id
+from aurora_model.usage import usage_scope
+from aurora_tools.contract import ToolCall
+
+from .plugins.model._meta import CONFIGURE, EXECUTE, MODEL_CALL
 
 
 class ModelCallState(TypedDict):
@@ -41,12 +43,11 @@ class ModelCall:
     completed 表示推理请求正常结束，业务是否完成仍须结合 finish_reason 判断。
     """
 
-    definition_id = Id("org.aurora.agent:handlers/model_call")
+    definition_id = MODEL_CALL
 
     def __init__(
         self,
         ctx: Context,
-        client: ChatClient,
         *,
         instance_id: str | None = None,
         request_state: StateBinding,
@@ -57,10 +58,20 @@ class ModelCall:
         if not isinstance(self.instance_id, str) or not self.instance_id:
             raise ValueError("组件实例标识必须为非空字符串")
         self.ctx = ctx
-        self.client = client
+        self.client: ChatClient
         self.request_state = request_state
         self.output_state = output_state
         self.streaming = streaming
+        self.configuration = None
+
+    def bind(self, client: ChatClient) -> None:
+        """借用装配绑定的聊天资源，关闭职责留给资源所有者。"""
+        self.client = client
+
+    @aurora.plug(CONFIGURE)
+    def configure(self):
+        if self.configuration is not None:
+            self.streaming = self.configuration.get(self.ctx, ExecutionRequest("config"))["streaming"]
 
     @property
     def plug(self) -> ExecutionPlug:
@@ -69,8 +80,10 @@ class ModelCall:
             self.execute,
             {"input": self.request_state, "output": self.output_state},
             instance_id=self.instance_id,
+            port_id=plug_id(self.execute),
         )
 
+    @aurora.plug(EXECUTE)
     async def execute(self, execution: ExecutionRequest) -> None:
         buffer = ResponseBuffer()
 
@@ -123,11 +136,3 @@ class ModelCall:
                 raise
             else:
                 write("completed")
-
-
-def plugin() -> Plugin:
-    """声明模型调用组件及执行入口；客户端与实例由装配创建。"""
-    return Plugin(
-        "aurora_agent.model",
-        component_entries(ModelCall.definition_id, ModelCall, ModelCall.execute, provider="aurora_agent"),
-    )

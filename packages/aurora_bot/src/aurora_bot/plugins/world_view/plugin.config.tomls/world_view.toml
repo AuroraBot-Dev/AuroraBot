@@ -1,0 +1,6 @@
+max_chars = 12000
+archive_max_chars = 8000
+events = true
+environment = true
+notes = true
+actions = true

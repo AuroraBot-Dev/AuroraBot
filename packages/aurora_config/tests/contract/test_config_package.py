@@ -35,7 +35,7 @@ import sys
 
 class AbsentConfiguration(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'aurora_config', 'jsonschema', 'aurora_adapter', 'aurora_bot', 'aurora_cli'}:
+        if fullname.split('.')[0] in {'aurora_config', 'jsonschema', 'aurora_model', 'aurora_mcp', 'aurora_bot', 'aurora_cli'}:
             raise ModuleNotFoundError(fullname)
 
 sys.meta_path.insert(0, AbsentConfiguration())

@@ -7,9 +7,8 @@ from pathlib import Path
 
 from aurora_api.access import AccessPolicy
 from aurora_api.server import serve
-from aurora_bot.assembly_config import AGENTS, MESSAGES, RUN, WORK
 from aurora_bot.conversation import CONVERSATION
-from aurora_core import entry_from
+from aurora_bot.runtime import AGENTS, MESSAGES, RUN, WORK
 from test_default_assembly import seed, setup
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,9 +17,6 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_panel_observes_tool_results_and_confirms_completion(tmp_path):
     async def scenario():
         host, _, ctx, registry, _, _, events, _ = setup(tmp_path)
-        registry.register_many(
-            entry_from(target, provider="test") for target in (ctx.get, ctx.list, ctx.subscribe, ctx.unsubscribe)
-        )
         process = None
         token = "test-panel-runtime-token-1234567890"
         await host.start(configure=lambda: seed(ctx))

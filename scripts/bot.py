@@ -5,22 +5,20 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import cast
 
-from aurora_adapter.mcp import CLIENT_STATUS
-from aurora_adapter.mcp.bot import ASSEMBLY
-from aurora_adapter.mcp.preset import PLUGINS as MCP_PLUGINS
-from aurora_adapter.mcp.world import WORLD_STATUS
 from aurora_api.access import AccessPolicy, token_from_env
-from aurora_bot.assembly_config import AGENTS, MESSAGES, RUN, WORK
 from aurora_bot.cadence.state import CHECKPOINT
 from aurora_bot.conversation import CONVERSATION
-from aurora_bot.self_control_state import SELF_CONTROL
-from aurora_bot.work_notes import NOTES
+from aurora_bot.mcp_preset import PLUGINS as MCP_PLUGINS
+from aurora_bot.mcp_preset import initialize
+from aurora_bot.runtime import AGENTS, MESSAGES, RUN, WORK
 from aurora_cli.commander import run_cli
-from aurora_cli.configuration import read_host_config
 from aurora_config import CONFIGURATION
+from aurora_host import Host, read_assembly
+from aurora_host.configuration import select_assembly
 from aurora_logging import configure_logging
+from aurora_mcp import CLIENT_STATUS
+from aurora_mcp.world import WORLD_STATUS
 from aurora_world import ENVIRONMENT, RECORDS, SOURCE_STATUS
 from dotenv import load_dotenv
 
@@ -28,10 +26,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGINS = (
     *MCP_PLUGINS,
     "aurora_control",
-    "aurora_world",
+    "aurora_world.records",
+    "aurora_world.sources",
     "aurora_world.configuration",
     "aurora_world.environment",
-    "aurora_adapter.mcp.world",
+    "aurora_mcp.world",
     "aurora_bot.cadence",
     "aurora_api",
 )
@@ -40,12 +39,10 @@ READ_ONLY_KEYS = (
     MESSAGES,
     RUN,
     WORK,
-    NOTES,
     RECORDS,
     ENVIRONMENT,
     SOURCE_STATUS,
     CHECKPOINT,
-    SELF_CONTROL,
     CLIENT_STATUS,
     WORLD_STATUS,
 )
@@ -53,7 +50,7 @@ ORIGINS = ("http://127.0.0.1:5173", "http://localhost:5173")
 
 
 async def run(argv: list[str] | None = None) -> int:
-    """明确选择完整产品装配，合并宿主的额外插件；配置文件只由配置服务补缺。"""
+    """按显式产品预设创建宿主；已有插件选择与配置文件保持不变。"""
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data", help="数据目录，默认项目根目录的 data")
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env", help="环境文件，默认项目根目录的 .env")
@@ -76,11 +73,9 @@ async def run(argv: list[str] | None = None) -> int:
         allowed_origins=tuple(args.allowed_origin or ORIGINS),
         allowed_hosts=tuple(args.allowed_host or ("127.0.0.1", "localhost")),
     )
-    configured = read_host_config(args.data_dir)
-    plugins = dict.fromkeys((*PLUGINS, *cast(list[str], configured.get("plugins", []))))
-    arguments = ["--root", str(ROOT), "--data-dir", str(args.data_dir), "--assembly", str(ASSEMBLY)]
-    for name in plugins:
-        arguments.extend(["--plugin", name])
+    if not (args.data_dir / "config/host.toml").exists():
+        initialize(args.data_dir, plugins=PLUGINS, preset="bot")
+    arguments = ["--root", str(ROOT), "--data-dir", str(args.data_dir)]
     arguments.extend(
         [
             "serve",
@@ -100,7 +95,11 @@ async def run(argv: list[str] | None = None) -> int:
             json.dumps(access.allowed_hosts),
         ]
     )
-    return await run_cli(arguments)
+    runtime = Host.create(read_assembly(select_assembly(args.data_dir)), (), args.data_dir, workspace_root=ROOT)
+    try:
+        return await run_cli(arguments, runtime=runtime)
+    finally:
+        await runtime.stop()
 
 
 def main() -> int:

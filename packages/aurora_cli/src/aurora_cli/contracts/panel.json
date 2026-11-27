@@ -1,0 +1,4 @@
+{
+  "help": "快速启动 Panel 开发服务器，连接已有后端",
+  "passthrough": "参数原样交给 scripts/panel.py；无参数使用项目默认配置"
+}

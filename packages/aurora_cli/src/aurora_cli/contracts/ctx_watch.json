@@ -1,0 +1,16 @@
+{
+  "help": "观察当前宿主后续变化，Ctrl+C 退出",
+  "arguments": [
+    {
+      "name": "key",
+      "type": "id",
+      "option": true
+    },
+    {
+      "name": "location",
+      "type": "location",
+      "option": true
+    }
+  ],
+  "runtime": true
+}

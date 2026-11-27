@@ -75,11 +75,10 @@ def test_corrupt_checkpoint_is_rejected(fault):
 @pytest.mark.parametrize(
     "decision",
     [
-        {},
-        {"model_role": "cadence", "min_seconds": 60, "max_seconds": 30},
-        {"model_role": "cadence", "active_seconds": 60, "idle_seconds": 30},
-        {"model_role": "cadence", "jitter_ratio": 1},
-        {"model_role": "cadence", "api_key": "must-not-persist"},
+        {"min_seconds": 60, "max_seconds": 30},
+        {"active_seconds": 60, "idle_seconds": 30},
+        {"jitter_ratio": 1},
+        {"api_key": "must-not-persist"},
     ],
 )
 def test_invalid_decision_configuration(decision):
@@ -89,7 +88,7 @@ def test_invalid_decision_configuration(decision):
 
 def test_decision_defaults_are_explicit_and_separate_from_forwarding():
     assert CADENCE_CONFIG.parse({}) == {}
-    parsed = CADENCE_CONFIG.parse({"decision": {"model_role": "cadence"}})
+    parsed = CADENCE_CONFIG.parse({"decision": {}})
     assert isinstance(parsed, dict)
     assert parsed["decision"]["active_seconds"] == 5
     assert parsed["decision"]["idle_seconds"] == 180

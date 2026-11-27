@@ -3,20 +3,21 @@
 import json
 
 import pytest
-from aurora_agent.tools import ToolExecutionError
 from aurora_bot.event_archive import EventArchive
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import register_plugins
 from aurora_core.json_data import encode_json
+from aurora_tools.execution import ToolExecutionError
 from aurora_world import RECORDS, WorldRecords
-from aurora_world.plugin import plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin
 
 
 @pytest.fixture
 def world():
     registry = bootstrap()
-    register_plugins(registry, [plugin()])
+    register_plugins(registry, [records_plugin(), plugin()])
     ctx = Context(registry)
     clock = [10000.0]
     records = WorldRecords(ctx, now=lambda: clock[0])

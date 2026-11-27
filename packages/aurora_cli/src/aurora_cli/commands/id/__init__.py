@@ -5,7 +5,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from ...declarations import CommandContext, command_plugin
+from ...declarations import CommandContext, builtin_commands
 
 
 def execute(context: CommandContext) -> None:
@@ -16,12 +16,4 @@ def execute(context: CommandContext) -> None:
 
 
 def plugin():
-    return command_plugin(
-        __name__,
-        {
-            "id/list": {
-                "help": "列出启动前已登记的公共 ID、类型和提供者，不启动装配",
-                "executor": execute,
-            }
-        },
-    )
+    return builtin_commands(__name__, {"id/list": execute})

@@ -1,19 +1,18 @@
 """按 bot 实例定位运行管理器；公共操作定义与运行实例分别管理。"""
 
-from aurora_adapter.model import JsonValue
 from aurora_agent.runtime import AgentRuntime, RunHandle, Submission
-from aurora_core import Id, operation
+from aurora_core import operation
+from aurora_core.json_data import JsonValue
 
-RUN_CONTROL = Id("org.aurora.bot:services/run_control")
-RUN_SUBMIT = Id("org.aurora.bot:operations/run/submit")
-RUN_ACTIVATE = Id("org.aurora.bot:operations/run/activate")
-RUN_CANCEL = Id("org.aurora.bot:operations/run/cancel")
+from .plugins.runtime._meta import RUN_ACTIVATE, RUN_CANCEL, RUN_CONTROL, RUN_SUBMIT
+
+__all__ = ["RUN_ACTIVATE", "RUN_CANCEL", "RUN_CONTROL", "RUN_SUBMIT", "RunOperations"]
 
 
 class RunOperations:
     """每份插件清单持有独立分发表；只保存运行期引用，不进入 ctx 快照。
 
-    instance_id 为 bot 配置中的实例身份，必须显式提供。提交与激活沿用进程内
+    instance_id 为装配显式分配的产品实例身份，必须显式提供。提交与激活沿用进程内
     Submission/RunHandle 返回值；传输层须显式转换回执，不直接序列化运行句柄。
     """
 

@@ -1,0 +1,290 @@
+schema_version = 2
+
+[host]
+name = "aurora_cli"
+title = "CLI 宿主目录"
+summary = "内置命令、命令接收方与交互配置；命令实现由 CLI 装载"
+
+[definitions.COMMANDS]
+id = "org.aurora.cli:registries/commands"
+kind = "registry"
+summary = "CLI registries/commands"
+
+[definitions.COMMANDS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.COMMAND_SCHEMA]
+id = "org.aurora.cli:schemas/command"
+kind = "schema"
+summary = "CLI schemas/command"
+
+[definitions.COMMAND_SCHEMA.register_to]
+id = "org.aurora.core:registries/schemas"
+
+[definitions.CONFIGURATION]
+id = "org.aurora.cli:configs/default"
+kind = "config"
+summary = "CLI configs/default"
+
+[definitions.CONFIGURATION.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.CONFIG]
+id = "org.aurora.cli:state/config"
+kind = "state_key"
+summary = "CLI state/config"
+
+[definitions.CONFIG.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[definitions.CMD_ABOUT]
+id = "org.aurora.cli:commands/about"
+kind = "command"
+summary = "了解 AuroraBot 与当前运行环境"
+provider = "aurora_cli.commands.about"
+contract = "about"
+
+[definitions.CMD_ABOUT.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_CHECK]
+id = "org.aurora.cli:commands/check"
+kind = "command"
+summary = "默认运行静态检查与快速边界测试；--full 运行完整测试，--coverage 统计完整覆盖率"
+provider = "aurora_cli.commands.check"
+contract = "check"
+
+[definitions.CMD_CHECK.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_CTX_GET]
+id = "org.aurora.cli:commands/ctx/get"
+kind = "command"
+summary = "读取精确状态地址"
+provider = "aurora_cli.commands.ctx"
+contract = "ctx_get"
+
+[definitions.CMD_CTX_GET.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_CTX_SET]
+id = "org.aurora.cli:commands/ctx/set"
+kind = "command"
+summary = "以 JSON 整项替换状态"
+provider = "aurora_cli.commands.ctx"
+contract = "ctx_set"
+
+[definitions.CMD_CTX_SET.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_CTX_DELETE]
+id = "org.aurora.cli:commands/ctx/delete"
+kind = "command"
+summary = "删除精确状态地址"
+provider = "aurora_cli.commands.ctx"
+contract = "ctx_delete"
+
+[definitions.CMD_CTX_DELETE.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_CTX_LIST]
+id = "org.aurora.cli:commands/ctx/list"
+kind = "command"
+summary = "枚举已赋值地址"
+provider = "aurora_cli.commands.ctx"
+contract = "ctx_list"
+
+[definitions.CMD_CTX_LIST.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_CTX_WATCH]
+id = "org.aurora.cli:commands/ctx/watch"
+kind = "command"
+summary = "观察当前宿主后续变化，Ctrl+C 退出"
+provider = "aurora_cli.commands.ctx"
+contract = "ctx_watch"
+
+[definitions.CMD_CTX_WATCH.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_DONK_SHOW]
+id = "org.aurora.cli:commands/donk/show"
+kind = "command"
+summary = "显示 Python 工作区版本"
+provider = "aurora_cli.commands.donk"
+contract = "donk_show"
+
+[definitions.CMD_DONK_SHOW.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_DONK_MAJOR]
+id = "org.aurora.cli:commands/donk/major"
+kind = "command"
+summary = "升级主版本号"
+provider = "aurora_cli.commands.donk"
+contract = "donk_major"
+
+[definitions.CMD_DONK_MAJOR.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_DONK_MINOR]
+id = "org.aurora.cli:commands/donk/minor"
+kind = "command"
+summary = "升级次版本号"
+provider = "aurora_cli.commands.donk"
+contract = "donk_minor"
+
+[definitions.CMD_DONK_MINOR.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_DONK_PATCH]
+id = "org.aurora.cli:commands/donk/patch"
+kind = "command"
+summary = "升级修订版本号"
+provider = "aurora_cli.commands.donk"
+contract = "donk_patch"
+
+[definitions.CMD_DONK_PATCH.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_HELP]
+id = "org.aurora.cli:commands/help"
+kind = "command"
+summary = "列出当前可用命令"
+provider = "aurora_cli.commands.help"
+contract = "help"
+
+[definitions.CMD_HELP.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_ID_LIST]
+id = "org.aurora.cli:commands/id/list"
+kind = "command"
+summary = "列出启动前已登记的公共 ID、类型和提供者，不启动装配"
+provider = "aurora_cli.commands.id"
+contract = "id_list"
+
+[definitions.CMD_ID_LIST.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_BOT]
+id = "org.aurora.cli:commands/bot"
+kind = "command"
+summary = "快速启动完整 Bot 后端，读取项目 .env 与 data"
+provider = "aurora_cli.commands.launch"
+contract = "bot"
+
+[definitions.CMD_BOT.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_PANEL]
+id = "org.aurora.cli:commands/panel"
+kind = "command"
+summary = "快速启动 Panel 开发服务器，连接已有后端"
+provider = "aurora_cli.commands.launch"
+contract = "panel"
+
+[definitions.CMD_PANEL.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_TUI]
+id = "org.aurora.cli:commands/tui"
+kind = "command"
+summary = "快速启动 TUI，使用项目 .env 中的访问令牌"
+provider = "aurora_cli.commands.launch"
+contract = "tui"
+
+[definitions.CMD_TUI.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_RUN]
+id = "org.aurora.cli:commands/run"
+kind = "command"
+summary = "启动选定装配，Ctrl+C 停止"
+provider = "aurora_cli.commands.run"
+contract = "run"
+
+[definitions.CMD_RUN.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CMD_SERVE]
+id = "org.aurora.cli:commands/serve"
+kind = "command"
+summary = "启动本机 API；keys 为开放状态 ID 数组（默认 CLI config），endpoints 为显式开放的产品端点 ID 数组"
+provider = "aurora_cli.commands.serve"
+contract = "serve"
+
+[definitions.CMD_SERVE.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[contracts.about]
+format = "json"
+file = "contracts/about.json"
+
+[contracts.check]
+format = "json"
+file = "contracts/check.json"
+
+[contracts.ctx_get]
+format = "json"
+file = "contracts/ctx_get.json"
+
+[contracts.ctx_set]
+format = "json"
+file = "contracts/ctx_set.json"
+
+[contracts.ctx_delete]
+format = "json"
+file = "contracts/ctx_delete.json"
+
+[contracts.ctx_list]
+format = "json"
+file = "contracts/ctx_list.json"
+
+[contracts.ctx_watch]
+format = "json"
+file = "contracts/ctx_watch.json"
+
+[contracts.donk_show]
+format = "json"
+file = "contracts/donk_show.json"
+
+[contracts.donk_major]
+format = "json"
+file = "contracts/donk_major.json"
+
+[contracts.donk_minor]
+format = "json"
+file = "contracts/donk_minor.json"
+
+[contracts.donk_patch]
+format = "json"
+file = "contracts/donk_patch.json"
+
+[contracts.help]
+format = "json"
+file = "contracts/help.json"
+
+[contracts.id_list]
+format = "json"
+file = "contracts/id_list.json"
+
+[contracts.bot]
+format = "json"
+file = "contracts/bot.json"
+
+[contracts.panel]
+format = "json"
+file = "contracts/panel.json"
+
+[contracts.tui]
+format = "json"
+file = "contracts/tui.json"
+
+[contracts.run]
+format = "json"
+file = "contracts/run.json"
+
+[contracts.serve]
+format = "json"
+file = "contracts/serve.json"

@@ -1,6 +1,7 @@
 """在 config 阶段收集声明、校验全部配置并原子注入 ctx。"""
 
 from aurora_core import plug
+from aurora_core.components import InstanceExport
 from aurora_core.ctx import Context
 from aurora_core.discovery import ComponentFactory, Plugin
 from aurora_core.registry import DefinitionRegistry
@@ -34,8 +35,10 @@ def plugin() -> Plugin:
         components={
             "configuration": ComponentFactory(
                 create=ConfigurationService,
+                export=lambda service: InstanceExport(
+                    plugs={LOAD: service.configure}, resources={"configuration": service}, stop_accepting=service.close
+                ),
                 plugs=(ConfigurationService.configure,),
-                stop_accepting=ConfigurationService.close,
             ),
         },
     )

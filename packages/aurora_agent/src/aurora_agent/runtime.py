@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import uuid4
 
-from aurora_adapter.model import JsonValue
 from aurora_control import ExecutionRequest
-from aurora_core.json_data import encode_json
+from aurora_core.json_data import JsonValue, encode_json
 
 from .react import AgentBusyError, ReActAgent
 

@@ -4,13 +4,15 @@ version = "0.1.0"
 description = "AuroraBot unified installation package"
 requires-python = ">=3.12"
 dependencies = [
-    "aurora-bot>=0.1.0",
+    "aurora-bot[mcp-world,litellm,world]>=0.1.0",
     "aurora-cli>=0.1.0",
     "aurora-api>=0.1.0",
     "aurora-world[environment]>=0.1.0",
-    "aurora-adapter[mcp-bot]>=0.1.0",
     "python-dotenv>=1.2,<2",
 ]
+
+[project.optional-dependencies]
+memory = ["aurora-memory[compaction]>=0.1.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -21,6 +23,8 @@ packages = []
 
 [dependency-groups]
 dev = [
+    "aurora-meta-build==0.1.0",
+    "hatchling",
     "pytest>=8",
     "pytest-cov>=6",
     "pytest-xdist>=3.8.0",
@@ -30,11 +34,15 @@ dev = [
 
 [tool.coverage.run]
 source = [
-    "aurora_adapter",
+    "aurora_memory",
+    "aurora_host",
+    "aurora_model",
+    "aurora_mcp",
     "aurora_config",
     "aurora_core",
     "aurora_control",
     "aurora_agent",
+    "aurora_tools",
     "aurora_cli",
     "aurora_bot",
     "aurora_api",
@@ -56,6 +64,7 @@ venvPath = "."
 venv = ".venv"
 include = [
     "packages/*/src",
+    "tooling/aurora_meta_build/src",
     "packages/*/tests",
     "tests",
     "conftest.py",
@@ -64,11 +73,16 @@ include = [
 ]
 exclude = ["**/__pycache__", "**/node_modules", ".venv", "build", "dist"]
 extraPaths = [
-    "packages/aurora_adapter/src",
+    "packages/aurora_memory/src",
+    "packages/aurora_host/src",
+    "tooling/aurora_meta_build/src",
+    "packages/aurora_model/src",
+    "packages/aurora_mcp/src",
     "packages/aurora_config/src",
     "packages/aurora_core/src",
     "packages/aurora_control/src",
     "packages/aurora_agent/src",
+    "packages/aurora_tools/src",
     "packages/aurora_bot/src",
     "packages/aurora_cli/src",
     "packages/aurora_api/src",
@@ -78,11 +92,16 @@ extraPaths = [
 
 [tool.uv.workspace]
 members = [
-    "packages/aurora_adapter",
+    "packages/aurora_memory",
+    "packages/aurora_host",
+    "tooling/aurora_meta_build",
+    "packages/aurora_model",
+    "packages/aurora_mcp",
     "packages/aurora_config",
     "packages/aurora_core",
     "packages/aurora_control",
     "packages/aurora_agent",
+    "packages/aurora_tools",
     "packages/aurora_bot",
     "packages/aurora_cli",
     "packages/aurora_api",
@@ -91,11 +110,16 @@ members = [
 ]
 
 [tool.uv.sources]
-aurora-adapter = { workspace = true }
+aurora-host = { workspace = true }
+aurora-memory = { workspace = true }
+aurora-meta-build = { workspace = true }
+aurora-model = { workspace = true }
+aurora-mcp = { workspace = true }
 aurora-config = { workspace = true }
 aurora-core = { workspace = true }
 aurora-control = { workspace = true }
 aurora-agent = { workspace = true }
+aurora-tools = { workspace = true }
 aurora-bot = { workspace = true }
 aurora-cli = { workspace = true }
 aurora-api = { workspace = true }

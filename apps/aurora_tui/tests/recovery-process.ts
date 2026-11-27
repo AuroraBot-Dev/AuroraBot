@@ -78,7 +78,7 @@ try {
 
   for (const model of [first, second]) {
     await model.editor.openConfiguration();
-    const file = model.editor.files.find((item) => item.state === 'org.aurora.bot:state/config');
+    const file = model.editor.files.find((item) => item.state === 'org.aurora.agent:state/react_defaults/config');
     assert.ok(file);
     model.editor.edit('id', file.id);
     await model.editor.read();

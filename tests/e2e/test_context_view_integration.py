@@ -6,13 +6,16 @@ from dataclasses import replace
 from typing import cast
 
 import pytest
-from aurora_agent.tools import ToolInstance, ToolSpec
-from aurora_bot.assembly_config import CONFIG, MESSAGES, WORK
 from aurora_bot.conversation import CONVERSATION, ConversationEndpoint
+from aurora_bot.runtime import MESSAGES, WORK
 from aurora_control import ExecutionPlug
+from aurora_tools.execution import ToolInstance, ToolSpec
 from aurora_world.configuration import plugin as configuration_plugin
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin as world_plugin
 from test_default_assembly import COMPONENT, TOOL, seed, setup
+
+from tests.fixtures.bot_graph import bot_options, configure_bot
 
 
 def view(request):
@@ -22,13 +25,13 @@ def view(request):
 @pytest.mark.parametrize("streaming", [False, True])
 def test_tool_changes_refresh_view_without_persisting_snapshots_and_restore(tmp_path, streaming):
     async def scenario():
-        plugins = (world_plugin(), configuration_plugin())
+        plugins = (records_plugin(), world_plugin(), configuration_plugin())
         host, assembly, ctx, registry, clients, _, _, _ = setup(tmp_path, extra_plugins=plugins)
         records = assembly.world_records
         assert records is not None
         records.select("weather", "weather")
 
-        async def factory(*, ctx, storage, instance_id, input_state, output_state, config):
+        async def factory(*, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
             async def execute(request):
                 call = input_state.get(ctx, request)
                 records.append(source_id="workshop", message_id="checked", payload="检查完成")
@@ -48,7 +51,9 @@ def test_tool_changes_refresh_view_without_persisting_snapshots_and_restore(tmp_
 
         def configure():
             seed(ctx)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "streaming": streaming, "system_prompt": "保持稳定的规则"})
+            configure_bot(
+                ctx, {**cast(dict, bot_options(ctx)), "streaming": streaming, "system_prompt": "保持稳定的规则"}
+            )
 
         await host.start(configure=configure)
         try:
@@ -87,7 +92,7 @@ def test_tool_changes_refresh_view_without_persisting_snapshots_and_restore(tmp_
         assert "business_context" not in snapshot
 
         host, assembly, ctx, _, clients, _, _, _ = setup(
-            tmp_path, extra_plugins=(world_plugin(), configuration_plugin())
+            tmp_path, extra_plugins=(records_plugin(), world_plugin(), configuration_plugin())
         )
         await host.start()
         try:
@@ -106,12 +111,12 @@ def test_tool_changes_refresh_view_without_persisting_snapshots_and_restore(tmp_
 @pytest.mark.parametrize("with_world,enabled", [(False, True), (True, False)])
 def test_direct_input_works_without_world_or_with_view_disabled(tmp_path, with_world, enabled):
     async def scenario():
-        plugins = (world_plugin(), configuration_plugin()) if with_world else ()
+        plugins = (records_plugin(), world_plugin(), configuration_plugin()) if with_world else ()
         host, assembly, ctx, _, clients, _, _, _ = setup(tmp_path, extra_plugins=plugins)
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "context_view": {"enabled": enabled}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "context_view": {"enabled": enabled}})
 
         await host.start(configure=configure)
         try:

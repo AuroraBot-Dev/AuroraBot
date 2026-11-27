@@ -5,16 +5,17 @@ import json
 from typing import cast
 
 import pytest
-from aurora_adapter.model.testing import FakeReply
 from aurora_agent.react import AgentBusyError
-from aurora_bot.assembly_config import CONFIG
 from aurora_bot.cadence.timing import CadenceTiming
 from aurora_bot.self_control_state import SELF_CONTROL
 from aurora_control import ExecutionRequest
+from aurora_model.testing import FakeReply
 from test_cadence import append, state, until
 from test_cadence import configured as forwarding
 from test_cadence_decision import configured as deciding
 from test_default_assembly import seed, setup
+
+from tests.fixtures.bot_graph import bot_options, configure_bot
 
 
 class Clock:
@@ -48,8 +49,8 @@ def configured(root, *, clock=None):
 
     def configure():
         seed(ctx, tools=False)
-        ctx.set(
-            CONFIG, {**cast(dict, ctx.get(CONFIG)), "self_control": {"enabled": True}, "actions": {"enabled": True}}
+        configure_bot(
+            ctx, {**cast(dict, bot_options(ctx)), "self_control": {"enabled": True}, "actions": {"enabled": True}}
         )
 
     return host, assembly, ctx, clients, clock, configure
@@ -324,7 +325,7 @@ def test_pause_stops_inflight_decision_and_resume_preserves_event(tmp_path):
 
         def config():
             configure()
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "self_control": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "self_control": {"enabled": True}})
 
         await host.start(configure=config)
         try:
@@ -354,7 +355,7 @@ def test_pause_forwarding_resumes_without_another_world_event(tmp_path):
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "self_control": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "self_control": {"enabled": True}})
 
         await host.start(configure=configure)
         try:
@@ -385,7 +386,7 @@ def test_due_wakeup_joins_existing_run_without_another_owner(tmp_path):
 
         def configure():
             seed(ctx)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "self_control": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "self_control": {"enabled": True}})
 
         await host.start(configure=configure)
         try:

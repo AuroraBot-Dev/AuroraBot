@@ -1,0 +1,10 @@
+{
+  "name": "bot_finish",
+  "description": "请求本轮全部工具和结果观察完成后正常结束，不再推理。应放在本批最后；不取消其他工具或新输入，不暂停自动引导。",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  }
+}

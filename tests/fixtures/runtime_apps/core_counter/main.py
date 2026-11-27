@@ -4,7 +4,7 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from aurora_core import Id, entry_from, hook_handler, operation
+from aurora_core import Id, entry_from, operation, plug
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey, install_context
 from aurora_core.discovery import Plugin, load_plugins, register_plugins
@@ -31,7 +31,7 @@ class Counter:
         self.ctx = ctx
         self.location = {"counter": name}
 
-    @hook_handler("dev.example.counter:handlers/increment", slot=INCREMENT)
+    @plug("dev.example.counter:handlers/increment")
     def increment(self, amount: int) -> int:
         try:
             previous = self.ctx.get(COUNT, location=self.location)
@@ -72,7 +72,7 @@ async def run_counter(data_dir: Path, name: str, amount: int) -> int:
     persistence = ContextPersistence(ctx, storage.snapshot_store())
     subscription: str | None = None
 
-    @hook_handler("dev.example.counter:handlers/prepare", slot=PREPARE)
+    @plug("dev.example.counter:handlers/prepare")
     def prepare() -> None:
         nonlocal subscription
         counter = Counter(ctx, name)
@@ -93,7 +93,7 @@ async def run_counter(data_dir: Path, name: str, amount: int) -> int:
             lambda change: print(f"{name}: {change.value}"), key=COUNT, location={"counter": name}
         )
 
-    @hook_handler("dev.example.counter:handlers/clean", slot=CLEAN)
+    @plug("dev.example.counter:handlers/clean")
     def clean() -> None:
         if subscription is not None:
             ctx.unsubscribe(subscription)

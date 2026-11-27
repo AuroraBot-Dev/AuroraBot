@@ -33,5 +33,12 @@ def test_defaults_are_copied_without_changing_input():
 def test_configuration_plugin_requires_explicit_dependencies():
     with pytest.raises(ValueError):
         load_plugins(enabled=["aurora_world.configuration"])
-    plugins = load_plugins(enabled=["aurora_world", "aurora_config", "aurora_world.configuration"])
-    assert {item.name for item in plugins} == {"aurora_world", "aurora_config", "aurora_world.configuration"}
+    plugins = load_plugins(
+        enabled=["aurora_world.records", "aurora_world.sources", "aurora_config", "aurora_world.configuration"]
+    )
+    assert {item.name for item in plugins} == {
+        "aurora_world.records",
+        "aurora_world.sources",
+        "aurora_config",
+        "aurora_world.configuration",
+    }

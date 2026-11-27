@@ -4,9 +4,11 @@ import math
 from typing import cast
 
 from aurora_config import ConfigSchema
-from aurora_core import Id
 
-SELF_CONTROL = Id("org.aurora.bot:state/self_control")
+from .plugins.self_control._meta import SELF_CONTROL
+
+__all__ = ["MAX_WAKES", "REVISION", "SELF_CONTROL", "WAKE_ID", "initial_state", "validate_state"]
+
 MAX_WAKES = 128
 IDENTITY = {"type": "string", "minLength": 1, "maxLength": 256}
 WAKE_ID = {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$", "maxLength": 64}

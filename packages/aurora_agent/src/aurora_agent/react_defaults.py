@@ -1,23 +1,34 @@
 """默认 ReAct 阶段：准备上下文、解释模型决定和回填工具观察。"""
 
 import logging
-from collections.abc import Callable
 from typing import NotRequired, TypedDict, cast
 
-from aurora_adapter.model import ChatRequest, Message, ModelProtocolError, ToolCall
-from aurora_adapter.model.content import validate_content
-from aurora_adapter.model.usage import usage_scope
-from aurora_control import ExecutionLink, ExecutionPlug, ExecutionRequest, InstanceStateBinding, component_entries
+from aurora_control import ExecutionPlug, ExecutionRequest
+from aurora_core import plug
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
-from aurora_core.ids import Id
 from aurora_core.json_data import encode_json
+from aurora_model import ChatRequest, Message, ModelProtocolError
+from aurora_model.content import validate_content
+from aurora_model.usage import usage_scope
+from aurora_tools.contract import ToolBatchState, ToolCall
+from aurora_tools.execution import ToolExecutor, failure, read_request
 
-from .compaction import CompactionState, HistoryCompactor, validate_compaction
-from .input_budget import ModelInputBudget, ModelInputBudgetExceeded, read_exchange_ends
-from .model import ModelCall, ModelCallState
+from .compaction import CompactionState, validate_compaction
+from .input_budget import ModelInputBudgetExceeded, read_exchange_ends
+from .model import ModelCallState
+from .plugins.defaults._meta import (
+    BUILD_PROMPT,
+    BUILD_PROMPT_EXECUTE,
+    CONFIGURE,
+    INTERPRET_RESPONSE,
+    INTERPRET_RESPONSE_EXECUTE,
+    RECORD_OBSERVATION,
+    RECORD_OBSERVATION_EXECUTE,
+    defaults_plugin,
+)
 from .react import Guidance, ReActAgent
-from .tools import ToolBatchState, ToolExecutor, ToolResult, failure, read_request
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +56,7 @@ class ReActContext(TypedDict):
 
 
 class ReActDefaults:
-    """将已有 agent、ModelCall 与 ToolExecutor 连接成可使用的默认流程。
+    """默认阶段通过明确状态地址交换数据，接线由宿主装配提供。
 
     context_state 是实例级 ReActContext，prepare 原子保存消息与已接纳的引导位置。
     字符串与 kind=model_input 的结构化引导作为 user 内容，其他 JSON 编码为环境输入。
@@ -58,62 +69,36 @@ class ReActDefaults:
     context、inbox 与工具记录的裁剪同样由装配负责。本组件不关闭共享模型客户端。
     """
 
-    def __init__(
-        self,
-        agent: ReActAgent,
-        model: ModelCall,
-        tools: ToolExecutor,
-        *,
-        context_state: InstanceStateBinding,
-        system_prompt: str = "",
-        context_view: Callable[[ExecutionRequest], str] | None = None,
-        input_budget: ModelInputBudget | None = None,
-        compactor: HistoryCompactor | None = None,
-        tool_observation: Callable[[str, ToolResult], str] | None = None,
-    ) -> None:
-        if agent.ctx is not model.ctx or agent.ctx is not tools.ctx:
-            raise ValueError("默认 ReAct 组件必须使用同一 ctx")
-        if not isinstance(context_state, InstanceStateBinding):
-            raise TypeError("ReAct 上下文必须使用实例级绑定")
-        self.agent, self.model, self.tools = agent, model, tools
-        self.ctx: Context = agent.ctx
-        self.context_state, self.system_prompt = context_state, system_prompt
-        self.context_view = context_view
-        self.input_budget = input_budget
+    def __init__(self, ctx: Context, *, instance_id: str, states, system_prompt: str = "") -> None:
+        self.ctx, self.instance_id, self.states = ctx, instance_id, states
+        self.context_state = states["context"]
+        self.system_prompt = system_prompt
+        self.agent: ReActAgent
+        self.tools: ToolExecutor
+        self.context_view = None
+        self.input_budget = None
+        self.compactor = None
+        self.tool_observation = None
+
+    def bind(self, *, agent, tools, context_view=None, input_budget=None, compactor=None, tool_observation=None):
+        self.agent, self.tools = agent, tools
+        self.context_view, self.input_budget = context_view, input_budget
         self.compactor, self.tool_observation = compactor, tool_observation
 
-    def connect(self) -> None:
-        """连接四个工作阶段；装配须先登记对应插件，失败时撤销本次连接。"""
-        phases = ("prepare", "infer", "act", "observe")
-        if any(self.agent.slots[phase].links() for phase in phases):
-            raise ValueError("默认阶段要求 prepare/infer/act/observe 尚未连接")
-        links: list[ExecutionLink] = []
-        try:
-            for phase, method in (
-                ("prepare", "build_prompt"),
-                ("infer", "interpret_response"),
-                ("observe", "record_observation"),
-            ):
-                plug = ExecutionPlug(
-                    Id(f"org.aurora.agent:handlers/react/{method}"),
-                    getattr(self, method),
-                    {
-                        **self.agent.states,
-                        "context": self.context_state,
-                        "model_input": self.model.request_state,
-                        "model_output": self.model.output_state,
-                        "tool_input": self.tools.request_state,
-                        "tool_output": self.tools.output_state,
-                    },
-                    instance_id=f"{self.agent.instance_id}/{method}",
-                )
-                links.append(self.agent.slots[phase].connect(plug, priority=10))
-            links.append(self.agent.slots["infer"].connect(self.model.plug))
-            links.append(self.agent.slots["act"].connect(self.tools.plug))
-        except Exception:
-            for link in links:
-                self.agent.slots["prepare"].hooks.disconnect(link.connection)
-            raise
+    @plug(CONFIGURE)
+    def configure(self):
+        if "config" in self.states:
+            self.system_prompt = self.states["config"].get(self.ctx, ExecutionRequest("config"))["system_prompt"]
+
+    def execution_plugs(self):
+        return {
+            identity: ExecutionPlug(definition, method, self.states, instance_id=self.instance_id, port_id=identity)
+            for definition, identity, method in (
+                (BUILD_PROMPT, BUILD_PROMPT_EXECUTE, self.build_prompt),
+                (INTERPRET_RESPONSE, INTERPRET_RESPONSE_EXECUTE, self.interpret_response),
+                (RECORD_OBSERVATION, RECORD_OBSERVATION_EXECUTE, self.record_observation),
+            )
+        }
 
     def _context(self, request: ExecutionRequest) -> ReActContext:
         try:
@@ -148,7 +133,7 @@ class ReActDefaults:
             return
         calls = pending["message"].get("tool_calls", [])
         try:
-            value = self.tools.output_state.get(self.ctx, ExecutionRequest(pending["run_id"]))
+            value = self.states["tool_output"].get(self.ctx, ExecutionRequest(pending["run_id"]))
         except KeyError:
             value = None
         matching = isinstance(value, dict) and value.get("turn_id") == pending["turn_id"]
@@ -172,10 +157,11 @@ class ReActDefaults:
         context["messages"].extend([pending["message"], *observations])
         context["pending"] = None
 
+    @plug(BUILD_PROMPT_EXECUTE)
     async def build_prompt(self, request: ExecutionRequest) -> None:
         context = self._context(request)
         self._settle(context, recovering=True)
-        batch = self.agent.batch.get(self.ctx, request)
+        batch = self.states["batch"].get(self.ctx, request)
         if not isinstance(batch, list):
             raise TypeError("prepare 需要引导 batch 列表")
         for item in cast(list[Guidance], batch):
@@ -225,13 +211,14 @@ class ReActDefaults:
                     )
             except ModelInputBudgetExceeded as error:
                 logger.error("模型输入超限：%s", error)
-                address = self.model.request_state.address(request)
+                address = self.states["model_input"].address(request)
                 self.ctx.delete(address.key, location=dict(address.location))
                 raise
-        self.model.request_state.set(self.ctx, request, model_request)
+        self.states["model_input"].set(self.ctx, request, model_request)
 
+    @plug(INTERPRET_RESPONSE_EXECUTE)
     async def interpret_response(self, request: ExecutionRequest) -> None:
-        value = self.model.output_state.get(self.ctx, request)
+        value = self.states["model_output"].get(self.ctx, request)
         if not isinstance(value, dict) or value.get("status") != "completed":
             raise ModelProtocolError("模型尚未完成")
         response = cast(ModelCallState, value)
@@ -259,9 +246,10 @@ class ReActDefaults:
             if end and (not ends or ends[-1] != end):
                 ends.append(end)
         self.context_state.set(self.ctx, request, context)
-        self.tools.request_state.set(self.ctx, request, batch)
-        self.agent.decision.set(self.ctx, request, "act" if calls else "finish")
+        self.states["tool_input"].set(self.ctx, request, batch)
+        self.states["decision"].set(self.ctx, request, "act" if calls else "finish")
 
+    @plug(RECORD_OBSERVATION_EXECUTE)
     async def record_observation(self, request: ExecutionRequest) -> None:
         context = self._context(request)
         self._settle(context, recovering=False)
@@ -270,18 +258,32 @@ class ReActDefaults:
         self.context_state.set(self.ctx, request, context)
 
 
+def _create(*, ctx, instance_id, states, options):
+    if "config" in states and options:
+        raise ValueError("默认阶段参数须选择配置状态或显式 options")
+    return ReActDefaults(ctx, instance_id=instance_id, states=states, **options)
+
+
 def plugin() -> Plugin:
-    return Plugin(
-        "aurora_agent.react_defaults",
-        tuple(
-            entry
-            for method in ("build_prompt", "interpret_response", "record_observation")
-            for entry in component_entries(
-                Id(f"org.aurora.agent:handlers/react/{method}"),
-                ReActDefaults,
-                getattr(ReActDefaults, method),
-                provider="aurora_agent",
-            )
-        ),
-        requires=("aurora_agent.react", "aurora_agent.model", "aurora_agent.tools"),
+    from .context_resources import factories
+
+    return defaults_plugin(
+        targets={BUILD_PROMPT: ReActDefaults, INTERPRET_RESPONSE: ReActDefaults, RECORD_OBSERVATION: ReActDefaults},
+        components={
+            **factories(),
+            "defaults": ComponentFactory(
+                _create,
+                lambda instance: InstanceExport(
+                    plugs={**instance.execution_plugs(), CONFIGURE: instance.configure},
+                    resources={"defaults": instance},
+                ),
+                plugs=(
+                    ReActDefaults.build_prompt,
+                    ReActDefaults.interpret_response,
+                    ReActDefaults.record_observation,
+                    ReActDefaults.configure,
+                ),
+                bind=lambda instance, resources: instance.bind(**resources),
+            ),
+        },
     )

@@ -1,0 +1,40 @@
+{
+  "schema_version": 2,
+  "distribution": {
+    "name": "aurora-api",
+    "version": "0.1.0",
+    "description": "AuroraBot HTTP and WebSocket transport",
+    "requires-python": ">=3.12",
+    "dependencies": ["aurora-core>=0.1.0", "aiohttp>=3.14.5,<4"],
+    "entry-points": {
+      "aurora.plugins": {
+        "aurora_api": "aurora_api.endpoints:plugin"
+      }
+    }
+  },
+  "manifests": {
+    "src/aurora_api/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "api": {
+          "entry_point": "aurora_api",
+          "title": "HTTP 与 WebSocket 传输",
+          "summary": "接收显式选用的 HTTP 端点，不分发任意操作",
+          "requires": [],
+          "factory": "aurora_api.endpoints:plugin"
+        }
+      },
+      "definitions": {
+        "ENDPOINTS": {
+          "plugin": "api",
+          "id": "org.aurora.api:registries/endpoints",
+          "kind": "registry",
+          "summary": "HTTP 端点接收方",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        }
+      }
+    }
+  }
+}

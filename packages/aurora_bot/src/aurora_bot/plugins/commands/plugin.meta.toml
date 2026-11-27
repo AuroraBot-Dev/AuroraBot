@@ -1,0 +1,38 @@
+schema_version = 2
+
+[plugins.commands]
+entry_point = "aurora_bot.commands"
+title = "运行命令"
+summary = "导出本能力的定义、端口和资源，由宿主显式装配"
+requires = [
+    "aurora_bot.runtime",
+]
+
+[definitions.SUBMIT]
+plugin = "commands"
+id = "org.aurora.bot:commands/run/submit"
+kind = "command"
+summary = "运行命令"
+
+[definitions.SUBMIT.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.ACTIVATE]
+plugin = "commands"
+id = "org.aurora.bot:commands/run/activate"
+kind = "command"
+summary = "运行命令"
+
+[definitions.ACTIVATE.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[definitions.CANCEL]
+plugin = "commands"
+id = "org.aurora.bot:commands/run/cancel"
+kind = "command"
+summary = "运行命令"
+
+[definitions.CANCEL.register_to]
+id = "org.aurora.cli:registries/commands"
+
+[components]

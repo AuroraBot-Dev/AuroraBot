@@ -1,0 +1,110 @@
+schema_version = 2
+
+[plugins.cadence]
+entry_point = "aurora_bot.cadence"
+title = "主动节律"
+summary = "导出本能力的定义、端口和资源，由宿主显式装配"
+requires = [
+    "aurora_bot.runtime",
+    "aurora_world.records",
+    "aurora_config",
+]
+
+[definitions.CONFIGURATION]
+plugin = "cadence"
+id = "org.aurora.bot:configs/cadence"
+kind = "config"
+summary = "业务参数配置"
+contract = "config"
+
+[definitions.CONFIGURATION.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.CHECKPOINT]
+plugin = "cadence"
+id = "org.aurora.bot:state/cadence"
+kind = "state_key"
+summary = "本能力持有的状态"
+
+[definitions.PREPARE]
+plugin = "cadence"
+id = "org.aurora.bot:handlers/cadence/prepare"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.START]
+plugin = "cadence"
+id = "org.aurora.bot:handlers/cadence/start"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.START.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.STOP]
+plugin = "cadence"
+id = "org.aurora.bot:handlers/cadence/stop"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.STOP.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CLEAN]
+plugin = "cadence"
+id = "org.aurora.bot:handlers/cadence/clean"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CONFIG_STATE]
+plugin = "cadence"
+id = "org.aurora.bot:state/cadence_config"
+kind = "state_key"
+summary = "本能力持有的状态"
+
+[definitions.CONFIG_STATE.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[components.cadence]
+inject = [
+    "ctx",
+    "instance_id",
+    "options",
+]
+plugs = [
+    "PREPARE",
+    "START",
+    "STOP",
+    "CLEAN",
+]
+slots = []
+states = []
+optional_states = []
+inputs = [
+    "runtime",
+    "records",
+]
+optional_inputs = [
+    "choice",
+    "view",
+    "control",
+]
+resources = [
+    "cadence",
+]
+options = "owner"
+plugin = "cadence"
+
+[contracts.owner]
+format = "json-schema"
+file = "owner.schema.json"
+
+[contracts.config]
+format = "json-schema"
+export = "aurora_bot.cadence.parameters:schema"

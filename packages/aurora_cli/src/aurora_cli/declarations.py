@@ -10,14 +10,21 @@ from aurora_core.discovery import Plugin
 from aurora_core.ids import Id
 from aurora_core.registry import DefinitionRegistry, RegistryEntry
 
-COMMANDS = Id("org.aurora.cli:registries/commands")
-CONFIG = Id("org.aurora.cli:state/config")
+from ._meta import COMMANDS, CONFIG, HOST_DEFINITIONS
 
+__all__ = [
+    "COMMANDS",
+    "CONFIG",
+    "Command",
+    "CommandContext",
+    "CommandReceiver",
+    "builtin_commands",
+    "command_plugin",
+    "read_command",
+]
 
 ARGUMENT_TYPES = frozenset({"string", "integer", "json", "id", "location", "flag"})
-ALLOWED_SPEC_FIELDS = frozenset(
-    {"help", "operation", "arguments", "executor", "runtime", "assembly_argument", "passthrough"}
-)
+ALLOWED_SPEC_FIELDS = frozenset({"help", "operation", "arguments", "executor", "runtime", "passthrough"})
 ALLOWED_ARGUMENT_FIELDS = frozenset({"name", "type", "option", "required"})
 
 
@@ -31,7 +38,6 @@ class Command:
     arguments: tuple[dict[str, Any], ...]
     executor: Callable[..., object] | None = None
     runtime: bool = True
-    assembly_argument: str | None = None
     passthrough: str | None = None
 
 
@@ -62,6 +68,25 @@ def command_plugin(
             for name, spec in definitions.items()
         ),
     )
+
+
+def builtin_commands(provider: str, executors: Mapping[str, Callable[..., object]]) -> Plugin:
+    """绑定宿主目录的命令定义与纯数据契约，执行函数由所属命令模块提供。"""
+    import json
+    from importlib.resources import files
+
+    entries = []
+    for identity, definition in HOST_DEFINITIONS.items():
+        if definition.kind != "command" or definition.provider != provider:
+            continue
+        name = identity.local_path
+        spec = json.loads(
+            files("aurora_cli").joinpath("contracts/" + name.replace("/", "_") + ".json").read_text(encoding="utf-8")
+        )
+        if name in executors:
+            spec["executor"] = executors[name]
+        entries.append(definition.bind(spec))
+    return Plugin(provider, tuple(entries))
 
 
 def read_command(entry: RegistryEntry) -> Command:
@@ -112,13 +137,6 @@ def read_command(entry: RegistryEntry) -> Command:
             raise ValueError("passthrough 必须为非空帮助文本")
         if "passthrough" in names:
             raise ValueError("透传命令不能同时声明名为 passthrough 的参数")
-    assembly_argument = spec.get("assembly_argument")
-    if assembly_argument is not None and (
-        not runtime
-        or not isinstance(assembly_argument, str)
-        or not any(item["name"] == assembly_argument and item.get("type") == "id" for item in arguments)
-    ):
-        raise ValueError("assembly_argument 须引用运行期命令的 id 类型参数")
     return Command(
         entry.id,
         spec["help"],
@@ -126,7 +144,6 @@ def read_command(entry: RegistryEntry) -> Command:
         tuple(deepcopy(arguments)),
         executor,
         runtime,
-        assembly_argument,
         passthrough,
     )
 

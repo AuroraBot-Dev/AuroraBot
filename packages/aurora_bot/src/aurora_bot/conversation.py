@@ -5,17 +5,16 @@ from dataclasses import dataclass
 from typing import cast
 from uuid import uuid4
 
-from aurora_adapter.model import JsonValue
 from aurora_agent.react import AgentBusyError
 from aurora_agent.runtime import Submission
-from aurora_core import Id
+from aurora_core.json_data import JsonValue
 
 from .attachments import message_content
 from .conversation_contract import describe_conversation
 from .operations import RunOperations
+from .plugins.conversation._meta import CONVERSATION, conversation_plugin
 
-CONVERSATION = Id("org.aurora.bot:endpoints/conversation")
-ENDPOINTS = Id("org.aurora.api:registries/endpoints")
+__all__ = ["CONVERSATION", "ConversationEndpoint", "plugin"]
 
 
 class ConversationError(Exception):
@@ -37,10 +36,12 @@ class ConversationEndpoint:
     不暴露任意 operation。回执不进入快照，重启后旧会话明确失效。
     """
 
-    def __init__(self, operations: RunOperations, *, receipt_limit: int = 4096) -> None:
+    def __init__(self, operations: RunOperations | None = None, *, receipt_limit: int = 4096) -> None:
         if type(receipt_limit) is not int or receipt_limit <= 0:
             raise ValueError("回执上限必须为正整数")
-        self.operations = operations
+        self.operations: RunOperations
+        if operations is not None:
+            self.operations = operations
         self.session_id = uuid4().hex
         self.receipt_limit = receipt_limit
         self._receipts: dict[tuple[str, str], Receipt] = {}
@@ -125,3 +126,19 @@ class ConversationEndpoint:
             result["run_status"] = "pending" if completion is None else completion.status
             result["error"] = None if completion is None else completion.error
         return result
+
+
+def plugin():
+    from aurora_core.components import ComponentFactory, InstanceExport
+
+    endpoint = ConversationEndpoint()
+    return conversation_plugin(
+        targets={CONVERSATION: endpoint},
+        components={
+            "endpoint": ComponentFactory(
+                lambda registry: registry.get(CONVERSATION).target,
+                lambda instance: InstanceExport(resources={"endpoint": instance}),
+                bind=lambda instance, resources: setattr(instance, "operations", resources["operations"]),
+            ),
+        },
+    )

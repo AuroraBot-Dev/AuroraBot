@@ -5,12 +5,12 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from uuid import uuid4
 
+from aurora_core._meta import HOOK_HANDLERS, HOOK_SLOTS
 from aurora_core.ctx import Context, StateAddress
 from aurora_core.hooks import HookConnection, HookConnections, HookSlot
 from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
 
-CONTROL_STATE = Id("org.aurora.control:state/control")
 _logger = logging.getLogger(__name__)
 
 
@@ -34,7 +34,7 @@ def component_entries(
             "hook_handler",
             execute,
             provider,
-            register_to=Id("org.aurora.core:registries/hook_handlers"),
+            register_to=HOOK_HANDLERS,
             interface=definition_id,
         ),
     )
@@ -50,7 +50,7 @@ def execution_slot_entry(slot_id: Id, *, provider: str) -> RegistryEntry:
         "hook_slot",
         HookSlot(_accept_execution),
         provider,
-        register_to=Id("org.aurora.core:registries/hook_slots"),
+        register_to=HOOK_SLOTS,
     )
 
 
@@ -129,9 +129,11 @@ class ExecutionPlug:
     def __post_init__(self) -> None:
         _check_identity(self.definition_id, self.instance_id)
 
+    port_id: Id | None = field(default=None, kw_only=True)
+
     @property
     def execute_id(self) -> Id:
-        return Id(f"{self.definition_id}/execute")
+        return self.port_id if self.port_id is not None else Id(f"{self.definition_id}/execute")
 
     @property
     def reference(self) -> str:

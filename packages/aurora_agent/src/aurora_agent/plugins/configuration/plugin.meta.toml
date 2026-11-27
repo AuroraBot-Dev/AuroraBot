@@ -1,0 +1,112 @@
+schema_version = 2
+
+[plugins.configuration]
+entry_point = "aurora_agent.configuration"
+title = "执行参数配置"
+summary = "按实际消费者登记非持久配置；不创建业务实例"
+requires = [
+    "aurora_config",
+    "aurora_agent.react",
+    "aurora_agent.model",
+    "aurora_agent.react_defaults",
+]
+
+[definitions.REACT]
+plugin = "configuration"
+id = "org.aurora.agent:configs/react"
+kind = "config"
+summary = "react 的行为参数"
+contract = "react"
+
+[definitions.REACT.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.REACT_STATE]
+plugin = "configuration"
+id = "org.aurora.agent:state/react/config"
+kind = "state_key"
+summary = "react 的非持久配置状态"
+
+[definitions.MODEL_CALL]
+plugin = "configuration"
+id = "org.aurora.agent:configs/model_call"
+kind = "config"
+summary = "model_call 的行为参数"
+contract = "model_call"
+
+[definitions.MODEL_CALL.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.MODEL_CALL_STATE]
+plugin = "configuration"
+id = "org.aurora.agent:state/model_call/config"
+kind = "state_key"
+summary = "model_call 的非持久配置状态"
+
+[definitions.REACT_DEFAULTS]
+plugin = "configuration"
+id = "org.aurora.agent:configs/react_defaults"
+kind = "config"
+summary = "react_defaults 的行为参数"
+contract = "react_defaults"
+
+[definitions.REACT_DEFAULTS.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.REACT_DEFAULTS_STATE]
+plugin = "configuration"
+id = "org.aurora.agent:state/react_defaults/config"
+kind = "state_key"
+summary = "react_defaults 的非持久配置状态"
+
+[definitions.INPUT_BUDGET]
+plugin = "configuration"
+id = "org.aurora.agent:configs/input_budget"
+kind = "config"
+summary = "input_budget 的行为参数"
+contract = "input_budget"
+
+[definitions.INPUT_BUDGET.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.INPUT_BUDGET_STATE]
+plugin = "configuration"
+id = "org.aurora.agent:state/input_budget/config"
+kind = "state_key"
+summary = "input_budget 的非持久配置状态"
+
+[definitions.COMPACTION]
+plugin = "configuration"
+id = "org.aurora.agent:configs/compaction"
+kind = "config"
+summary = "compaction 的行为参数"
+contract = "compaction"
+
+[definitions.COMPACTION.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.COMPACTION_STATE]
+plugin = "configuration"
+id = "org.aurora.agent:state/compaction/config"
+kind = "state_key"
+summary = "compaction 的非持久配置状态"
+
+[contracts.react]
+format = "json-schema"
+export = "aurora_agent.parameters:react"
+
+[contracts.model_call]
+format = "json-schema"
+export = "aurora_agent.parameters:model_call"
+
+[contracts.react_defaults]
+format = "json-schema"
+export = "aurora_agent.parameters:react_defaults"
+
+[contracts.input_budget]
+format = "json-schema"
+export = "aurora_agent.parameters:input_budget"
+
+[contracts.compaction]
+format = "json-schema"
+export = "aurora_agent.parameters:compaction"

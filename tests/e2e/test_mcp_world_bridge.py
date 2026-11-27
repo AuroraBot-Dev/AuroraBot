@@ -12,7 +12,7 @@ def test_mcp_world_roundtrip_without_agent_or_product_packages(tmp_path):
 import importlib.abc
 import runpy
 import sys
-blocked = {'aurora_agent', 'aurora_bot', 'aurora_control', 'aurora_adapter.model', 'aurora_cli', 'aurora_api'}
+blocked = {'aurora_agent', 'aurora_bot', 'aurora_control', 'aurora_model', 'aurora_tools', 'aurora_cli', 'aurora_api'}
 class AbsentPackages(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if any(fullname == item or fullname.startswith(item + '.') for item in blocked):

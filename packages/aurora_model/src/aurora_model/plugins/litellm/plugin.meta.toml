@@ -1,0 +1,36 @@
+schema_version = 2
+
+[plugins.litellm]
+entry_point = "aurora_model.litellm"
+title = "LiteLLM 供应商"
+summary = "LiteLLM 供应商的公开定义与真实实例导出"
+requires = [
+    "aurora_model",
+]
+
+[definitions.CHAT]
+plugin = "litellm"
+id = "org.aurora.model:adapters/litellm/chat"
+kind = "adapter"
+summary = "LiteLLM 聊天工厂"
+
+[definitions.CHAT.register_to]
+id = "org.aurora.model:registries/adapters"
+
+[definitions.CHOICE]
+plugin = "litellm"
+id = "org.aurora.model:adapters/litellm/choice"
+kind = "adapter"
+summary = "LiteLLM 决策工厂"
+
+[definitions.CHOICE.register_to]
+id = "org.aurora.model:registries/adapters"
+
+[definitions.EMBEDDING]
+plugin = "litellm"
+id = "org.aurora.model:adapters/litellm/embedding"
+kind = "adapter"
+summary = "LiteLLM 向量工厂"
+
+[definitions.EMBEDDING.register_to]
+id = "org.aurora.model:registries/adapters"

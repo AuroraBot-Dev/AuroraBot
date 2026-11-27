@@ -1,0 +1,179 @@
+schema_version = 2
+
+[host]
+name = "aurora_core"
+title = "内核宿主目录"
+summary = "自举目录、生命周期和 ctx 操作，不作为可选插件启用"
+
+[definitions.REGISTRY_DIRECTORY]
+id = "org.aurora.core:registries/registries"
+kind = "registry"
+summary = "内核分类接收方：registries"
+
+[definitions.PLUGINS]
+id = "org.aurora.core:registries/plugins"
+kind = "registry"
+summary = "内核分类接收方：plugins"
+
+[definitions.PLUGINS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.OPERATIONS]
+id = "org.aurora.core:registries/operations"
+kind = "registry"
+summary = "内核分类接收方：operations"
+
+[definitions.OPERATIONS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.HOOK_SLOTS]
+id = "org.aurora.core:registries/hook_slots"
+kind = "registry"
+summary = "内核分类接收方：hook_slots"
+
+[definitions.HOOK_SLOTS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.HOOK_HANDLERS]
+id = "org.aurora.core:registries/hook_handlers"
+kind = "registry"
+summary = "内核分类接收方：hook_handlers"
+
+[definitions.HOOK_HANDLERS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.RESOURCES]
+id = "org.aurora.core:registries/resources"
+kind = "registry"
+summary = "内核分类接收方：resources"
+
+[definitions.RESOURCES.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.SERVICES]
+id = "org.aurora.core:registries/services"
+kind = "registry"
+summary = "内核分类接收方：services"
+
+[definitions.SERVICES.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.SCHEMAS]
+id = "org.aurora.core:registries/schemas"
+kind = "registry"
+summary = "内核分类接收方：schemas"
+
+[definitions.SCHEMAS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.STATE_KEYS]
+id = "org.aurora.core:registries/state_keys"
+kind = "registry"
+summary = "内核分类接收方：state_keys"
+
+[definitions.STATE_KEYS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.EVENTS]
+id = "org.aurora.core:registries/events"
+kind = "registry"
+summary = "内核分类接收方：events"
+
+[definitions.EVENTS.register_to]
+id = "org.aurora.core:registries/registries"
+
+[definitions.CONFIG]
+id = "org.aurora.core:lifecycle/config"
+kind = "hook_slot"
+summary = "宿主生命周期：config"
+
+[definitions.CONFIG.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.PREPARE]
+id = "org.aurora.core:lifecycle/prepare"
+kind = "hook_slot"
+summary = "宿主生命周期：prepare"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.START]
+id = "org.aurora.core:lifecycle/start"
+kind = "hook_slot"
+summary = "宿主生命周期：start"
+
+[definitions.START.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.STOP]
+id = "org.aurora.core:lifecycle/stop"
+kind = "hook_slot"
+summary = "宿主生命周期：stop"
+
+[definitions.STOP.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.CLEAN]
+id = "org.aurora.core:lifecycle/clean"
+kind = "hook_slot"
+summary = "宿主生命周期：clean"
+
+[definitions.CLEAN.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.CTX_GET]
+id = "org.aurora.core:operations/ctx/get"
+kind = "operation"
+summary = "共享状态操作：get"
+
+[definitions.CTX_GET.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.CTX_SET]
+id = "org.aurora.core:operations/ctx/set"
+kind = "operation"
+summary = "共享状态操作：set"
+
+[definitions.CTX_SET.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.CTX_DELETE]
+id = "org.aurora.core:operations/ctx/delete"
+kind = "operation"
+summary = "共享状态操作：delete"
+
+[definitions.CTX_DELETE.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.CTX_LIST]
+id = "org.aurora.core:operations/ctx/list"
+kind = "operation"
+summary = "共享状态操作：list"
+
+[definitions.CTX_LIST.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.CTX_SUBSCRIBE]
+id = "org.aurora.core:operations/ctx/subscribe"
+kind = "operation"
+summary = "共享状态操作：subscribe"
+
+[definitions.CTX_SUBSCRIBE.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.CTX_UNSUBSCRIBE]
+id = "org.aurora.core:operations/ctx/unsubscribe"
+kind = "operation"
+summary = "共享状态操作：unsubscribe"
+
+[definitions.CTX_UNSUBSCRIBE.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.CTX_CHANGED]
+id = "org.aurora.core:events/ctx/changed"
+kind = "event"
+summary = "共享状态变化事件"
+
+[definitions.CTX_CHANGED.register_to]
+id = "org.aurora.core:registries/events"

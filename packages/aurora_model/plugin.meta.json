@@ -1,0 +1,455 @@
+{
+  "schema_version": 2,
+  "distribution": {
+    "name": "aurora-model",
+    "version": "0.1.0",
+    "description": "Aurora model protocols, configuration and providers",
+    "requires-python": ">=3.12",
+    "dependencies": ["aurora-core>=0.1.0", "aurora-tools>=0.1.0"],
+    "optional-dependencies": {
+      "config": ["aurora-config>=0.1.0"],
+      "litellm": ["litellm>=1.106.6,<1.107"]
+    },
+    "entry-points": {
+      "aurora.plugins": {
+        "aurora_model": "aurora_model.plugin:plugin",
+        "aurora_model.configuration": "aurora_model.configuration:plugin",
+        "aurora_model.litellm": "aurora_model.supplier:plugin"
+      }
+    }
+  },
+  "manifests": {
+    "src/aurora_model/plugins/model/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "model": {
+          "entry_point": "aurora_model",
+          "title": "模型协议与资源",
+          "summary": "模型协议与资源的公开定义与真实实例导出",
+          "requires": [],
+          "factory": "aurora_model.plugin:plugin"
+        }
+      },
+      "definitions": {
+        "ADAPTERS": {
+          "plugin": "model",
+          "id": "org.aurora.model:registries/adapters",
+          "kind": "registry",
+          "summary": "模型供应商工厂目录",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "EMBEDDING_CLIENT": {
+          "plugin": "model",
+          "id": "org.aurora.model:services/embedding_client",
+          "kind": "service",
+          "summary": "文本向量协议",
+          "register_to": {
+            "id": "org.aurora.core:registries/services"
+          }
+        },
+        "CHOICE_CLIENT": {
+          "plugin": "model",
+          "id": "org.aurora.model:services/choice_client",
+          "kind": "service",
+          "summary": "有限选项决策协议",
+          "register_to": {
+            "id": "org.aurora.core:registries/services"
+          }
+        },
+        "CHAT_CLIENT": {
+          "plugin": "model",
+          "id": "org.aurora.model:services/chat_client",
+          "kind": "service",
+          "summary": "聊天客户端协议",
+          "register_to": {
+            "id": "org.aurora.core:registries/services"
+          }
+        },
+        "CHAT_REQUEST": {
+          "plugin": "model",
+          "id": "org.aurora.model:schemas/chat/request",
+          "kind": "schema",
+          "summary": "聊天请求数据契约",
+          "register_to": {
+            "id": "org.aurora.core:registries/schemas"
+          }
+        },
+        "CHAT_RESPONSE": {
+          "plugin": "model",
+          "id": "org.aurora.model:schemas/chat/response",
+          "kind": "schema",
+          "summary": "聊天响应数据契约",
+          "register_to": {
+            "id": "org.aurora.core:registries/schemas"
+          }
+        },
+        "CHAT_CHUNK": {
+          "plugin": "model",
+          "id": "org.aurora.model:schemas/chat/chunk",
+          "kind": "schema",
+          "summary": "聊天增量数据契约",
+          "register_to": {
+            "id": "org.aurora.core:registries/schemas"
+          }
+        },
+        "CHAT_CAPABILITIES": {
+          "plugin": "model",
+          "id": "org.aurora.model:schemas/chat/capabilities",
+          "kind": "schema",
+          "summary": "聊天客户端能力声明",
+          "register_to": {
+            "id": "org.aurora.core:registries/schemas"
+          }
+        },
+        "CHAT_PREPARE": {
+          "plugin": "model",
+          "id": "org.aurora.model:handlers/chat/prepare",
+          "kind": "hook_handler",
+          "summary": "创建并检查模型客户端",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CHAT_CLEAN": {
+          "plugin": "model",
+          "id": "org.aurora.model:handlers/chat/clean",
+          "kind": "hook_handler",
+          "summary": "关闭自有模型客户端",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CHOICE_PREPARE": {
+          "plugin": "model",
+          "id": "org.aurora.model:handlers/choice/prepare",
+          "kind": "hook_handler",
+          "summary": "创建并检查模型客户端",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CHOICE_CLEAN": {
+          "plugin": "model",
+          "id": "org.aurora.model:handlers/choice/clean",
+          "kind": "hook_handler",
+          "summary": "关闭自有模型客户端",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "EMBEDDING_PREPARE": {
+          "plugin": "model",
+          "id": "org.aurora.model:handlers/embedding/prepare",
+          "kind": "hook_handler",
+          "summary": "创建并检查模型客户端",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "EMBEDDING_CLEAN": {
+          "plugin": "model",
+          "id": "org.aurora.model:handlers/embedding/clean",
+          "kind": "hook_handler",
+          "summary": "关闭自有模型客户端",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        }
+      },
+      "components": {
+        "chat": {
+          "plugin": "model",
+          "inject": ["ctx", "registry", "resolve_credential", "states", "options"],
+          "plugs": ["CHAT_PREPARE", "CHAT_CLEAN"],
+          "slots": [],
+          "resources": ["model"],
+          "optional_inputs": ["catalog"],
+          "options": "resource",
+          "optional_states": ["profiles"]
+        },
+        "choice": {
+          "plugin": "model",
+          "inject": ["ctx", "registry", "resolve_credential", "states", "options"],
+          "plugs": ["CHOICE_PREPARE", "CHOICE_CLEAN"],
+          "slots": [],
+          "resources": ["model"],
+          "optional_inputs": ["catalog"],
+          "options": "resource",
+          "optional_states": ["profiles"]
+        },
+        "embedding": {
+          "plugin": "model",
+          "inject": ["ctx", "registry", "resolve_credential", "states", "options"],
+          "plugs": ["EMBEDDING_PREPARE", "EMBEDDING_CLEAN"],
+          "slots": [],
+          "resources": ["model"],
+          "optional_inputs": ["catalog"],
+          "options": "resource",
+          "optional_states": ["profiles"]
+        }
+      },
+      "contracts": {
+        "resource": {
+          "format": "json-schema",
+          "export": "aurora_model.contracts:resource_options",
+          "content": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["adapter", "model"],
+                "additionalProperties": false,
+                "properties": {
+                  "adapter": {
+                    "type": "string",
+                    "format": "aurora-id"
+                  },
+                  "model": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  },
+                  "base_url": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  },
+                  "credential": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  },
+                  "thinking": {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "type": {
+                        "enum": ["enabled", "disabled"]
+                      },
+                      "budget_tokens": {
+                        "type": "integer",
+                        "minimum": 1024
+                      }
+                    }
+                  },
+                  "reasoning_effort": {
+                    "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+                  },
+                  "capabilities": {
+                    "type": "object",
+                    "required": ["streaming", "tool_calls"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "streaming": {
+                        "type": "boolean"
+                      },
+                      "tool_calls": {
+                        "type": "boolean"
+                      },
+                      "file_input": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["profile"],
+                "properties": {
+                  "profile": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "src/aurora_model/plugins/configuration/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "configuration": {
+          "entry_point": "aurora_model.configuration",
+          "title": "模型配置",
+          "summary": "模型配置的公开定义与真实实例导出",
+          "requires": ["aurora_model", "aurora_config"],
+          "factory": "aurora_model.configuration:plugin"
+        }
+      },
+      "definitions": {
+        "PROFILES": {
+          "plugin": "configuration",
+          "id": "org.aurora.model:configs/profiles",
+          "kind": "config",
+          "summary": "模型 profile 配置声明",
+          "contract": "profiles",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "CONFIG": {
+          "plugin": "configuration",
+          "id": "org.aurora.model:state/config",
+          "kind": "state_key",
+          "summary": "非持久的模型 profiles",
+          "register_to": {
+            "id": "org.aurora.core:registries/state_keys"
+          }
+        },
+        "ROLES": {
+          "plugin": "configuration",
+          "id": "org.aurora.model:configs/bindings",
+          "kind": "config",
+          "summary": "模型角色引用配置声明",
+          "contract": "bindings",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "BINDINGS": {
+          "plugin": "configuration",
+          "id": "org.aurora.model:state/bindings",
+          "kind": "state_key",
+          "summary": "非持久的模型角色绑定",
+          "register_to": {
+            "id": "org.aurora.core:registries/state_keys"
+          }
+        }
+      },
+      "contracts": {
+        "profiles": {
+          "format": "json-schema",
+          "export": "aurora_model.contracts:profiles_schema",
+          "content": {
+            "type": "object",
+            "propertyNames": {
+              "minLength": 1
+            },
+            "additionalProperties": {
+              "type": "object",
+              "required": ["adapter", "model"],
+              "additionalProperties": false,
+              "properties": {
+                "adapter": {
+                  "type": "string",
+                  "format": "aurora-id"
+                },
+                "model": {
+                  "type": "string",
+                  "pattern": "\\S"
+                },
+                "base_url": {
+                  "type": "string",
+                  "pattern": "\\S"
+                },
+                "credential": {
+                  "type": "string",
+                  "pattern": "\\S"
+                },
+                "provider": {
+                  "type": "string",
+                  "pattern": "\\S"
+                },
+                "thinking": {
+                  "type": "object",
+                  "required": ["type"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "type": {
+                      "enum": ["enabled", "disabled"]
+                    },
+                    "budget_tokens": {
+                      "type": "integer",
+                      "minimum": 1024
+                    }
+                  }
+                },
+                "reasoning_effort": {
+                  "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+                },
+                "capabilities": {
+                  "type": "object",
+                  "required": ["streaming", "tool_calls"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "streaming": {
+                      "type": "boolean"
+                    },
+                    "tool_calls": {
+                      "type": "boolean"
+                    },
+                    "file_input": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "bindings": {
+          "format": "json-schema",
+          "file": "bindings.schema.json",
+          "content": {
+            "type": "object",
+            "propertyNames": {
+              "minLength": 1
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_model/plugins/litellm/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "litellm": {
+          "entry_point": "aurora_model.litellm",
+          "title": "LiteLLM 供应商",
+          "summary": "LiteLLM 供应商的公开定义与真实实例导出",
+          "requires": ["aurora_model"],
+          "factory": "aurora_model.supplier:plugin"
+        }
+      },
+      "definitions": {
+        "CHAT": {
+          "plugin": "litellm",
+          "id": "org.aurora.model:adapters/litellm/chat",
+          "kind": "adapter",
+          "summary": "LiteLLM 聊天工厂",
+          "register_to": {
+            "id": "org.aurora.model:registries/adapters"
+          }
+        },
+        "CHOICE": {
+          "plugin": "litellm",
+          "id": "org.aurora.model:adapters/litellm/choice",
+          "kind": "adapter",
+          "summary": "LiteLLM 决策工厂",
+          "register_to": {
+            "id": "org.aurora.model:registries/adapters"
+          }
+        },
+        "EMBEDDING": {
+          "plugin": "litellm",
+          "id": "org.aurora.model:adapters/litellm/embedding",
+          "kind": "adapter",
+          "summary": "LiteLLM 向量工厂",
+          "register_to": {
+            "id": "org.aurora.model:registries/adapters"
+          }
+        }
+      }
+    }
+  }
+}

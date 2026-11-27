@@ -1,0 +1,41 @@
+{
+  "help": "启动本机 API；keys 为开放状态 ID 数组（默认 CLI config），endpoints 为显式开放的产品端点 ID 数组",
+  "runtime": true,
+  "arguments": [
+    {
+      "name": "port",
+      "type": "integer",
+      "option": true
+    },
+    {
+      "name": "keys",
+      "type": "json",
+      "option": true
+    },
+    {
+      "name": "read_only_keys",
+      "type": "json",
+      "option": true
+    },
+    {
+      "name": "endpoints",
+      "type": "json",
+      "option": true
+    },
+    {
+      "name": "token_env",
+      "type": "string",
+      "option": true
+    },
+    {
+      "name": "allowed_origins",
+      "type": "json",
+      "option": true
+    },
+    {
+      "name": "allowed_hosts",
+      "type": "json",
+      "option": true
+    }
+  ]
+}

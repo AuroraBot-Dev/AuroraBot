@@ -4,14 +4,12 @@ import asyncio
 from typing import cast
 
 import pytest
-from aurora_adapter.model import ChatRequest, Message, ModelError, ToolDefinition
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import ModelCall, ModelCallState
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import Guidance, ReActAgent
 from aurora_agent.react import plugin as react_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, StateBinding, component_entries
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import register_plugins
@@ -20,6 +18,9 @@ from aurora_core.lifecycle import STOP, Lifecycle, LifecycleComponent, install_l
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_model import ChatRequest, Message, ModelError
+from aurora_model.testing import FakeModel, FakeReply
+from aurora_tools.contract import ToolDefinition
 
 STATE = Id("dev.react.integration:state/data")
 TOOL: ToolDefinition = {
@@ -72,7 +73,8 @@ def assemble(data_dir, *, fail_tool=False, fail_model=False):
         return FakeReply(("准备计算",), tool_calls=({"id": "add-1", "name": "add", "arguments": {"a": 2, "b": 3}},))
 
     client = FakeModel(respond)
-    model = ModelCall(ctx, client, request_state=model_input, output_state=model_output, instance_id="model")
+    model = ModelCall(ctx, request_state=model_input, output_state=model_output, instance_id="model")
+    model.bind(client)
 
     def messages(request) -> list[Message]:
         try:
@@ -130,7 +132,7 @@ def assemble(data_dir, *, fail_tool=False, fail_model=False):
     assert model_link.slot_states["inbox"] == agent.inbox
     assert model_link.plug.states["input"] == model_input
 
-    @hook_handler("dev.react.integration:handlers/close", slot=STOP)
+    @plug("dev.react.integration:handlers/close")
     async def close():
         # 装配持有模型资源，并明确本示例的中间值保留策略。
         await client.aclose()

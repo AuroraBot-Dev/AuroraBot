@@ -1,0 +1,93 @@
+schema_version = 2
+
+[plugins.clients]
+entry_point = "aurora_mcp"
+title = "MCP 客户端"
+summary = "MCP 客户端的公开定义与真实实例导出"
+requires = [
+    "aurora_config",
+]
+
+[definitions.CONFIGURATION]
+plugin = "clients"
+id = "org.aurora.mcp:configs/default"
+kind = "config"
+summary = "MCP 连接和目录筛选配置"
+contract = "configuration"
+
+[definitions.CONFIGURATION.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.CONFIG_STATE]
+plugin = "clients"
+id = "org.aurora.mcp:state/config"
+kind = "state_key"
+summary = "非持久的 MCP 配置"
+
+[definitions.CONFIG_STATE.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[definitions.CLIENT_STATUS]
+plugin = "clients"
+id = "org.aurora.mcp:state/clients"
+kind = "state_key"
+summary = "MCP 连接观察状态"
+
+[definitions.CONFIGURE]
+plugin = "clients"
+id = "org.aurora.mcp:handlers/configure"
+kind = "hook_handler"
+summary = "选择配置的 MCP 连接"
+
+[definitions.CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.PREPARE]
+plugin = "clients"
+id = "org.aurora.mcp:handlers/prepare"
+kind = "hook_handler"
+summary = "准备阶段端口"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.STOP]
+plugin = "clients"
+id = "org.aurora.mcp:handlers/stop"
+kind = "hook_handler"
+summary = "停止接收并等待借用者结束"
+
+[definitions.STOP.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CLEAN]
+plugin = "clients"
+id = "org.aurora.mcp:handlers/clean"
+kind = "hook_handler"
+summary = "关闭所有者创建的连接"
+
+[definitions.CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.clients]
+plugin = "clients"
+inject = [
+    "ctx",
+    "instance_id",
+    "workspace_root",
+    "resolve_credential",
+]
+plugs = [
+    "CONFIGURE",
+    "PREPARE",
+    "STOP",
+    "CLEAN",
+]
+slots = []
+resources = [
+    "clients",
+]
+
+[contracts.configuration]
+format = "json-schema"
+file = "config.schema.json"

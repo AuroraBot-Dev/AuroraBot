@@ -83,8 +83,6 @@ class HookConnections:
             raise TypeError(f"目标不是提供接收规则的 hook_slot：{slot}")
         if definition.kind != "hook_handler":
             raise TypeError(f"目标不是 hook_handler：{handler}")
-        if definition.slot is not None and definition.slot != slot:
-            raise ValueError(f"处理器声明的插槽与连接目标不符：{handler}")
         implementation = definition.target if target is None else target
         if not callable(implementation):
             raise TypeError(f"处理器实现不可调用：{handler}")

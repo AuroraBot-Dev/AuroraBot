@@ -6,13 +6,11 @@ from typing import cast
 
 import pytest
 import tomli_w
-from aurora_bot.assembly import DefaultAssembly
 from aurora_bot.cadence import plugin as cadence_plugin
 from aurora_bot.cadence.state import CHECKPOINT, CONFIG_STATE
 from aurora_control import ExecutionRequest
 from aurora_core import Id
 from aurora_core.discovery import Plugin
-from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP
 from aurora_core.registry import RegistryEntry
 from aurora_core.snapshots import JsonSnapshotStore
 from aurora_world import (
@@ -23,7 +21,8 @@ from aurora_world import (
     SourceUnavailableError,
 )
 from aurora_world.configuration import plugin as world_configuration_plugin
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin as world_plugin
 from test_default_assembly import seed, setup
 
 LOCATION = {"instance_id": "main"}
@@ -34,7 +33,7 @@ def configured(root):
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text(tomli_w.dumps({}), encoding="utf-8")
-    return setup(root, extra_plugins=(world_plugin(), cadence_plugin()))
+    return setup(root, extra_plugins=(records_plugin(), world_plugin(), cadence_plugin()))
 
 
 def state(ctx):
@@ -336,7 +335,7 @@ def test_source_lifecycle_and_partial_start_cleanup(tmp_path, fail_start):
         emitters = []
         source = Id("dev.cadence:sources/test")
 
-        async def factory(*, source_id, emit, config):
+        async def factory(*, source_id, emit, config, resources):
             emitters.append(emit)
 
             async def start():
@@ -357,7 +356,7 @@ def test_source_lifecycle_and_partial_start_cleanup(tmp_path, fail_start):
 
         for relative, value in (
             ("org.aurora.bot/cadence.toml", {}),
-            ("org.aurora.world/config.toml", {"sources": [{"source": str(source), "source_id": "selected"}]}),
+            ("org.aurora.world/plugin.config.toml", {"sources": [{"source": str(source), "source_id": "selected"}]}),
         ):
             path = tmp_path / "config" / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -365,6 +364,7 @@ def test_source_lifecycle_and_partial_start_cleanup(tmp_path, fail_start):
         host, assembly, ctx, _, clients, _, _, _ = setup(
             tmp_path,
             extra_plugins=(
+                records_plugin(),
                 world_plugin(),
                 world_configuration_plugin(),
                 cadence_plugin(),
@@ -388,33 +388,6 @@ def test_source_lifecycle_and_partial_start_cleanup(tmp_path, fail_start):
         assert [item["message_id"] for item in world["records"]] == ["one"]
 
     asyncio.run(scenario())
-
-
-def test_component_connection_failure_releases_cadence_links(tmp_path):
-    _, assembly, ctx, registry, _, _, _, _ = configured(tmp_path)
-
-    def fail(*args, **kwargs):
-        raise RuntimeError("世界组件连接失败")
-
-    registry.register_many(world_configuration_plugin().entries)
-    other = DefaultAssembly(
-        registry=registry,
-        ctx=ctx,
-        hooks=assembly.hooks,
-        storage=assembly.storage,
-        instance_id="failed",
-        world_component_factory=fail,
-    )
-    try:
-        with pytest.raises(RuntimeError, match="世界组件连接失败"):
-            other.components()
-        for owner in ("failed/model", "failed/bot", "failed/cadence", "failed/records"):
-            for phase in (PREPARE, START, STOP, CLEAN):
-                assert assembly.hooks.for_slot(phase, owner) == ()
-    finally:
-        assembly.hooks.close()
-        assembly.storage.close()
-        ctx.close()
 
 
 def test_forwarding_reads_durable_backlog_outside_recent_view(tmp_path):
@@ -454,7 +427,7 @@ def test_environment_sources_wake_without_changing_world_presentation(tmp_path, 
     from aurora_world.environment import plugin as environment_plugin
 
     async def scenario():
-        path = tmp_path / "config/org.aurora.world/config.toml"
+        path = tmp_path / "config/org.aurora.world/plugin.config.toml"
         path.parent.mkdir(parents=True)
         source = {"source": str(TIME), "source_id": "selected"}
         if archive:
@@ -464,7 +437,13 @@ def test_environment_sources_wake_without_changing_world_presentation(tmp_path, 
         (tmp_path / "config/org.aurora.bot/cadence.toml").write_text("", encoding="utf-8")
         host, assembly, ctx, _, clients, _, _, _ = setup(
             tmp_path,
-            extra_plugins=(world_plugin(), world_configuration_plugin(), environment_plugin(), cadence_plugin()),
+            extra_plugins=(
+                records_plugin(),
+                world_plugin(),
+                world_configuration_plugin(),
+                environment_plugin(),
+                cadence_plugin(),
+            ),
         )
         await host.start(configure=lambda: seed(ctx, tools=False))
         try:

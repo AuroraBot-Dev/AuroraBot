@@ -2,26 +2,32 @@
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from threading import get_ident
-from typing import Protocol
+from typing import Protocol, cast
 
-from aurora_core import entry_from, hook_handler
+from aurora_core import plug
 from aurora_core.bootstrap import Receiver
-from aurora_core.ctx import Context, StateChange
-from aurora_core.hooks import HookConnections
+from aurora_core.components import ComponentFactory, InstanceExport
+from aurora_core.ctx import Context, StateChange, StateKey
 from aurora_core.ids import Id
 from aurora_core.json_data import encode_json
-from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import RegistryEntry
 
+from .plugins.sources._meta import (
+    SOURCE_STATUS,
+    SOURCES,
+    SOURCES_CLEAN,
+    SOURCES_PREPARE,
+    SOURCES_START,
+    SOURCES_STOP,
+    sources_plugin,
+)
 from .records import Presentation, WorldReceipt, WorldRecords, _identity
 
-SOURCES = Id("org.aurora.world:registries/sources")
-SOURCE_STATUS = Id("org.aurora.world:state/sources")
 logger = logging.getLogger(__name__)
 
 
@@ -68,7 +74,9 @@ class SourceInstance:
 class SourceFactory(Protocol):
     """prepare 阶段创建来源；不接收原始 ctx，运行时共享资源通过装配注入。"""
 
-    async def __call__(self, *, source_id: str, emit: SourceEmit, config: dict[str, object]) -> SourceInstance: ...
+    async def __call__(
+        self, *, source_id: str, emit: SourceEmit, config: dict[str, object], resources: Mapping[str, object]
+    ) -> SourceInstance: ...
 
 
 @dataclass(frozen=True)
@@ -93,6 +101,7 @@ class _Binding:
     definition_id: Id
     factory: SourceFactory
     config: dict[str, object]
+    resources: Mapping[str, object]
     instance: SourceInstance | None = None
     accepting: bool = False
     started: bool = False
@@ -115,20 +124,26 @@ class WorldSources:
     """
 
     def __init__(
-        self, ctx: Context, hooks: HookConnections, records: WorldRecords, *, instance_id: str = "aurora_world/sources"
+        self,
+        ctx: Context,
+        records: WorldRecords | None = None,
+        *,
+        instance_id: str = "aurora_world/sources",
     ) -> None:
         _identity(instance_id)
-        self._ctx, self._hooks = ctx, hooks
-        self.records = records
+        self._ctx = ctx
+        self.records = cast(WorldRecords, records)
         self._instance_id = instance_id
         self._owner = get_ident()
         self._bindings: dict[str, _Binding] = {}
-        self._connected = False
         self._prepare_called = False
         self._prepared = False
         self._start_called = False
         self._quiesced = False
         self._context_subscription: str | None = None
+
+    def bind(self, *, records: WorldRecords) -> None:
+        self.records = records
 
     def _check_owner(self) -> None:
         if get_ident() != self._owner:
@@ -140,7 +155,7 @@ class WorldSources:
         *,
         source_id: str,
         config: dict[str, object] | None = None,
-        factory: SourceFactory | None = None,
+        resources: Mapping[str, object] | None = None,
         presentation: Presentation | None = None,
     ) -> None:
         """准备前选择一个来源；source_id 在本所有者内唯一，配置必须为 JSON 对象。"""
@@ -163,41 +178,14 @@ class WorldSources:
         if type(values) is not dict:
             raise TypeError("来源配置必须为 JSON 对象")
         encode_json(values)
-        if factory is not None and not callable(factory):
-            raise TypeError("来源实例工厂必须可调用")
         selected = presentation or {
             "org.aurora.world:sources/environment/time": "time",
             "org.aurora.world:sources/environment/weather": "weather",
         }.get(str(identity), "events")
         self.records.select(source_id, selected)
         self._bindings[source_id] = _Binding(
-            source_id, identity, entry.target.factory if factory is None else factory, deepcopy(values)
+            source_id, identity, entry.target.factory, deepcopy(values), {} if resources is None else dict(resources)
         )
-
-    def component(self, *, depends_on: tuple[str, ...] = ()) -> LifecycleComponent:
-        """连接来源所有者的生命周期；不创建来源、任务或状态。"""
-        self._check_owner()
-        if self._connected or self._prepare_called or self._quiesced:
-            raise RuntimeError("来源生命周期已连接或不再允许装配")
-        links = []
-        try:
-            for phase, method in ((PREPARE, self.prepare), (START, self.start), (STOP, self.stop), (CLEAN, self.clean)):
-                entry = entry_from(method, provider="aurora_world")
-                links.append(
-                    self._hooks.connect(
-                        phase,
-                        entry.id,
-                        slot_instance=self._instance_id,
-                        handler_instance=self._instance_id,
-                        target=method,
-                    )
-                )
-        except Exception:
-            for link in links:
-                self._hooks.disconnect(link)
-            raise
-        self._connected = True
-        return LifecycleComponent(self._instance_id, depends_on=depends_on, stop_accepting=self.stop_accepting)
 
     def _emit(self, binding: _Binding, *, message_id: str, payload: object) -> WorldReceipt:
         self._check_owner()
@@ -251,7 +239,7 @@ class WorldSources:
         assert binding.instance is not None and binding.instance.run is not None
         await binding.instance.run()
 
-    @hook_handler("org.aurora.world:handlers/sources/prepare", slot=PREPARE)
+    @plug(SOURCES_PREPARE)
     async def prepare(self) -> None:
         self._check_owner()
         if self._prepare_called or self._quiesced:
@@ -262,7 +250,10 @@ class WorldSources:
             for binding in self._bindings.values():
                 self._publish(binding, "preparing")
                 instance = await binding.factory(
-                    source_id=binding.source_id, emit=partial(self._emit, binding), config=deepcopy(binding.config)
+                    source_id=binding.source_id,
+                    emit=partial(self._emit, binding),
+                    config=deepcopy(binding.config),
+                    resources=binding.resources,
                 )
                 if not isinstance(instance, SourceInstance):
                     raise TypeError("来源工厂必须返回 SourceInstance")
@@ -278,7 +269,7 @@ class WorldSources:
             raise
         self._prepared = True
 
-    @hook_handler("org.aurora.world:handlers/sources/start", slot=START)
+    @plug(SOURCES_START)
     async def start(self) -> None:
         self._check_owner()
         if not self._prepared or self._start_called or self._quiesced:
@@ -331,7 +322,7 @@ class WorldSources:
                 binding.accepting = False
                 self._publish(binding)
 
-    @hook_handler("org.aurora.world:handlers/sources/stop", slot=STOP)
+    @plug(SOURCES_STOP)
     async def stop(self) -> None:
         self.stop_accepting()
         for binding in reversed(tuple(self._bindings.values())):
@@ -351,7 +342,7 @@ class WorldSources:
                 binding.stopped = True
                 self._publish(binding, "stopped")
 
-    @hook_handler("org.aurora.world:handlers/sources/clean", slot=CLEAN)
+    @plug(SOURCES_CLEAN)
     async def clean(self) -> None:
         self.stop_accepting()
         for binding in reversed(tuple(self._bindings.values())):
@@ -361,3 +352,26 @@ class WorldSources:
                 await binding.instance.aclose()
                 binding.instance = None
                 self._publish(binding, "closed")
+
+
+def plugin():
+    return sources_plugin(
+        targets={SOURCE_STATUS: StateKey(validate_source_status, persistent=False), SOURCES: SourceReceiver()},
+        components={
+            "sources": ComponentFactory(
+                WorldSources,
+                lambda instance: InstanceExport(
+                    plugs={
+                        SOURCES_PREPARE: instance.prepare,
+                        SOURCES_START: instance.start,
+                        SOURCES_STOP: instance.stop,
+                        SOURCES_CLEAN: instance.clean,
+                    },
+                    resources={"sources": instance},
+                    stop_accepting=instance.stop_accepting,
+                ),
+                plugs=(WorldSources.prepare, WorldSources.start, WorldSources.stop, WorldSources.clean),
+                bind=lambda instance, resources: instance.bind(**resources),
+            )
+        },
+    )

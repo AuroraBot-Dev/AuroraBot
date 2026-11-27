@@ -1,84 +1,56 @@
 """实例隔离的计划唤醒与自身运行工具；所有引导仍由既有 AgentRuntime 接纳。"""
 
 import asyncio
+import json
 import logging
 import math
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from functools import partial
+from importlib.resources import files
 from time import time
 from typing import cast
 
-from aurora_adapter.model import JsonValue
 from aurora_agent.react import AgentBusyError, ReActAgent
 from aurora_agent.runtime import AgentRuntime
-from aurora_agent.tools import TOOLS, ToolExecutionError, ToolInstance, ToolSpec
 from aurora_config import ConfigSchema
-from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding, component_entries
-from aurora_core import Id
+from aurora_control import ExecutionPlug, ExecutionRequest
+from aurora_core import plug
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context, StateKey
-from aurora_core.registry import RegistryEntry
+from aurora_tools.execution import ToolExecutionError, ToolInstance, ToolSpec
 
-from .assembly_config import WORK
-from .self_control_state import MAX_WAKES, REVISION, SELF_CONTROL, WAKE_ID, initial_state, validate_state
+from .plugins.self_control._meta import (
+    AUTONOMY,
+    CANCEL,
+    CLEAN,
+    COMPONENT,
+    EXECUTE,
+    FINISH,
+    LIST,
+    PREPARE,
+    SCHEDULE,
+    START,
+    STATUS,
+    self_control_plugin,
+)
+from .self_control_state import MAX_WAKES, SELF_CONTROL, initial_state, validate_state
 
-logger = logging.getLogger(__name__)
-COMPONENT = Id("org.aurora.bot:components/self_control")
-SELF_TOOLS = {
-    name: Id(f"org.aurora.bot:tools/self_control/{name}")
-    for name in ("status", "autonomy", "finish", "schedule", "list", "cancel")
+CONTRACTS = {
+    name: json.loads(
+        files("aurora_bot").joinpath("plugins/self_control/" + name + ".schema.json").read_text(encoding="utf-8")
+    )
+    for name in ["status", "autonomy", "finish", "schedule", "list", "cancel"]
 }
 
-
-def _parameters(fields: dict, required: list[str]) -> dict:
-    return {"type": "object", "additionalProperties": False, "properties": fields, "required": required}
-
-
-_SCHEDULE = _parameters(
-    {
-        "wake_id": WAKE_ID,
-        "expected_revision": REVISION,
-        "text": {"type": "string", "minLength": 1, "maxLength": 4000},
-        "delay_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 2592000},
-        "at": {"type": "string", "minLength": 1, "maxLength": 64},
-        "late_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 86400},
-    },
-    ["wake_id", "expected_revision", "text"],
-)
-_SCHEDULE["oneOf"] = [{"required": ["delay_seconds"]}, {"required": ["at"]}]
-_TOOLS = {
-    "status": ("bot_status", "读取自己的运行、自动引导开关、计划数量、下次唤醒及当前 UTC 时间。", _parameters({}, [])),
-    "autonomy": (
-        "bot_autonomy",
-        "设置 paused。暂停普通 cadence 和计划唤醒，保留计划且直接交流仍可用；false 恢复。不会结束当前运行或清除故障。",
-        _parameters({"paused": {"type": "boolean"}}, ["paused"]),
-    ),
-    "finish": (
-        "bot_finish",
-        "请求本轮全部工具和结果观察完成后正常结束，不再推理。应放在本批最后；不取消其他工具或新输入，不暂停自动引导。",
-        _parameters({}, []),
-    ),
-    "schedule": (
-        "wake_schedule",
-        (
-            "创建或更新一次性唤醒。用 delay_seconds 或带时区的 ISO 时间 at，二选一，最多30天后。"
-            "late_seconds 为迟到有效期，默认3600秒；过期不补发。创建 expected_revision=0，更新先查询版本。"
-            "仅提交未来引导，不重试旧工具。工具成功表示已写入 ctx，宿主异步落盘。"
-        ),
-        _SCHEDULE,
-    ),
-    "list": (
-        "wake_list",
-        "分页读取自己的完整唤醒计划和投递回执。uncertain 须核对，不能据缺失回执推断未执行或自动重试。",
-        _parameters(
-            {"after": {"type": "string", "maxLength": 64}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}},
-            [],
-        ),
-    ),
-    "cancel": (
-        "wake_cancel",
-        "按当前 revision 取消未提交计划。uncertain 仅停止后续投递，不撤销可能已接纳的引导；先核对外部结果。",
-        _parameters({"wake_id": WAKE_ID, "expected_revision": REVISION}, ["wake_id", "expected_revision"]),
-    ),
+logger = logging.getLogger(__name__)
+SELF_TOOLS = {
+    "status": STATUS,
+    "autonomy": AUTONOMY,
+    "finish": FINISH,
+    "schedule": SCHEDULE,
+    "list": LIST,
+    "cancel": CANCEL,
 }
 
 
@@ -93,15 +65,21 @@ class SelfControl:
         self,
         ctx: Context,
         instance_id: str,
-        runtime: AgentRuntime,
-        get_agent: Callable[[], ReActAgent],
+        runtime: AgentRuntime | None = None,
+        get_agent: Callable[[], ReActAgent] | None = None,
         *,
         now: Callable[[], float] = time,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         if not instance_id:
             raise ValueError("自身控制需要 bot 实例身份")
-        self.ctx, self.instance_id, self.runtime, self.get_agent = ctx, instance_id, runtime, get_agent
+        self.ctx, self.instance_id = ctx, instance_id
+        self.runtime: AgentRuntime
+        self.get_agent: Callable[[], ReActAgent]
+        if runtime is not None:
+            self.runtime = runtime
+        if get_agent is not None:
+            self.get_agent = get_agent
         self.now, self.sleep = now, sleep
         self.location = {"instance_id": instance_id}
         self._changed = asyncio.Event()
@@ -130,11 +108,13 @@ class SelfControl:
         self._save(wakes=[*(wake for wake in self.state()["wakes"] if wake["wake_id"] != item["wake_id"]), updated])
         return updated
 
+    @plug(PREPARE)
     def prepare(self) -> None:
         for item in self.state()["wakes"]:
             if item["status"] == "pending":
                 self._replace(item, status="uncertain")
 
+    @plug(START)
     def start(self) -> None:
         if self._worker is not None:
             raise RuntimeError("计划等待任务已经启动")
@@ -146,6 +126,7 @@ class SelfControl:
         if self._worker is not None and not self._worker.done() and not self._worker.cancelling():
             self._worker.cancel()
 
+    @plug(CLEAN)
     async def close(self) -> None:
         self.stop_accepting()
         if self._worker is not None:
@@ -163,7 +144,7 @@ class SelfControl:
         return previous
 
     def schedule(self, values: dict, request: ExecutionRequest, call_id: str) -> dict:
-        ConfigSchema(_SCHEDULE).validate(values)
+        ConfigSchema(CONTRACTS["schedule"]["parameters"]).validate(values)
         previous = self._previous(values["wake_id"], values["expected_revision"])
         if previous is not None and previous["status"] in ("pending", "uncertain"):
             raise ToolExecutionError("wake_uncertain", "投递结果未明确，须核对并显式取消，不能覆盖或重投")
@@ -203,7 +184,7 @@ class SelfControl:
             else value
             for key, value in values.items()
         }
-        ConfigSchema(_TOOLS[action][2]).validate(values)
+        ConfigSchema(CONTRACTS[action]["parameters"]).validate(values)
         if action == "schedule":
             return self.schedule(values, request, call_id)
         if action == "finish":
@@ -323,59 +304,56 @@ class SelfControl:
             self._save(error="WakeupFailed")
 
 
-async def _declared(request: ExecutionRequest) -> None:
-    raise RuntimeError("自身控制工具需要默认装配注入实例服务")
+class BoundTool:
+    """执行已选择的产品工具，借用装配显式提供的服务。"""
 
+    def __init__(self, ctx, input_state, output_state, service, action=None):
+        self.ctx, self.input_state, self.output_state = ctx, input_state, output_state
+        self.service, self.action = service, action
 
-async def create_tool(
-    action,
-    *,
-    service: SelfControl,
-    ctx,
-    storage,
-    instance_id,
-    input_state: StateBinding,
-    output_state: StateBinding,
-    config,
-) -> ToolInstance:
-    if (
-        config
-        or ctx is not service.ctx
-        or any(
-            binding.key != WORK or dict(binding.location).get("instance_id") != service.instance_id
-            for binding in (input_state, output_state)
-        )
-    ):
-        raise ValueError("自身控制工具必须绑定同一 bot，不接受所有者覆盖")
-
-    async def execute(request: ExecutionRequest) -> None:
-        call = cast(dict, input_state.get(ctx, request))
+    @plug(EXECUTE)
+    async def execute(self, request: ExecutionRequest) -> None:
+        call = cast(dict, self.input_state.get(self.ctx, request))
         try:
-            result = service.execute(action, call["arguments"], request, call["id"])
+            result = self.service.execute(self.action, call["arguments"], request, call["id"])
         except ValueError as error:
             raise ToolExecutionError("invalid_control", str(error)) from None
-        output_state.set(ctx, request, result)
+        self.output_state.set(self.ctx, request, result)
 
+
+async def create_tool(action, *, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
+    tool = BoundTool(ctx, input_state, output_state, resources["control"], action)
     return ToolInstance(
-        ExecutionPlug(COMPONENT, execute, {"input": input_state, "output": output_state}, instance_id=instance_id)
+        ExecutionPlug(COMPONENT, tool.execute, {"input": input_state, "output": output_state}, instance_id=instance_id)
     )
 
 
-def entries() -> tuple[RegistryEntry, ...]:
-    return (
-        RegistryEntry(SELF_CONTROL, "state_key", StateKey(validate_state), "aurora_bot"),
-        *component_entries(COMPONENT, SelfControl, _declared, provider="aurora_bot"),
-        *(
-            RegistryEntry(
-                SELF_TOOLS[action],
-                "tool",
-                ToolSpec(
-                    COMPONENT,
-                    {"name": name, "description": description, "parameters": cast(dict[str, JsonValue], parameters)},
+def _bind(instance, resources):
+    instance.runtime = resources["runtime"]
+    instance.get_agent = lambda: resources["agent"]
+
+
+def plugin():
+    return self_control_plugin(
+        targets={
+            SELF_CONTROL: StateKey(validate_state),
+            COMPONENT: BoundTool,
+            EXECUTE: BoundTool.execute,
+            **{
+                identity: ToolSpec(COMPONENT, CONTRACTS[action], factory=partial(create_tool, action))
+                for action, identity in SELF_TOOLS.items()
+            },
+        },
+        components={
+            "control": ComponentFactory(
+                lambda ctx, options: SelfControl(ctx, options["owner"]),
+                lambda instance: InstanceExport(
+                    plugs={PREPARE: instance.prepare, START: instance.start, CLEAN: instance.close},
+                    resources={"control": instance},
+                    stop_accepting=instance.stop_accepting,
                 ),
-                "aurora_bot",
-                register_to=TOOLS,
+                plugs=(SelfControl.prepare, SelfControl.start, SelfControl.close),
+                bind=_bind,
             )
-            for action, (name, description, parameters) in _TOOLS.items()
-        ),
+        },
     )

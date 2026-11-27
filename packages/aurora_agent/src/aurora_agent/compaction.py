@@ -6,9 +6,9 @@ import logging
 from copy import deepcopy
 from typing import Protocol, TypedDict
 
-from aurora_adapter.model import ChatClient, ChatRequest, Message, ModelProtocolError
-from aurora_adapter.model.content import MAX_FILE_BYTES, request_size
 from aurora_core.json_data import encode_json
+from aurora_model import ChatClient, ChatRequest, Message, ModelProtocolError
+from aurora_model.content import MAX_FILE_BYTES, request_size
 
 from .input_budget import ModelInputBudget, ModelInputBudgetExceeded, read_exchange_ends
 

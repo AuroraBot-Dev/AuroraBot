@@ -1,0 +1,58 @@
+schema_version = 2
+
+[plugins.configuration]
+entry_point = "aurora_world.configuration"
+title = "世界配置"
+summary = "声明来源选择与视图参数，在 config 阶段配置已绑定的来源所有者"
+requires = [
+    "aurora_config",
+    "aurora_world.records",
+    "aurora_world.sources",
+]
+
+[definitions.CONFIG_STATE]
+plugin = "configuration"
+id = "org.aurora.world:state/config"
+kind = "state_key"
+summary = "非持久的来源与视图配置"
+
+[definitions.CONFIGURATION]
+plugin = "configuration"
+id = "org.aurora.world:configs/sources"
+kind = "config"
+summary = "来源选择与视图参数声明"
+contract = "source_config"
+
+[definitions.CONFIGURATION.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.CONFIGURE]
+plugin = "configuration"
+id = "org.aurora.world:handlers/sources/configure"
+kind = "hook_handler"
+summary = "读取配置并向来源所有者提交明确的来源选择"
+
+[definitions.CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.configuration]
+plugin = "configuration"
+summary = "声明来源选择与视图参数，在 config 阶段配置已绑定的来源所有者"
+inject = [
+    "ctx",
+]
+plugs = [
+    "CONFIGURE",
+]
+slots = []
+inputs = [
+    "sources",
+]
+resources = []
+resource_maps = [
+    "source_resources",
+]
+
+[contracts.source_config]
+format = "json-schema"
+file = "source_config.schema.json"

@@ -1,18 +1,18 @@
 """ctx 的显式传输绑定与 JSON 信封。"""
 
+from aurora_core._meta import CTX_CHANGED, CTX_DELETE, CTX_GET, CTX_LIST, CTX_SET, CTX_SUBSCRIBE, CTX_UNSUBSCRIBE
 from aurora_core.ctx import StateAddress, StateChange
-from aurora_core.ids import Id
 
 HTTP_ACTIONS = {
-    "get": ("/ctx/get", Id("org.aurora.core:operations/ctx/get")),
-    "list": ("/ctx/list", Id("org.aurora.core:operations/ctx/list")),
-    "set": ("/ctx/set", Id("org.aurora.core:operations/ctx/set")),
-    "delete": ("/ctx/delete", Id("org.aurora.core:operations/ctx/delete")),
+    "get": ("/ctx/get", CTX_GET),
+    "list": ("/ctx/list", CTX_LIST),
+    "set": ("/ctx/set", CTX_SET),
+    "delete": ("/ctx/delete", CTX_DELETE),
 }
 WATCH_PATH = "/ctx/watch"
-CHANGED = "org.aurora.core:events/ctx/changed"
-SUBSCRIBE = Id("org.aurora.core:operations/ctx/subscribe")
-UNSUBSCRIBE = Id("org.aurora.core:operations/ctx/unsubscribe")
+CHANGED = str(CTX_CHANGED)
+SUBSCRIBE = CTX_SUBSCRIBE
+UNSUBSCRIBE = CTX_UNSUBSCRIBE
 
 
 def address_data(address: StateAddress) -> dict[str, object]:

@@ -10,10 +10,10 @@ from aurora_core.ids import validate_namespace
 
 @dataclass(frozen=True)
 class ConfigTemplate:
-    """包资源为 config.toml 或 config.tomls/ 下的 TOML 相对路径。"""
+    """包资源为 plugin.config.toml 或 plugin.config.tomls/ 下的 TOML 相对路径。"""
 
     package: str
-    resource: str = "config.toml"
+    resource: str = "plugin.config.toml"
     owner: str | None = None
 
     def __post_init__(self) -> None:
@@ -24,16 +24,19 @@ class ConfigTemplate:
             or path.is_absolute()
             or any(part in ("", ".", "..") or ":" in part for part in self.resource.split("/"))
             or path.suffix != ".toml"
-            or not (self.resource == "config.toml" or (len(path.parts) > 1 and path.parts[0] == "config.tomls"))
+            or not (
+                self.resource == "plugin.config.toml"
+                or (len(path.parts) > 1 and path.parts[0] == "plugin.config.tomls")
+            )
         ):
-            raise ValueError("配置模板必须指向包内 config.toml 或 config.tomls/ 下的 TOML 文件")
+            raise ValueError("配置模板必须指向包内 plugin.config.toml 或 plugin.config.tomls/ 下的 TOML 文件")
         if self.owner is not None:
             validate_namespace(self.owner)
 
     def source(self):
         package = files(self.package)
-        if package.joinpath("config.toml").is_file() and package.joinpath("config.tomls").is_dir():
-            raise ValueError(f"配置模板不能同时提供 config.toml 与 config.tomls：{self.package}")
+        if package.joinpath("plugin.config.toml").is_file() and package.joinpath("plugin.config.tomls").is_dir():
+            raise ValueError(f"配置模板不能同时提供 plugin.config.toml 与 plugin.config.tomls：{self.package}")
         source = package.joinpath(*PurePosixPath(self.resource).parts)
         if not source.is_file():
             raise ValueError(f"配置模板不存在：{self.package}/{self.resource}")

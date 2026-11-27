@@ -1,0 +1,56 @@
+schema_version = 2
+
+[plugins.configuration]
+entry_point = "aurora_model.configuration"
+title = "模型配置"
+summary = "模型配置的公开定义与真实实例导出"
+requires = [
+    "aurora_model",
+    "aurora_config",
+]
+
+[definitions.PROFILES]
+plugin = "configuration"
+id = "org.aurora.model:configs/profiles"
+kind = "config"
+summary = "模型 profile 配置声明"
+contract = "profiles"
+
+[definitions.PROFILES.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.CONFIG]
+plugin = "configuration"
+id = "org.aurora.model:state/config"
+kind = "state_key"
+summary = "非持久的模型 profiles"
+
+[definitions.CONFIG.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[definitions.ROLES]
+plugin = "configuration"
+id = "org.aurora.model:configs/bindings"
+kind = "config"
+summary = "模型角色引用配置声明"
+contract = "bindings"
+
+[definitions.ROLES.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.BINDINGS]
+plugin = "configuration"
+id = "org.aurora.model:state/bindings"
+kind = "state_key"
+summary = "非持久的模型角色绑定"
+
+[definitions.BINDINGS.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[contracts.profiles]
+format = "json-schema"
+export = "aurora_model.contracts:profiles_schema"
+
+[contracts.bindings]
+format = "json-schema"
+file = "bindings.schema.json"

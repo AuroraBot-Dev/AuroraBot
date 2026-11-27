@@ -2,6 +2,146 @@
 
 ## 2026-11-27
 
+### 修复记忆索引缺少实际模型身份
+
+- 模型资源解析实际配置后导出不可变 ModelIdentity，包含 adapter、model、provider、base_url；profile 名称和凭证不参与身份。记忆将此身份与分块、embedding_id、index_version 一同形成指纹，自定义 embedding 资源明确提供身份，不回查 Bot 配置或降级使用手工标记。
+- 新增一条跨包契约用例，补足原存储单测仅手工更换 fingerprint 无法发现的缺口：真实 EmbeddingResource 经 profile/直接参数解析，保持记忆配置不变，切换同维模型或端点后检索在调用模型前拒绝旧索引；显式重建保留原文和版本，仅 profile 改名或凭证轮换继续召回。现有工具、恢复与资源所有权夹具同步新契约，不新增重复整机链路。
+- 指纹规则改变后，先前已写入的索引也须明确调用 memory_reindex；原文、公共 ID 和业务快照不变，不自动重建、覆盖或删除用户数据。配置与元信息文档同步模型身份职责和重建要求，移除原先“不会识别实际模型变更”的限制说明。
+- 验收：针对性 15 项通过；日常检查 8.49 秒，完整检查 32.85 秒，1220 项 Python、131 项前端、5 项原生终端通过，保留 1 项平台跳过和 39 条依赖警告。16 个 wheel 构建通过；Python 3.12 工作区外干净安装通过模型身份/索引重建契约及记忆五工具恢复，无 agent/Bot/Host/CLI/API/供应商 SDK/MCP。文档链接、锚点及差异检查通过；未增加 worker、超时或重试，未调用真实供应商。
+- 核对 PR #108 与 #109 既有审查：#108 没有审查线程；#109 的六项文档/命名意见已由前轮文档提交解决，本轮完成其余工具集合 P2 与记忆指纹 P1。
+
+### 修复工具集合显式与目录选择重叠
+
+- 合并工具 ID 时保持首次出现顺序并去重，显式选择的参数继续传给工厂；目录 include/exclude 不覆盖显式配置。同一工具只创建、导出和关闭一次，不增加异常回退或隐式重试。
+- 扩展既有集合资源释放用例，覆盖显式工具与目录重叠时正常准备、目录追加成员使用默认参数，以及创建/发布失败后的逆序关闭；未新增重复集成链路。配置指南同步组合规则。
+- 验收：工具单测 25 项通过；完整业务测试 1219 项通过、1 项跳过，前端 131 项与原生终端 5 项通过。完整命令 37.26 秒，首次静态检查发现测试 import 排序问题，修正后日常检查全通过（8.70 秒）；后续模型身份修复再完成统一完整验收。未调用真实供应商。
+
+### 整理文档索引与历史计划边界
+
+- 当前索引加入元信息规范与预设入口，明确主题文档聚焦职责、公开契约和可观察行为。原能力拆分方案标记为迁移前快照；实施计划注明 W01–W08 已完成、W09 查询入口和 W10 最终收口仍有待办，不把文档同步当成全部迁移完成。
+- 保留历史方案、145 项能力盘点和归档正文；已删除源码的链接固定到实际存在该文件的历史提交，历史变更记录的旧章节也指向对应快照，不把旧命令改写成当前教程。
+- 验收：扫描 docs 全部 Markdown、首次启动、AGENTS 与三份 README，共 29 个文件，无失效本地链接/锚点；当前 TOML 示例全部可解析，新增历史源码链接均用 git 对象确认目标存在，git diff --check 通过。此轮没有修改运行代码或用户配置。
+
+### 更新新基线配置、运行与开发指南
+
+- 配置指南按 host 选择、完整预设和能力参数组织，列出当前 model/agent/tools/MCP/world/memory/Bot 文件路径；删除旧插件列表、大配置开关及不存在的迁移命令用法。启动说明明确既有 host 不合并插件，通用 CLI 不自动读取 .env，模板只补缺失文件。
+- 上下文指南改用显式预算、压缩、记录器、模型和运行所有者资源，保留历史、证据、索引与接纳/完成的行为边界。准确说明当前工具集合重复选择会失败、记忆索引不会自动纳入实际模型身份；这两项代码审查问题没有在文档提交中修复。
+- 经用户确认修正三种语言 README 的模型配置路径，首次启动保持短指南。开发指南补充构建工具前置、清单生成及静态目录入口，区分已存在的 id list / Python 运行图与尚未实现的 W09 CLI 查询。
+- 验收：7 个业务/实例参数示例通过当前真实契约校验；临时独立目录的 default/full 初始化、预设解析、实际配置路径与 id list 查询通过，未启动模型/MCP。CLI 与 serve 帮助、构建参数、静态目录、链接、锚点及差异检查通过；纯文档修改未新增测试、未调用真实供应商。
+
+### 对齐 W08 架构、元信息与公共目录
+
+- 将元信息方案收敛为当前 schema v2 规范，明确 pyproject、plugin.meta.toml、生成目录、Python 实现、业务配置与集中装配各自的唯一来源；以真实配置服务的清单、代码和完整装配说明插头导出与 core 生命周期槽的关系。
+- 架构与安装边界聚焦公开职责、状态和资源所有权；按实际预设修正 ReAct 五条连接接入四个阶段槽的图示。公共目录由静态 JSON 汇总全部 29 个插件、两个宿主目录及 225 个定义，列出组件端口、状态和资源角色，不导入插件或启动资源。
+- 经用户明确确认，同步 AGENTS 的新包、插件、模板、宿主装配约定及构建工具前置步骤。原拆分盘点仍作为历史验收依据，不改写为当前实现。
+- 验收：元信息生成一致性检查、已安装 aurora-agent 静态目录读取通过；文档中的配置服务清单、Python 实现和装配与真实文件一致，业务连接片段与 default 预设一致；本地链接、锚点、TOML/Python 示例解析与 git diff --check 通过。仅修改文档，未运行无关业务回归或调用真实供应商。
+
+### 完成 W08 完整预设与公共定义收口
+
+- 增加 world、memory、full 三份完整预设。world 独立于 MCP；memory 显式绑定 embedding、记忆存储、压缩记录器和 agent 压缩资源；full 在现有 Bot 世界/节律组合上选用笔记、动作证据、自身控制、归档读取、choice 和记忆。来源依赖运行入口与节律，运行入口依赖工具、模型及压缩资源，消费者先结束、资源所有者后关闭。现有 default/MCP/MCP-world/bot、config 最小预设及 onboarding 保持显式文件装配。
+- initialize 只合并调用方明确提供的附加插件，选择 world/memory 等预设时不再隐式带入 MCP 插件集。API、CLI、Bot 和通用声明辅助方法直接引用 core/CLI 的生成身份；公开控制插头使用装饰方法的生成 ID，不重复拼接具体公共端口。
+- 全部 29 个公开插件和 core/CLI 两个宿主目录共 225 个静态定义已纳入统一清单与目录。新增测试数据 tests/fixtures/metadata/baseline_ids.json 对原 145 个定义逐项记录：135 个对应当前拥有者和清单来源，10 个旧聚合定义删除并说明原因；此数据仅作验收，不被运行时读取或用于转换。契约检查同时核对全部 entry point 均有清单、ID 唯一及旧 ID 不残留。
+- 新增两条有独立价值的预设验收：七份发行预设和 onboarding 不启动资源即可装配；full 的真实来源触发 ReAct 调用记忆/笔记工具，重启读回数据且不自动重放，验证来源启动前依赖就绪、运行结束后资源关闭、embedding/choice/chat 各关闭一次和配置不入快照。原有业务协议测试不复制扩展组合矩阵。
+- 最终验收：日常检查 8.67 秒、完整检查 35.42 秒；1218 项 Python 测试通过，保留 1 项平台跳过和 39 条依赖警告，前端与原生终端检查通过。16 个 wheel 构建通过；Python 3.12 工作区外干净安装验证最小 Bot 无 world/MCP/memory/CLI/API/SDK 运行，以及完整预设的真实执行、恢复与资源关闭。control 无 agent/模型、tools 无 agent/模型、model 无 config/SDK、agent 无 Bot/宿主/SDK 的独立执行与恢复通过；core/CLI/API/Bot 静态目录和新预设均包含在 wheel 中。
+- W08 完成，W09 的目录/计划/实际图查询和正式使用说明仍待实施。公共 ID 和既有业务快照未新增变化；接口直接切换，不保留旧自动接线别名，不改写用户数据。未增加 worker、超时或重试，未调用真实供应商；README、AGENTS 和其他手写文档继续暂缓统一更新。
+
+### 推进 W08：移除旧目标槽声明与提供方自动接线
+
+- 删除 hook_handler 固定目标槽装饰器、Declaration.slot、RegistryEntry.slot 及登记阶段的槽匹配检查。plug 只保存身份，程序化调用 entry_from 可显式登记该方法；槽接收判断仅发生在真实 connect 时。操作声明与登记接收方诊断保持原语义。
+- 删除 MCPClients、MCPTools、WorldRecords、WorldSources 的 component 自动接线及 world/MCP 固定组合工厂；同时删除不再使用的 hooks 构造参数、连接标记与对应清单注入。提供方只导出方法、资源和本地停止接收动作，生命周期连接由宿主装配决定。
+- 既有程序化测试和独立安装夹具改为明确列出阶段与绑定方法，保留来源、客户端、关闭和恢复行为断言；将旧槽声明验收改为真实连接时的接收判断，删除已不存在的提供方接线回滚专属测试。444 项针对性测试通过；完整检查 34.63 秒，1215 项 Python 测试通过、1 项平台跳过，前端和原生终端检查通过。公共 ID 与快照不变，不提供旧接口别名。
+
+### 推进 W08：内核与 CLI 宿主静态目录
+
+- 元信息构建支持宿主清单，与可选插件清单共用纯数据目录和发布核对；core、CLI 不新增 aurora.plugins 入口。core 自举目录、五个生命周期槽、六个 ctx 操作与变化事件统一使用生成 ID 和声明。
+- CLI 的接收方、配置及 18 个内置命令归宿主目录；命令参数和帮助使用包内纯 JSON 契约，代码只绑定执行函数，运行登记与离线查询读取同一来源。第三方程序化命令仍可使用通用声明接口。
+- 扩展现有元信息对账与 sdist 离线构建到 core/CLI，确认无需运行依赖即可读取目录，公共 ID 和 provider 保持不变。171 项针对性测试通过；完整检查 34.24 秒，1217 项 Python 测试通过、1 项平台跳过，前端与原生终端检查通过。
+
+### 推进 W08：补齐控制组件与 API 清单
+
+- control 的 Serial、Branch、While、Parallel 均导出真实执行方法和子组件槽；选择器与条件通过资源引用绑定，循环及并发上限使用清单契约。控制算法保留在代码中，不引入配置表达式。API 端点接收方切换清单生成定义，并纳入静态目录及 sdist 离线构建。
+- 扩展已有文件装配验收为 Serial → While → Branch → Parallel → ModelCall，验证两次运行、明确的条件资源、共享状态和模型资源关闭；不新增重复业务测试。57 项针对性测试通过；完整检查 34.04 秒，1217 项 Python 测试通过、1 项平台跳过，前端和原生终端检查通过。
+- 本提交完成 W08 的公开组件补齐；宿主目录、旧声明删除及完整可选组合继续实施。既有公共 ID 不变，不修改用户数据；其他手写文档暂缓统一更新。
+
+### 完成 W07 Bot 能力与配置拆分
+
+- Bot 独立提供 runtime、conversation、commands、notes、actions、self_control、world_view、cadence 八个插件及其清单、生成声明和静态目录。删除 DefaultAssembly、assembly_config、旧代码装配入口及聚合生命周期；模型、工具、世界服务和后台任务均由显式实例及资源引用装配，不保留等价总工厂。
+- conversation、commands、自身控制和 cadence 使用同一运行入口；notes、actions、自身控制、世界视图及归档读取导出各自服务，工具工厂借用明确资源和状态绑定，不反查 Bot WORK 或产品配置，不替换 ToolSpec.factory。cadence 只借用明确提供的模型、世界记录和自身控制服务，不负责创建、关闭模型。
+- agent 默认阶段增加预算与压缩资源组件，输入预算、压缩模型、归档记录器和动作观察均显式绑定。业务参数归所属配置桥；actions/world_view 分别使用 config/org.aurora.bot/actions.toml、world_view.toml，cadence 保留原路径并删除模型角色选择。清单和配置校验共用纯契约来源。
+- 删除 org.aurora.bot:configs/default、org.aurora.bot:state/config 及旧聚合模板；保留运行、消息、工作和各业务状态 ID。新配置和装配文件须按新基线建立，不转换、覆盖或删除用户已有配置、数据库或快照。
+- Bot 基础安装不携带 world、MCP 或模型供应商 SDK，相关依赖改为显式 extra。为删除旧入口，同步提供 default/MCP/MCP-world/bot 文件预设，并让启动脚本、onboarding 与真实进程夹具使用 Host 读取文件；工具集合、五条执行连接、资源和生命周期顺序均在文件中声明。W08 的完整可选组合与剩余公开元信息收口仍待实施。
+- 现有业务回归改用文件装配夹具，保留工具往返、取消、故障、持久化及恢复断言。删除已不存在的聚合配置和旧连接工厂专属测试；将笔记工具的旧 owner 限制测试替换为显式借用服务、使用任意状态地址的验收。独立 runtime 验收扩展到 conversation 共用运行入口；Bot 八个清单纳入元信息对账和 sdist 离线重建。
+- 验收：日常检查 8.28 秒、完整检查 31.57 秒；1217 项 Python 测试通过，保留 1 项平台跳过和 39 条依赖警告，前端与原生终端检查通过。16 个 wheel 构建通过；Python 3.12 干净安装验证 Bot 基础运行及六个基础插件发现无需 world/MCP/SDK/CLI/API，world extra 可独立发现视图与 cadence；control/tools/model/agent 的独立安装、工具往返和恢复通过。未增加 worker、超时或重试，未调用真实供应商。README、AGENTS 和其他手写文档继续暂缓统一更新。
+
+### 推进 W07：独立运行所有者
+
+- 新增 `aurora_bot.runtime` 清单、生成声明及静态目录；运行状态、消息、工作状态与三项运行操作使用清单生成的公共 ID。导出 operations 与 runtime 两个组件，通过显式资源引用绑定 ReAct 和运行分发表，四个生命周期插头不声明目标插槽。
+- RuntimeOwner 只持有 AgentRuntime，处理恢复中断标记、运行入口绑定、任务收束及状态保留，不创建模型、工具、世界服务或后台来源。状态范围来自装配绑定；裁剪保留最近模型结果和未接纳的工具结果，不影响其他实例。
+- 新增一条真实文件装配验收，覆盖独立启用、不自动运行、恢复标记、状态裁剪、等待者取消与显式取消、重启及关闭资源；同时将 Bot 纳入既有元信息一致性和 sdist 离线重建验收。公共状态 ID 未变化，不改写用户配置或快照。
+- 本提交为 W07 的第一步；其他产品能力与旧 DefaultAssembly 的删除仍在后续拆分中，不宣称 W07 整体完成。其余手写文档继续暂缓统一更新。
+- 验收：日常检查 8.43 秒、完整检查 31.09 秒，1230 项 Python 测试通过，1 项平台跳过、39 条依赖警告；16 个 wheel 构建通过，Python 3.12 干净安装后的文件装配、取消和恢复验收通过，未安装 CLI/API，未调用真实供应商。
+
+### 完成 W06 资源导出与工具集合装配
+
+- model 导出 Chat/Choice/Embedding 资源组件与 prepare/clean 方法；导出对象在客户端创建前后保持同一身份，供应商客户端只由资源所有者创建和关闭。模型 profile 通过显式状态引用和选择项提供，凭证通过宿主运行服务解析，不写入配置或 ctx；ModelCall 只借用模型资源。MCPClients、MCPTools 和世界桥导出客户端、目录及来源资源，来源仍通过直接协议执行。
+- ReAct 导出执行插头与六个阶段槽，ReActDefaults 导出三个真实阶段插头；默认阶段改用装配传入的状态地址，删除 connect 及其隐藏五条接线。ModelCall、ReAct 和工具执行器支持显式 options 或配置状态两种独立参数来源；新增同发行包内的 agent.configuration / tools.configuration 可选配置桥及模板。配置和组件参数共用纯契约来源，不维护两份字段约束；完整 Bot 配置拆解仍由 W07 完成。
+- aurora_tools 提供静态/动态 ToolCollection、成员创建、逆序关闭与带工具身份的执行插头；集合从明确目录按 include/exclude、实例名称及状态地址规则创建工具，借用资源由提供方管理。现有 Bot 路径也改用同一集合管理工具成员，删除重复的工厂调用和关闭逻辑；剩余产品选择策略及局部工厂替换随 W07 拆解，不新增总装配工厂。
+- host 接收 collection_connections，并注入按集合限定的 publish_members；集合 prepare 返回前完成实际接线，运行图记录真实成员导出和连接。清单补充可选资源、资源映射与可选状态角色，资源仍只按实例及导出名引用；不解释属性链、不补业务连接、不实现热加载。成员创建或接线失败时关闭已创建成员并传播异常，不跳过失败工具继续启动。
+- model、MCP、agent、tools 的公开定义全部归清单和生成目录；provider 使用所属插件全名。MCP 动态工具范围及登记信息也由清单生成，发现代码只提交成员名称与实现。发现和静态查询不创建客户端或调用目录服务；基础 agent/tools 无需配置包，配置桥按 config extra 安装。公开既有 ID 和业务快照地址保持不变；同步全部构造签名、资源消费者、回归夹具与锁文件，不留旧 ReActDefaults 接口。
+- 新增一条完整文件装配验收：假模型驱动真实 ReAct 五条阶段连接，静态工具与模拟 MCP 目录展开到执行器，只修改 infer 连接即可切换模型，并验证所有者各关闭一次。新增两种集合失败验收覆盖部分创建与发布失败后的逆序清理；扩展既有元信息对账到全部已迁移插件，sdist 隔离构建覆盖 config/control/agent/model/MCP/tools，不重复添加业务协议测试。
+- 验收：日常检查 9.30 秒、完整检查 30.87 秒；1229 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过和 39 条依赖警告。16 个 wheel 构建及干净环境安装通过；安装后的完整文件装配无需 Bot/CLI/world/供应商 SDK，Choice/Embedding 基础资源无需配置包，全部 W06 静态目录无需运行包即可读取。既有 control/tools/agent、模型各 extra、MCP 两个桥、world/memory/host/CLI 的独立运行与恢复保持通过。未增加 worker、超时或重试，未调用真实供应商；README、AGENTS 和其他手写文档继续暂缓统一更新。
+
+### 完成 W05 世界与记忆能力解耦
+
+- world 拆为同包内的 aurora_world.records 与 aurora_world.sources；删除旧总入口，configuration/environment 和全部消费者显式选择新插件。records 独立拥有状态及归档，sources 借用 records；两者导出真实组件、生命周期方法和资源，配置选择也可通过版本 2 装配连接。来源仍使用直接生命周期协议，SourceFactory 接收应用提供的资源；MCP 与测试来源删除工厂替换机制，改为传入共享资源。
+- 新增 aurora_memory，将存储、五种工具、配置和公共 ID 从 Bot 迁出；基础包无需 agent/Bot/宿主。工具通过明确的 owner、storage、输入输出状态和 embedding 执行，不读取 Bot WORK/BOT_CONFIG 或解析凭证。ToolFactory 增加 owner/resources 参数，现有工具工厂及消费者一起切换；模型资源组件和工具集合仍按 W06 推进。
+- 可选 aurora_memory.compaction 借用记忆存储，导出压缩记录器及后台任务生命周期；数据库与 embedding 分别由其提供方关闭。DefaultAssembly 只接收工具资源和 agent 的 CompactionRecorder 协议，不再创建或管理记忆实现；保留原有压缩前归档、失败延后索引、恢复补索引且不重放工具的行为。
+- world 四个插件及 memory 两个插件补齐 plugin.meta.toml、生成声明和静态目录；配置 schema 与工具契约分别共用单一来源。生成器按实际组件声明生成导入，使仅提供来源定义的清单也能通过格式、lint 与构建核对。同步 workspace、发布包检查和锁文件。
+- 删除 aurora_bot.memory 入口及源码。记忆公共定义改用 org.aurora.memory，配置改为 config/org.aurora.memory/plugin.config.toml，数据库使用 org.aurora.memory 存储目录；不探测、转换或覆盖旧配置、数据库和快照。world 既有公共 ID 保持不变，启用名称须按新插件拆分填写。README、AGENTS 和其他手写文档继续按要求暂缓统一更新。
+- 搬迁既有记忆单测并保留真实工具往返、压缩故障和恢复断言；新增两条代表验收：禁止 Bot/agent/宿主导入后完成五种记忆工具及恢复，并确认借用客户端只由外部关闭一次；通过版本 2 文件绑定真实 world 组件、归档事件并关闭。records 原有恢复测试改为只启用 records，明确验证来源注册表不存在。
+- 验收：日常检查 8.51 秒、完整检查 30.89 秒；1226 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过和 39 条依赖警告。16 个 wheel 构建及干净环境安装通过，world/memory 的 sdist 在工作区外离线重建 wheel 通过；独立 records、memory、可选压缩桥与无运行依赖的静态目录查询均通过，既有 control/tools/agent/model/MCP/host/CLI 安装验收保持通过。未增加 worker、超时或重试，未调用真实模型供应商。
+
+### 完成 W04 独立宿主与版本 2 装配
+
+- 新增 aurora_host，只依赖 core/config/control；接管装配读取、实例创建/导出/绑定、状态地址、资源引用、方法/执行连接、运行图和生命周期。CLI 只负责命令交互并消费 Host；宿主不认识 CommandContext、命令名或 Bot 装配 ID。程序化入口与文件装配使用相同的生命周期及资源释放路径。
+- 集中配置仅接受 schema_version=2；host.toml 只保留 assembly_file，插件统一由装配清单选择，显式提供的插件实现也须被选中。删除 --assembly、run 的装配 ID 参数、--plugin、旧配置选择及代码工厂分派；不补配置插件、实例或连接。配置最小预设明确列出服务实例和 config 接线；状态支持 instance/run 两种作用域，资源按实例及导出名直接绑定。
+- 包内模板、资源引用、ConfigTemplate 默认路径与 onboarding 全部改为 plugin.config.toml / plugin.config.tomls。单文件用户路径改为 config/<owner>/plugin.config.toml；多文件模板仍按 owner 下的相对文件名落盘。只复制缺失文件，保留已有编辑端点及非持久配置状态；不探测旧名、不改写用户配置和快照。
+- scripts/bot.py 与 onboarding 显式构造产品组件并交给 Host；产品仍使用现有 DefaultAssembly，其拆解及完整文件预设分别按 W07/W08 推进，本轮不增加等价总工厂或旧 ID 分派兼容层。同步 workspace、CLI/Bot 依赖、发布包检查、配置预设与现有消费者；README、AGENTS 和设计文档继续暂缓统一更新。
+- 复用并改写现有装配与 CLI 回归，覆盖移除配置实例/连接、静态发现不启动资源、文件选择、配置恢复和编辑、失败释放、信号收尾及产品往返。原 Serial/ModelCall 手工握手用例改为真实版本 2 文件装配，独有验证前向资源引用、固定输入/按 run 隔离输出、执行接线与资源所有者关闭；独立 MCP/world 夹具显式连接配置服务，不为测试引入 host/control 依赖。旧的两种代码装配覆盖合并为一条文件选择覆盖，测试总数减少 1 项。
+- 验收：日常检查 13.13 秒、完整检查 36.72 秒，1224 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过和 37 条依赖警告。15 个 wheel 构建及干净环境安装通过；host 独立运行配置生命周期，安装 CLI 后加载新模板，均无需 Bot/agent/model/MCP；control/tools/agent 和 MCP 两个桥的独立执行与恢复仍通过。未增加 worker、超时或重试，未调用真实模型供应商。
+
+### 完成 W03 元信息生成器与真实实例导出
+
+- 提取独立 aurora-meta-build 构建工具，仅依赖标准库；支持多清单、各清单独立符号、版本 2 发行目录、生成与只读核对，以及不加载插件的已安装目录查询。删除 config 包内生成算法，各包构建钩子调用同一实现；CI 先构建工具 wheel，再构建运行包。
+- core 的 ComponentFactory 提供 create/export/bind；实例显式导出实际插头、槽、资源与停止接纳回调。清单记录宿主注入、状态角色、资源输入/输出和参数契约；不扫描方法、不补缺失导出、不在 core 引入 control 或模型依赖。
+- config 清单移至实现旁并导出配置服务；control 的公共定义归清单，Serial 导出 ExecutionPlug/ExecutionSlot；ModelCall 用 @aurora.plug 声明执行身份，创建后显式 bind 聊天资源。现有程序化消费者、插件工厂入口和配置宿主一起切换，不保留旧构造签名或转发入口；公开插件名、ID 和用户配置路径不变。W04 的宿主/装配格式切换尚未实施。
+- 复用并扩展元信息及装饰器测试：验证同发行两份清单的同名局部符号不冲突、产物过期检查、真实 Serial→ModelCall 状态握手、显式资源绑定和缺失导出。新增一条分发集成测试，从 config/control/agent 的 sdist 在工作区外隔离构建 wheel，并禁止运行包/SDK 导入后执行生成核对与静态读取；仅增加 3 项测试，无重复协议覆盖。
+- 验收：82 项针对性测试通过；Python 3.12 日常检查 12.97 秒、完整检查 36.93 秒，1225 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过及 38 条依赖警告。14 个 wheel 构建通过；工作区外复验 control/tools/agent 和 MCP 两个桥的独立安装与执行，构建工具不成为运行依赖；仅安装工具及三个无依赖插件 wheel 时也可查询目录，不需要 core/model/MCP/SDK。未调用真实模型供应商。
+- 按用户要求，README、AGENTS 和其他手写文档统一更新暂缓，本轮只保留这份变更与验收记录。生成的 _meta.py/plugin.meta.json 属于构建产物，不另维护实现细节清单。
+
+### 完成 W02 模型与 MCP 发行边界拆分
+
+- 新增 aurora_model、aurora_mcp，删除 aurora_adapter 的发行声明、源码和旧入口。模型协议与中立目录由 aurora_model 提供，模型 TOML 声明由 aurora_model.configuration 提供，LiteLLM 工厂由 aurora_model.litellm 提供；config 与 litellm 为独立 extra。ModelAdapter/ADAPTERS 归 registry，不通过配置模块获取协议目录；基础导入和插件发现不加载供应商 SDK。
+- MCP 客户端、传输、配置、目录及工具/world 桥迁入 aurora_mcp；tools、world 分别按 extra 安装，基础包不依赖 model、tools、world 或 Bot。MCP 产品装配和预设生成移到 aurora_bot.mcp / aurora_bot.mcp_preset，产品装配 ID 为 org.aurora.bot:assemblies/mcp，由已有 aurora_bot.assembly 插件导出；不新增 MCP Bot 插件或兼容入口。Bot 按选择延迟导入 MCP 桥，工具桥复用同一客户端。
+- 模型/MCP 公共定义分别归 org.aurora.model / org.aurora.mcp，local_path 移除重复的 model/mcp 前缀；动态工具 ID、实例名、模型绑定、凭证消费者、产品预设、onboarding、测试和文档同步切换。配置文件位于 config/org.aurora.model/{profiles,bindings}.toml 和 config/org.aurora.mcp/config.toml。包内 config.toml(s) 文件名保持当前格式，plugin.config 命名由 W04 实施。
+- 同步根安装集合、workspace/sources、类型/覆盖率路径、锁文件及发布版本检查包清单；Bot 提供 mcp / mcp-world 产品 extra。删除仅服务旧格式的 MCP migrate 命令和特殊迁移提示，当前 schema 直接校验声明，不探测或转换旧文件。
+- 既有模型与 MCP 测试搬入所属包，产品预设测试归 Bot；删除旧转换器专属 7 项测试及已不存在的 MCP Bot 插件依赖测试。现有独立进程边界测试增加基础模型无配置包、全部模型插件发现无 SDK、MCP 无工具/模型及世界桥无工具的验证；模板测试核对两个发行包的资源归属，不复制原有协议测试。
+- 完整回归再次复现上轮 stdio 截断诊断竞态：同一 ExceptionGroup 同时含 process_exited 与 stdout_incomplete 时，汇总回退为 connect_failed。汇总优先保留具体管道故障；新增一条确定性单测覆盖实际异常组合，保留已有真实进程断言。相关 MCP、宿主与安装声明回归 71 项通过，1 项既有 Windows 专属测试在 Linux 跳过。
+- Python 3.12 已安装开发环境：日常 `uv run --locked aurora check` 12.84 秒，完整 `uv run --locked aurora check --full` 36.51 秒；1222 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过和 37 条依赖警告。未增加 worker、超时、重试或放宽有效断言。当前文档的 130 个本地链接、workspace/插件入口及发布检查格式已核对。
+- 13 个 wheel 构建通过。工作区外干净环境验证 control、tools、agent 的执行与恢复；model 基础包无 config/SDK 的协议及发现、config extra 无 SDK 的模板读取、litellm extra 无 config 的登记与客户端创建/关闭；MCP 客户端、工具桥、世界桥分别在不安装其他桥或 Bot/agent/model 的环境完成本机协议往返。Bot 基础安装未携带 MCP，查询产品装配定义不加载 LiteLLM。wheel 包含模型/MCP 模板，不包含旧 adapter 包；未调用真实供应商。
+- 用户配置和自定义接线直接使用新包、插件、ID 与路径。模型/MCP 配置及观察状态不持久化，Bot 业务状态 ID 保持当前值；历史工具身份和用户快照不改写，未知状态不静默忽略。记忆索引包含 adapter ID，改名后的旧索引需由用户显式重建；原文保留，不自动调用供应商。详见配置指南的升级表。W03 及后续工作包尚未实施，README.md、AGENTS.md 未修改。
+
+### 完成 W01 通用工具契约与执行器拆分
+
+- 新增 aurora_tools 发行包。contract 提供 ToolDefinition、ToolCall、批次请求/状态及 ToolResult，只依赖 core 的 JsonValue；execution 提供工具定义、工厂、实例、执行器与前后插槽，依赖 core/control 和原有 schema 库。JsonValue 移到 aurora_core.json_data，模型协议直接引用中立契约，不加载工具执行器。
+- 删除 aurora_agent.tools 模块、旧插件入口和模型包对 JsonValue/ToolCall/ToolDefinition 的公共导出；所有 agent、模型、MCP、Bot、测试、夹具和 onboarding 消费者切换到新位置，不保留兼容别名或转发层。工具登记入口改为 aurora_tools，公共目录和端口改到 org.aurora.tools，执行器为 components/executor，前后槽为 executor/before_call、executor/after_call。
+- agent 的 schema 依赖移到 tools；adapter 基础包声明中立工具契约依赖，MCP tools extra 不再依赖 agent；Bot 显式声明 tools 依赖。同步 workspace、类型检查、覆盖率目录、锁文件、默认插件清单和当前架构/公共 ID 文档。W02 的 model/MCP 分包及后续元信息、宿主装配工作尚未实施。
+- 原工具单测搬至新包，不复制用例。新增一条独立 tools 进程验收，验证禁止导入 agent/模型/Bot/SDK 时，before → 工具 → after 调用、结果和临时状态清理仍正常；同一夹具用于 wheel 安装验收。扩展现有包契约和 MCP 桥隔离断言，核对新入口、命名空间、实际依赖及中立契约不导入执行器；不增加运行时防御逻辑。
+- Python 3.12 已安装开发环境验收：32 项工具与包边界针对性测试通过；日常 `uv run --locked aurora check` 13.11 秒，完整 `uv run --locked aurora check --full` 37.01 秒。完整回归含 1229 项 Python、131 项前端、5 项原生终端测试，1 项既有 Windows 专属测试在 Linux 跳过，38 条既有依赖警告保留。未增加 worker、放宽断言或跳过检查。
+- 首轮完整检查的既有 MCP stdio incomplete 故障用例收到 connect_failed 而非 stdout_incomplete；该组 5 项单独复跑和随后完整复跑均通过。相关 stdio 实现与断言未修改，保留这一间歇失败记录。
+- 12 个 wheel 构建通过。工作区外的干净环境分别验证 control 独立执行、tools 无 agent/adapter/Bot/SDK 的工具往返、agent 无 Bot/CLI/API/SDK 的 ReAct 工具往返与恢复，以及 MCP tools extra 无 agent/Bot/world 的本机工具桥调用。agent wheel 不再包含旧 tools.py；测试未调用真实供应商，未读取或改写用户数据目录。
+- 用户配置需要将 aurora_agent.tools 改为 aurora_tools；自定义接线改用新的 org.aurora.tools ID。直接按新基线建立环境和数据目录，不提供旧配置/ID/快照转换。历史设计文档保留原基线名称，已迁走源码的链接改为基线提交位置；README.md、AGENTS.md 未改动。
+
 ### 修复 CI 中 ESLint 配置测试的冷启动超时
 
 - Python 3.12 CI 作业的 1228 项 Python 测试均通过；失败发生在 ESLint 声明文件测试，第一次加载完整配置和插件被计入单条测试，耗时 5.6 秒超过默认 5 秒限制。
@@ -81,7 +221,7 @@
 - `aurora_adapter.model` 从 13 个文件、1450 行合并为 9 个文件、1349 行，按 contract、config、content、response、litellm、内部 codec、testing 和 plugin 职责平铺。聊天类型统一命名为 ChatClient / ChatRequest / ChatResponse / ChatChunk / ChatCapabilities；去除旧模块、兼容别名和三套重复工厂解析。
 - 聊天、choice、embedding 共用类型化 ModelAdapter、泛型 ModelFactory / ResolvedModel 与 resolve_model(kind=...)，统一登记到 model/adapters。LiteLLMClient 统一管理实例连接、用途、在途调用、错误脱敏和关闭；向量请求改用原生 aembedding，流式工具与思考碎片改用 SDK ChunkProcessor，保留完整性与签名校验。移除独立 OpenAI embedding HTTP 实现和 embedding extra，Bot 统一依赖 litellm extra；该 extra 不再额外安装 MCP。
 - 保留 SDK 版本约束 `>=1.106.6,<1.107`。当前高层 decisions 不透传实例 client，继续使用 SDK 请求转换和底层 handler；OpenAI embedding 会覆盖零重试值，自有客户端固定零重试；DeepSeek 使用兼容路由保留文件和思考。没有引入共享 Router 或修改 SDK 全局配置，模型能力范围以已接入实例传输的供应商为准。
-- adapter ID 改为 model/litellm/chat、choice、embedding；聊天服务改为 model/chat_client，聊天 schema 移入 model/chat/，移除独立 choice/embedding 注册表。同步迁移消费者、测试夹具、包模板和安装助手；插件入口、配置及持久业务状态 ID 不变。旧用户 TOML 不自动覆盖，旧向量 profile 须补 provider=openai；记忆索引指纹包含 adapter ID，升级后须显式重建，原文保留。完整手动迁移说明见[配置指南](configuration.md#从旧模型配置升级)与[模型边界](aurorabot-design-v0.2.3.md#模型边界)。
+- adapter ID 改为 model/litellm/chat、choice、embedding；聊天服务改为 model/chat_client，聊天 schema 移入 model/chat/，移除独立 choice/embedding 注册表。同步迁移消费者、测试夹具、包模板和安装助手；插件入口、配置及持久业务状态 ID 不变。旧用户 TOML 不自动覆盖，旧向量 profile 须补 provider=openai；记忆索引指纹包含 adapter ID，升级后须显式重建，原文保留。完整手动迁移说明见[配置指南](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/docs/configuration.md#从旧模型配置升级)与[模型边界](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/docs/aurorabot-design-v0.2.3.md#模型边界)。
 - 复用既有协议、装配、资源生命周期与记忆往返测试；只增加一个 Voyage 参数用例，独有价值是验证原生非 OpenAI 向量传输，同一用例同时覆盖顺序、无重试、重定向拒绝、错误脱敏和关闭。更新既有冷发现断言验证统一工厂用途与无 SDK 导入，保留全部业务及关闭断言。
 - 同一已安装开发环境实测：`uv run --locked aurora check` 12.73 秒，`uv run --locked aurora check --full` 39.33 秒；1205 项 Python、131 项前端、5 项原生终端测试全部通过。保持现有 4 worker，未跳过检查；Pydantic、aiohttp 依赖警告仍存在。验证全部使用假模型或模拟传输，未调用真实供应商。
 - 11 个 wheel 构建成功；干净环境验证 control 无需 agent/adapter/模型 SDK，agent 无需 Bot/CLI/API/HTTP/模型 SDK，并实际完成控制流与 agent 工具往返及恢复。安装 Bot 后确认无 MCP/CLI/API 依赖，模型插件发现不加载 LiteLLM，模板资源齐全，原生聊天、choice、OpenAI/Voyage embedding 模拟往返与关闭通过。

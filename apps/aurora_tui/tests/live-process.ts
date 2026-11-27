@@ -51,7 +51,9 @@ try {
   terminal.mockInput.pressEscape();
   terminal.mockInput.pressKey('F7');
   await until(() => !model.editor.busy);
-  const configIndex = model.editor.files.findIndex((item) => item.state === 'org.aurora.bot:state/config');
+  const configIndex = model.editor.files.findIndex(
+    (item) => item.state === 'org.aurora.agent:state/react_defaults/config',
+  );
   assert.ok(configIndex !== -1);
   view.editorPanel.files.setSelectedIndex(configIndex);
   terminal.mockInput.pressKey('F5');

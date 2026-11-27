@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "max_chars": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 32000,
+      "default": 8000
+    }
+  }
+}

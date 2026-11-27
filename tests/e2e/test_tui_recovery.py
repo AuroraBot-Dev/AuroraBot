@@ -8,10 +8,9 @@ from pathlib import Path
 from aiohttp import ClientSession, WSMsgType, web
 from aurora_api.protocol import SUBSCRIBE, UNSUBSCRIBE
 from aurora_api.server import serve
-from aurora_bot.assembly_config import AGENTS, MESSAGES, RUN, WORK
 from aurora_bot.conversation import CONVERSATION
+from aurora_bot.runtime import AGENTS, MESSAGES, RUN, WORK
 from aurora_config import CONFIGURATION
-from aurora_core import entry_from
 from aurora_core.ctx import StateKey
 from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
@@ -81,10 +80,6 @@ class ClientLink:
 
 def make_host(root, *, behavior):
     host, _, ctx, registry, clients, _, events, _ = setup(root, behavior=behavior)
-    registry.register_many(
-        entry_from(target, provider="test")
-        for target in (ctx.get, ctx.set, ctx.delete, ctx.list, ctx.subscribe, ctx.unsubscribe)
-    )
     registry.register(RegistryEntry(SHARED, "state_key", StateKey(), "test"))
     registry.register(RegistryEntry(EPHEMERAL, "state_key", StateKey(persistent=False), "test"))
     active = set()

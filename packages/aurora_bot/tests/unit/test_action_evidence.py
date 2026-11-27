@@ -4,13 +4,13 @@ import json
 import sqlite3
 
 import pytest
-from aurora_agent.tools import ToolExecutionError
 from aurora_bot.action_evidence import ActionEvidence
-from aurora_bot.assembly_config import parse_config
-from aurora_bot.context_view import BusinessContextView
+from aurora_bot.context_view import CONTRACTS, BusinessContextView
+from aurora_config import ConfigSchema
 from aurora_control import ExecutionRequest
 from aurora_core.json_data import encode_json
 from aurora_core.storage import StorageService
+from aurora_tools.execution import ToolExecutionError
 
 
 def call(identity="one"):
@@ -160,7 +160,7 @@ def test_failed_result_commit_leaves_unknown(evidence, monkeypatch):
 
 def test_view_is_bounded_and_queries_only_current_instance(evidence):
     begin(evidence, *(call(str(i)) for i in range(20)))
-    config = parse_config({"instance_id": "main", "model_role": "reasoning", "context_view": {"max_chars": 1024}})
+    config = {"context_view": ConfigSchema(CONTRACTS["config"]).parse({"max_chars": 1024})}
     view = BusinessContextView(None, config["context_view"], actions=evidence)
     text = view(ExecutionRequest("view"))
     assert len(text) <= 1024

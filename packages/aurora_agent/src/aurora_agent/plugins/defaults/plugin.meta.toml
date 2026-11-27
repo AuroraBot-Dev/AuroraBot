@@ -1,0 +1,193 @@
+schema_version = 2
+
+[plugins.defaults]
+entry_point = "aurora_agent.react_defaults"
+title = "ReAct 默认阶段"
+summary = "ReAct 默认阶段的公开定义与真实实例导出"
+requires = [
+    "aurora_agent.react",
+    "aurora_agent.model",
+    "aurora_tools",
+]
+
+[definitions.BUILD_PROMPT]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/react/build_prompt"
+kind = "component"
+summary = "准备模型上下文的默认阶段"
+
+[definitions.BUILD_PROMPT_EXECUTE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/react/build_prompt/execute"
+kind = "hook_handler"
+summary = "把引导和历史写入模型请求状态"
+
+[definitions.BUILD_PROMPT_EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.BUILD_PROMPT_EXECUTE.interface.definition]
+id = "org.aurora.agent:handlers/react/build_prompt"
+
+[definitions.INTERPRET_RESPONSE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/react/interpret_response"
+kind = "component"
+summary = "解释模型响应的默认阶段"
+
+[definitions.INTERPRET_RESPONSE_EXECUTE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/react/interpret_response/execute"
+kind = "hook_handler"
+summary = "把模型响应转换为行动或完成决定"
+
+[definitions.INTERPRET_RESPONSE_EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.INTERPRET_RESPONSE_EXECUTE.interface.definition]
+id = "org.aurora.agent:handlers/react/interpret_response"
+
+[definitions.RECORD_OBSERVATION]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/react/record_observation"
+kind = "component"
+summary = "接纳工具观察的默认阶段"
+
+[definitions.RECORD_OBSERVATION_EXECUTE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/react/record_observation/execute"
+kind = "hook_handler"
+summary = "把工具批次结果追加到上下文"
+
+[definitions.RECORD_OBSERVATION_EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.RECORD_OBSERVATION_EXECUTE.interface.definition]
+id = "org.aurora.agent:handlers/react/record_observation"
+
+[definitions.CONFIGURE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/react_defaults/configure"
+kind = "hook_handler"
+summary = "读取显式绑定的提示词参数"
+
+[definitions.CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.BUDGET_CONFIGURE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/input_budget/configure"
+kind = "hook_handler"
+summary = "读取显式绑定的参数"
+
+[definitions.BUDGET_CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.COMPACTION_CONFIGURE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/compaction/configure"
+kind = "hook_handler"
+summary = "读取显式绑定的参数"
+
+[definitions.COMPACTION_CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.defaults]
+plugin = "defaults"
+inject = [
+    "ctx",
+    "instance_id",
+    "states",
+    "options",
+]
+plugs = [
+    "BUILD_PROMPT_EXECUTE",
+    "INTERPRET_RESPONSE_EXECUTE",
+    "RECORD_OBSERVATION_EXECUTE",
+    "CONFIGURE",
+]
+slots = []
+states = [
+    "context",
+    "batch",
+    "decision",
+    "model_input",
+    "model_output",
+    "tool_input",
+    "tool_output",
+]
+inputs = [
+    "agent",
+    "tools",
+]
+optional_inputs = [
+    "context_view",
+    "input_budget",
+    "compactor",
+    "tool_observation",
+]
+resources = [
+    "defaults",
+]
+options = "options"
+optional_states = [
+    "config",
+]
+
+[components.input_budget]
+plugin = "defaults"
+inject = [
+    "ctx",
+    "states",
+    "options",
+]
+plugs = [
+    "BUDGET_CONFIGURE",
+]
+slots = []
+optional_states = [
+    "config",
+]
+inputs = []
+optional_inputs = []
+resources = [
+    "input_budget",
+]
+options = "input_budget"
+
+[components.compaction]
+plugin = "defaults"
+inject = [
+    "ctx",
+    "states",
+    "options",
+]
+plugs = [
+    "COMPACTION_CONFIGURE",
+]
+slots = []
+optional_states = [
+    "config",
+]
+inputs = [
+    "chat",
+    "budget",
+]
+optional_inputs = [
+    "recorder",
+]
+resources = [
+    "compaction",
+]
+options = "compaction"
+
+[contracts.options]
+format = "json-schema"
+export = "aurora_agent.parameters:react_defaults_options"
+
+[contracts.input_budget]
+format = "json-schema"
+export = "aurora_agent.parameters:input_budget_options"
+
+[contracts.compaction]
+format = "json-schema"
+export = "aurora_agent.parameters:compaction_options"

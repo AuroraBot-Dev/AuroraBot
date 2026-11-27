@@ -1,0 +1,855 @@
+{
+  "source": "docs/plugin-capability-boundaries.md#附录-a-全部公开插件与定义",
+  "definitions": [
+    {
+      "previous": "org.aurora.adapter:handlers/mcp/configure",
+      "current": "org.aurora.mcp:handlers/configure",
+      "owner": "aurora_mcp",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/clients/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:handlers/mcp/prepare",
+      "current": "org.aurora.mcp:handlers/prepare",
+      "owner": "aurora_mcp",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/clients/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:handlers/mcp/stop",
+      "current": "org.aurora.mcp:handlers/stop",
+      "owner": "aurora_mcp",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/clients/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:handlers/mcp/clean",
+      "current": "org.aurora.mcp:handlers/clean",
+      "owner": "aurora_mcp",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/clients/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:configs/mcp",
+      "current": "org.aurora.mcp:configs/default",
+      "owner": "aurora_mcp",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/clients/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:state/mcp/config",
+      "current": "org.aurora.mcp:state/config",
+      "owner": "aurora_mcp",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/clients/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:state/mcp/clients",
+      "current": "org.aurora.mcp:state/clients",
+      "owner": "aurora_mcp",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/clients/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:assemblies/mcp/default_bot",
+      "removed": "删除代码装配工厂，组合由 Bot 的完整 assembly 预设提供"
+    },
+    {
+      "previous": "org.aurora.adapter:components/mcp/tool/execute",
+      "current": "org.aurora.mcp:components/tool/execute",
+      "owner": "aurora_mcp.tools",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:handlers/mcp/tools/prepare",
+      "current": "org.aurora.mcp:handlers/tools/prepare",
+      "owner": "aurora_mcp.tools",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:components/mcp/tool",
+      "current": "org.aurora.mcp:components/tool",
+      "owner": "aurora_mcp.tools",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:sources/mcp/resources",
+      "current": "org.aurora.mcp:sources/resources",
+      "owner": "aurora_mcp.world",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/world/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:state/mcp/world",
+      "current": "org.aurora.mcp:state/world",
+      "owner": "aurora_mcp.world",
+      "manifest": "packages/aurora_mcp/src/aurora_mcp/plugins/world/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:registries/model/adapters",
+      "current": "org.aurora.model:registries/adapters",
+      "owner": "aurora_model",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:services/model/embedding_client",
+      "current": "org.aurora.model:services/embedding_client",
+      "owner": "aurora_model",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:services/model/choice_client",
+      "current": "org.aurora.model:services/choice_client",
+      "owner": "aurora_model",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:services/model/chat_client",
+      "current": "org.aurora.model:services/chat_client",
+      "owner": "aurora_model",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:schemas/model/chat/request",
+      "current": "org.aurora.model:schemas/chat/request",
+      "owner": "aurora_model",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:schemas/model/chat/response",
+      "current": "org.aurora.model:schemas/chat/response",
+      "owner": "aurora_model",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:schemas/model/chat/chunk",
+      "current": "org.aurora.model:schemas/chat/chunk",
+      "owner": "aurora_model",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:schemas/model/chat/capabilities",
+      "current": "org.aurora.model:schemas/chat/capabilities",
+      "owner": "aurora_model",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:adapters/model/litellm/chat",
+      "current": "org.aurora.model:adapters/litellm/chat",
+      "owner": "aurora_model.litellm",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/litellm/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:adapters/model/litellm/choice",
+      "current": "org.aurora.model:adapters/litellm/choice",
+      "owner": "aurora_model.litellm",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/litellm/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:adapters/model/litellm/embedding",
+      "current": "org.aurora.model:adapters/litellm/embedding",
+      "owner": "aurora_model.litellm",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/litellm/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:configs/model/profiles",
+      "current": "org.aurora.model:configs/profiles",
+      "owner": "aurora_model.configuration",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/configuration/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:state/model/config",
+      "current": "org.aurora.model:state/config",
+      "owner": "aurora_model.configuration",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/configuration/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:configs/model/bindings",
+      "current": "org.aurora.model:configs/bindings",
+      "owner": "aurora_model.configuration",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/configuration/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.adapter:state/model/bindings",
+      "current": "org.aurora.model:state/bindings",
+      "owner": "aurora_model.configuration",
+      "manifest": "packages/aurora_model/src/aurora_model/plugins/configuration/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/model_call/execute",
+      "current": "org.aurora.agent:handlers/model_call/execute",
+      "owner": "aurora_agent.model",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/model_call",
+      "current": "org.aurora.agent:handlers/model_call",
+      "owner": "aurora_agent.model",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/model/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react_agent/execute",
+      "current": "org.aurora.agent:handlers/react_agent/execute",
+      "owner": "aurora_agent.react",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/react/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:react/prepare",
+      "current": "org.aurora.agent:react/prepare",
+      "owner": "aurora_agent.react",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/react/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:react/infer",
+      "current": "org.aurora.agent:react/infer",
+      "owner": "aurora_agent.react",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/react/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:react/act",
+      "current": "org.aurora.agent:react/act",
+      "owner": "aurora_agent.react",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/react/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:react/observe",
+      "current": "org.aurora.agent:react/observe",
+      "owner": "aurora_agent.react",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/react/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:react/finish",
+      "current": "org.aurora.agent:react/finish",
+      "owner": "aurora_agent.react",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/react/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:react/error",
+      "current": "org.aurora.agent:react/error",
+      "owner": "aurora_agent.react",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/react/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react_agent",
+      "current": "org.aurora.agent:handlers/react_agent",
+      "owner": "aurora_agent.react",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/react/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/build_prompt/execute",
+      "current": "org.aurora.agent:handlers/react/build_prompt/execute",
+      "owner": "aurora_agent.react_defaults",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/defaults/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/interpret_response/execute",
+      "current": "org.aurora.agent:handlers/react/interpret_response/execute",
+      "owner": "aurora_agent.react_defaults",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/defaults/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/record_observation/execute",
+      "current": "org.aurora.agent:handlers/react/record_observation/execute",
+      "owner": "aurora_agent.react_defaults",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/defaults/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/build_prompt",
+      "current": "org.aurora.agent:handlers/react/build_prompt",
+      "owner": "aurora_agent.react_defaults",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/defaults/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/interpret_response",
+      "current": "org.aurora.agent:handlers/react/interpret_response",
+      "owner": "aurora_agent.react_defaults",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/defaults/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/record_observation",
+      "current": "org.aurora.agent:handlers/react/record_observation",
+      "owner": "aurora_agent.react_defaults",
+      "manifest": "packages/aurora_agent/src/aurora_agent/plugins/defaults/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/execute_tools/execute",
+      "current": "org.aurora.tools:components/executor/execute",
+      "owner": "aurora_tools",
+      "manifest": "packages/aurora_tools/src/aurora_tools/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/execute_tools/children",
+      "current": "org.aurora.tools:components/executor/children",
+      "owner": "aurora_tools",
+      "manifest": "packages/aurora_tools/src/aurora_tools/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:tools/before_call",
+      "current": "org.aurora.tools:executor/before_call",
+      "owner": "aurora_tools",
+      "manifest": "packages/aurora_tools/src/aurora_tools/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:tools/after_call",
+      "current": "org.aurora.tools:executor/after_call",
+      "owner": "aurora_tools",
+      "manifest": "packages/aurora_tools/src/aurora_tools/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:registries/tools",
+      "current": "org.aurora.tools:registries/tools",
+      "owner": "aurora_tools",
+      "manifest": "packages/aurora_tools/src/aurora_tools/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.agent:handlers/react/execute_tools",
+      "current": "org.aurora.tools:components/executor",
+      "owner": "aurora_tools",
+      "manifest": "packages/aurora_tools/src/aurora_tools/plugins/tools/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.api:registries/endpoints",
+      "current": "org.aurora.api:registries/endpoints",
+      "owner": "aurora_api",
+      "manifest": "packages/aurora_api/src/aurora_api/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/notes/execute",
+      "current": "org.aurora.bot:components/notes/execute",
+      "owner": "aurora_bot.notes",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/notes/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/world/read_event/execute",
+      "current": "org.aurora.bot:components/world/read_event/execute",
+      "owner": "aurora_bot.world_view",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/world_view/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/actions/read/execute",
+      "current": "org.aurora.bot:components/actions/read/execute",
+      "owner": "aurora_bot.actions",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/actions/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/self_control/execute",
+      "current": "org.aurora.bot:components/self_control/execute",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/assembly/prepare_model",
+      "removed": "删除总装配生命周期，资源所有者分别导出生命周期插头"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/assembly/clean_model",
+      "removed": "删除总装配生命周期，资源所有者分别导出生命周期插头"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/assembly/prepare_bot",
+      "removed": "删除总装配生命周期，资源所有者分别导出生命周期插头"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/assembly/start_bot",
+      "removed": "删除总装配生命周期，资源所有者分别导出生命周期插头"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/assembly/stop_bot",
+      "removed": "删除总装配生命周期，资源所有者分别导出生命周期插头"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/assembly/clean_bot",
+      "removed": "删除总装配生命周期，资源所有者分别导出生命周期插头"
+    },
+    {
+      "previous": "org.aurora.bot:commands/run/submit",
+      "current": "org.aurora.bot:commands/run/submit",
+      "owner": "aurora_bot.commands",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/commands/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:commands/run/activate",
+      "current": "org.aurora.bot:commands/run/activate",
+      "owner": "aurora_bot.commands",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/commands/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:commands/run/cancel",
+      "current": "org.aurora.bot:commands/run/cancel",
+      "owner": "aurora_bot.commands",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/commands/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/notes",
+      "current": "org.aurora.bot:state/notes",
+      "owner": "aurora_bot.notes",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/notes/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/notes",
+      "current": "org.aurora.bot:components/notes",
+      "owner": "aurora_bot.notes",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/notes/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/notes/write",
+      "current": "org.aurora.bot:tools/notes/write",
+      "owner": "aurora_bot.notes",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/notes/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/notes/read",
+      "current": "org.aurora.bot:tools/notes/read",
+      "owner": "aurora_bot.notes",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/notes/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/notes/list",
+      "current": "org.aurora.bot:tools/notes/list",
+      "owner": "aurora_bot.notes",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/notes/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/world/read_event",
+      "current": "org.aurora.bot:components/world/read_event",
+      "owner": "aurora_bot.world_view",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/world_view/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/world/read_event",
+      "current": "org.aurora.bot:tools/world/read_event",
+      "owner": "aurora_bot.world_view",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/world_view/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/actions/read",
+      "current": "org.aurora.bot:components/actions/read",
+      "owner": "aurora_bot.actions",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/actions/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/actions/read",
+      "current": "org.aurora.bot:tools/actions/read",
+      "owner": "aurora_bot.actions",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/actions/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/self_control",
+      "current": "org.aurora.bot:state/self_control",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/self_control",
+      "current": "org.aurora.bot:components/self_control",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/self_control/status",
+      "current": "org.aurora.bot:tools/self_control/status",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/self_control/autonomy",
+      "current": "org.aurora.bot:tools/self_control/autonomy",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/self_control/finish",
+      "current": "org.aurora.bot:tools/self_control/finish",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/self_control/schedule",
+      "current": "org.aurora.bot:tools/self_control/schedule",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/self_control/list",
+      "current": "org.aurora.bot:tools/self_control/list",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/self_control/cancel",
+      "current": "org.aurora.bot:tools/self_control/cancel",
+      "owner": "aurora_bot.self_control",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/self_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:endpoints/conversation",
+      "current": "org.aurora.bot:endpoints/conversation",
+      "owner": "aurora_bot.conversation",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/conversation/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:assemblies/default",
+      "removed": "删除代码装配工厂，组合由 Bot 的完整 assembly 预设提供"
+    },
+    {
+      "previous": "org.aurora.bot:services/run_control",
+      "current": "org.aurora.bot:services/run_control",
+      "owner": "aurora_bot.runtime",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/runtime/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:operations/run/submit",
+      "current": "org.aurora.bot:operations/run/submit",
+      "owner": "aurora_bot.runtime",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/runtime/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:operations/run/activate",
+      "current": "org.aurora.bot:operations/run/activate",
+      "owner": "aurora_bot.runtime",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/runtime/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:operations/run/cancel",
+      "current": "org.aurora.bot:operations/run/cancel",
+      "owner": "aurora_bot.runtime",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/runtime/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/agents",
+      "current": "org.aurora.bot:state/agents",
+      "owner": "aurora_bot.runtime",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/runtime/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/messages",
+      "current": "org.aurora.bot:state/messages",
+      "owner": "aurora_bot.runtime",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/runtime/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/run",
+      "current": "org.aurora.bot:state/run",
+      "owner": "aurora_bot.runtime",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/runtime/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/react_work",
+      "current": "org.aurora.bot:state/react_work",
+      "owner": "aurora_bot.runtime",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/runtime/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:configs/default",
+      "removed": "聚合配置拆为 agent/tools 配置桥及 Bot actions/world_view 配置"
+    },
+    {
+      "previous": "org.aurora.bot:state/config",
+      "removed": "聚合配置状态拆为各消费者的非持久状态"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/cadence/prepare",
+      "current": "org.aurora.bot:handlers/cadence/prepare",
+      "owner": "aurora_bot.cadence",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/cadence/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/cadence/start",
+      "current": "org.aurora.bot:handlers/cadence/start",
+      "owner": "aurora_bot.cadence",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/cadence/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/cadence/stop",
+      "current": "org.aurora.bot:handlers/cadence/stop",
+      "owner": "aurora_bot.cadence",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/cadence/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:handlers/cadence/clean",
+      "current": "org.aurora.bot:handlers/cadence/clean",
+      "owner": "aurora_bot.cadence",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/cadence/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:configs/cadence",
+      "current": "org.aurora.bot:configs/cadence",
+      "owner": "aurora_bot.cadence",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/cadence/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/cadence_config",
+      "current": "org.aurora.bot:state/cadence_config",
+      "owner": "aurora_bot.cadence",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/cadence/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/cadence",
+      "current": "org.aurora.bot:state/cadence",
+      "owner": "aurora_bot.cadence",
+      "manifest": "packages/aurora_bot/src/aurora_bot/plugins/cadence/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/memory/execute",
+      "current": "org.aurora.memory:components/tool/execute",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:configs/memory",
+      "current": "org.aurora.memory:configs/default",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:state/memory/config",
+      "current": "org.aurora.memory:state/config",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:components/memory",
+      "current": "org.aurora.memory:components/tool",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/memory/write",
+      "current": "org.aurora.memory:tools/write",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/memory/search",
+      "current": "org.aurora.memory:tools/search",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/memory/read",
+      "current": "org.aurora.memory:tools/read",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/memory/delete",
+      "current": "org.aurora.memory:tools/delete",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.bot:tools/memory/reindex",
+      "current": "org.aurora.memory:tools/reindex",
+      "owner": "aurora_memory",
+      "manifest": "packages/aurora_memory/src/aurora_memory/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.config:handlers/load",
+      "current": "org.aurora.config:handlers/load",
+      "owner": "aurora_config",
+      "manifest": "packages/aurora_config/src/aurora_config/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.config:registries/configs",
+      "current": "org.aurora.config:registries/configs",
+      "owner": "aurora_config",
+      "manifest": "packages/aurora_config/src/aurora_config/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.config:endpoints/configuration",
+      "current": "org.aurora.config:endpoints/configuration",
+      "owner": "aurora_config",
+      "manifest": "packages/aurora_config/src/aurora_config/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/execute",
+      "current": "org.aurora.control:handlers/control/execute",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/serial/execute",
+      "current": "org.aurora.control:handlers/control/serial/execute",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/branch/execute",
+      "current": "org.aurora.control:handlers/control/branch/execute",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/while/execute",
+      "current": "org.aurora.control:handlers/control/while/execute",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/parallel/execute",
+      "current": "org.aurora.control:handlers/control/parallel/execute",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/children",
+      "current": "org.aurora.control:handlers/control/children",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/serial/children",
+      "current": "org.aurora.control:handlers/control/serial/children",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/branch/children",
+      "current": "org.aurora.control:handlers/control/branch/children",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/while/children",
+      "current": "org.aurora.control:handlers/control/while/children",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/parallel/children",
+      "current": "org.aurora.control:handlers/control/parallel/children",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control",
+      "current": "org.aurora.control:handlers/control",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/serial",
+      "current": "org.aurora.control:handlers/control/serial",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/branch",
+      "current": "org.aurora.control:handlers/control/branch",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/while",
+      "current": "org.aurora.control:handlers/control/while",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:handlers/control/parallel",
+      "current": "org.aurora.control:handlers/control/parallel",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.control:state/control",
+      "current": "org.aurora.control:state/control",
+      "owner": "aurora_control",
+      "manifest": "packages/aurora_control/src/aurora_control/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/sources/prepare",
+      "current": "org.aurora.world:handlers/sources/prepare",
+      "owner": "aurora_world.sources",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/sources/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/sources/start",
+      "current": "org.aurora.world:handlers/sources/start",
+      "owner": "aurora_world.sources",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/sources/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/sources/stop",
+      "current": "org.aurora.world:handlers/sources/stop",
+      "owner": "aurora_world.sources",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/sources/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/sources/clean",
+      "current": "org.aurora.world:handlers/sources/clean",
+      "owner": "aurora_world.sources",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/sources/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/records/prepare",
+      "current": "org.aurora.world:handlers/records/prepare",
+      "owner": "aurora_world.records",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/records/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/records/start",
+      "current": "org.aurora.world:handlers/records/start",
+      "owner": "aurora_world.records",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/records/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/records/stop",
+      "current": "org.aurora.world:handlers/records/stop",
+      "owner": "aurora_world.records",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/records/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/records/clean",
+      "current": "org.aurora.world:handlers/records/clean",
+      "owner": "aurora_world.records",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/records/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:state/environment",
+      "current": "org.aurora.world:state/environment",
+      "owner": "aurora_world.records",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/records/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:state/records",
+      "current": "org.aurora.world:state/records",
+      "owner": "aurora_world.records",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/records/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:state/sources",
+      "current": "org.aurora.world:state/sources",
+      "owner": "aurora_world.sources",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/sources/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:registries/sources",
+      "current": "org.aurora.world:registries/sources",
+      "owner": "aurora_world.sources",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/sources/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:handlers/sources/configure",
+      "current": "org.aurora.world:handlers/sources/configure",
+      "owner": "aurora_world.configuration",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/configuration/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:configs/sources",
+      "current": "org.aurora.world:configs/sources",
+      "owner": "aurora_world.configuration",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/configuration/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:state/config",
+      "current": "org.aurora.world:state/config",
+      "owner": "aurora_world.configuration",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/configuration/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:sources/environment/time",
+      "current": "org.aurora.world:sources/environment/time",
+      "owner": "aurora_world.environment",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/environment/plugin.meta.toml"
+    },
+    {
+      "previous": "org.aurora.world:sources/environment/weather",
+      "current": "org.aurora.world:sources/environment/weather",
+      "owner": "aurora_world.environment",
+      "manifest": "packages/aurora_world/src/aurora_world/plugins/environment/plugin.meta.toml"
+    }
+  ]
+}

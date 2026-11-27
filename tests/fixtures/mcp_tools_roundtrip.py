@@ -10,11 +10,6 @@ from typing import cast
 
 import tomli_w
 import uvicorn
-from aurora_adapter.mcp import CLIENT_STATUS, PROTOCOL_VERSION, MCPClients
-from aurora_adapter.mcp.catalog import automatic_name
-from aurora_adapter.mcp.tools import MCPTools
-from aurora_agent.tools import ToolExecutor, ToolSpec
-from aurora_config import configuration_component
 from aurora_control import ExecutionRequest, StateBinding
 from aurora_core import Id
 from aurora_core.bootstrap import bootstrap
@@ -25,9 +20,51 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_mcp import CLIENT_STATUS, PROTOCOL_VERSION, MCPClients
+from aurora_mcp.catalog import automatic_name
+from aurora_mcp.tools import MCPTools
+from aurora_tools.execution import ToolExecutor, ToolSpec
 from mcp.server import MCPServer
 
 STATE = Id("dev.mcp:state/work")
+
+
+from aurora_core.declarations import plug_id
+from aurora_core.lifecycle import CLEAN, CONFIG, PREPARE, START, STOP, LifecycleComponent
+
+
+def wire(hooks, identity, bindings, *, depends_on=(), stop_accepting=None):
+    for phase, method in bindings:
+        hooks.connect(phase, plug_id(method), slot_instance=identity, handler_instance=identity, target=method)
+    return LifecycleComponent(identity, depends_on=depends_on, stop_accepting=stop_accepting)
+
+
+def configured_world(ctx, hooks, records, *, depends_on=(), clients=None):
+    from aurora_world.configuration import _SourceConfiguration
+    from aurora_world.sources import WorldSources
+
+    sources = WorldSources(ctx, records)
+    configuration = _SourceConfiguration(ctx)
+    resources = {}
+    if clients is not None:
+        from aurora_mcp.world import WORLD_SOURCE
+
+        resources = {str(WORLD_SOURCE): {"ctx": ctx, "clients": clients}}
+        depends_on = (*depends_on, clients.instance_id)
+    configuration.bind(sources=sources, source_resources=resources)
+    return wire(
+        hooks,
+        "aurora_world/sources",
+        (
+            (CONFIG, configuration.configure),
+            (PREPARE, sources.prepare),
+            (START, sources.start),
+            (STOP, sources.stop),
+            (CLEAN, sources.clean),
+        ),
+        depends_on=("aurora_config", *depends_on),
+        stop_accepting=sources.stop_accepting,
+    )
 
 
 def echo_service(record) -> MCPServer:
@@ -45,6 +82,18 @@ def echo_service(record) -> MCPServer:
     return service
 
 
+def configuration_component(registry, ctx, hooks, storage):
+    from aurora_config._meta import LOAD
+    from aurora_config.service import ConfigurationService
+    from aurora_core.lifecycle import CONFIG, LifecycleComponent
+
+    service = ConfigurationService(registry, ctx, storage)
+    hooks.connect(
+        CONFIG, LOAD, slot_instance="aurora_config", handler_instance="aurora_config", target=service.configure
+    )
+    return LifecycleComponent("aurora_config", stop_accepting=service.close)
+
+
 async def run(
     root: Path,
     *,
@@ -55,7 +104,7 @@ async def run(
 ) -> dict:
     """通过真实本机 HTTP 或 stdio 完成工具及假模型默认装配验收。"""
     tool_name = automatic_name("local", "echo") if automatic else "local_echo"
-    tool_id = Id(f"org.aurora.adapter:tools/mcp/{tool_name}")
+    tool_id = Id(f"org.aurora.mcp:tools/{tool_name}")
     root = root.resolve()
     root.mkdir(parents=True, exist_ok=True)
     calls = []
@@ -94,14 +143,20 @@ async def run(
                     await asyncio.sleep(0.01)
         registry = bootstrap()
         install_lifecycle_slots(registry)
-        enabled = ["aurora_config", "aurora_adapter.mcp", "aurora_agent.tools", "aurora_adapter.mcp.tools"]
+        enabled = ["aurora_config", "aurora_mcp", "aurora_tools", "aurora_mcp.tools"]
         if with_bot:
             enabled += [
-                "aurora_adapter.model",
+                "aurora_model",
+                "aurora_model.configuration",
+                "aurora_model.litellm",
                 "aurora_agent.model",
                 "aurora_agent.react",
                 "aurora_agent.react_defaults",
-                "aurora_bot.assembly",
+                "aurora_bot.runtime",
+                "aurora_bot.conversation",
+                "aurora_bot.commands",
+                "aurora_agent.configuration",
+                "aurora_tools.configuration",
             ]
         register_plugins(registry, load_plugins(enabled=enabled))
         registry.register(RegistryEntry(STATE, "state_key", StateKey(persistent=False), "test"))
@@ -113,7 +168,7 @@ async def run(
             path.write_text(tomli_w.dumps(value), encoding="utf-8")
 
         config_file(
-            "org.aurora.adapter/mcp.toml",
+            "org.aurora.mcp/plugin.config.toml",
             {
                 "schema_version": 2,
                 "servers": {
@@ -127,14 +182,39 @@ async def run(
                 },
             },
         )
-        clients = MCPClients(ctx, hooks, workspace_root=root)
-        bridge = MCPTools(registry, ctx, hooks, clients)
-        components = [bridge.component(), clients.component(), configuration_component(registry, ctx, hooks, storage)]
+        clients = MCPClients(ctx, workspace_root=root)
+        bridge = MCPTools(registry, ctx, clients)
+        components = [
+            wire(
+                hooks,
+                bridge.instance_id,
+                ((PREPARE, bridge.prepare),),
+                depends_on=(clients.instance_id,),
+                stop_accepting=None,
+            ),
+            wire(
+                hooks,
+                clients.instance_id,
+                (
+                    (CONFIG, clients.configure),
+                    (PREPARE, clients.prepare),
+                    (STOP, clients.stop),
+                    (CLEAN, clients.clean),
+                ),
+                depends_on=("aurora_config",),
+                stop_accepting=clients.stop_accepting,
+            ),
+            configuration_component(registry, ctx, hooks, storage),
+        ]
         assembly = None
         if with_bot:
-            from aurora_adapter.model.config import ADAPTERS, ModelAdapter
-            from aurora_adapter.model.testing import FakeModel, FakeReply
-            from aurora_bot.assembly import DefaultAssembly
+            import tomllib
+            from importlib.resources import files
+            from types import SimpleNamespace
+
+            from aurora_host import AssemblyPlan
+            from aurora_model.registry import ADAPTERS, ModelAdapter
+            from aurora_model.testing import FakeModel, FakeReply
 
             async def model_factory(config, *, api_key=None):
                 assert bridge.prepared and registry.get(tool_id)
@@ -153,19 +233,32 @@ async def run(
             registry.register(
                 RegistryEntry(adapter, "adapter", ModelAdapter("chat", model_factory), "test", register_to=ADAPTERS)
             )
-            config_file("org.aurora.adapter/model/profiles.toml", {"test": {"adapter": str(adapter), "model": "fake"}})
-            config_file("org.aurora.adapter/model/bindings.toml", {"reasoning": "test"})
-            config_file(
-                "org.aurora.bot/config.toml",
+            config_file("org.aurora.model/profiles.toml", {"test": {"adapter": str(adapter), "model": "fake"}})
+            config_file("org.aurora.model/bindings.toml", {"reasoning": "test"})
+            config_file("org.aurora.agent/model_call.toml", {"streaming": False})
+            declaration = tomllib.loads(files("aurora_bot").joinpath("presets/mcp.toml").read_text())
+            declaration["instances"]["chat"]["options"]["profile"] = "test"
+            plan = AssemblyPlan.parse(declaration)
+            graph = plan.assemble(
+                load_plugins(enabled=declaration["plugins"]),
                 {
-                    "instance_id": "main",
-                    "model_role": "reasoning",
-                    "streaming": False,
-                    "tools": [{"tool": str(tool_id), "instance_id": "echo"}],
+                    "registry": registry,
+                    "ctx": ctx,
+                    "hooks": hooks,
+                    "storage": storage,
+                    "workspace_root": root,
+                    "resolve_credential": lambda _: None,
                 },
             )
-            assembly = DefaultAssembly(registry=registry, ctx=ctx, hooks=hooks, storage=storage)
-            components[0:0] = assembly.components(depends_on=(bridge.instance_id,))
+            clients = graph.instances["mcp_clients"].instance
+            bridge = graph.instances["mcp_catalog"].instance
+            owner = graph.instances["runtime"].instance
+            assembly = SimpleNamespace(
+                agent=graph.instances["main"].instance,
+                defaults=graph.instances["defaults"].instance,
+                activate=owner.activate,
+            )
+            components = graph.components
         host = Lifecycle(
             ctx, hooks, components, persistence=ContextPersistence(ctx, storage.snapshot_store()), storage=storage
         )
@@ -208,6 +301,8 @@ async def run(
                     instance_id="echo",
                     input_state=state("input"),
                     output_state=state("output"),
+                    owner="test",
+                    resources={"clients": clients},
                     config={},
                 )
                 executor.connect(tool_id, tool.plug)

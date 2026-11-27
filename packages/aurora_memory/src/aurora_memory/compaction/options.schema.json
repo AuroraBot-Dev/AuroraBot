@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "index_timeout_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 15
+    },
+    "retry_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 60
+    }
+  }
+}

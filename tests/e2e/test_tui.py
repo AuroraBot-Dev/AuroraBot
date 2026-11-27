@@ -8,10 +8,9 @@ from pathlib import Path
 import pytest
 from aurora_api.access import AccessPolicy
 from aurora_api.server import serve
-from aurora_bot.assembly_config import AGENTS, MESSAGES, RUN, WORK
 from aurora_bot.conversation import CONVERSATION
+from aurora_bot.runtime import AGENTS, MESSAGES, RUN, WORK
 from aurora_config import CONFIGURATION
-from aurora_core import entry_from
 from test_default_assembly import seed, setup
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,10 +20,6 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_native_tui_submit_append_detach_and_cancel(tmp_path, authenticated):
     async def scenario():
         host, _, ctx, registry, _, _, events, _ = setup(tmp_path, behavior="wait")
-        registry.register_many(
-            entry_from(target, provider="test")
-            for target in (ctx.get, ctx.set, ctx.delete, ctx.list, ctx.subscribe, ctx.unsubscribe)
-        )
         process = None
         await host.start(configure=lambda: seed(ctx))
         token = "test-tui-access-token-123456789012" if authenticated else None

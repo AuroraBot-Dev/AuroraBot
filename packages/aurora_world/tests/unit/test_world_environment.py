@@ -17,7 +17,8 @@ from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_core.registry import RegistryEntry
 from aurora_world import SOURCE_STATUS, SOURCES, SourceSpec, WorldRecords, WorldSources
 from aurora_world.environment import TIME_CONFIG, WEATHER_CONFIG, create_time, create_weather
-from aurora_world.plugin import plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin
 
 LOCATION = {"place": "南京", "latitude": 32.0617, "longitude": 118.7778}
 
@@ -50,14 +51,14 @@ class Schedule:
 def environment(factory, config):
     registry = bootstrap()
     install_lifecycle_slots(registry)
-    register_plugins(registry, [plugin()])
+    register_plugins(registry, [records_plugin(), plugin()])
     identity = Id("dev.test:sources/environment")
     registry.register(RegistryEntry(identity, "source", SourceSpec(factory), "test", register_to=SOURCES))
     ctx, hooks = Context(registry), HookConnections(registry)
     clock = factory.keywords.get("now")
     records = WorldRecords(ctx, now=(lambda: clock().timestamp()) if clock else time)
     records.open()
-    sources = WorldSources(ctx, hooks, records)
+    sources = WorldSources(ctx, records)
     sources.add(
         identity, source_id="environment/test", config=config, presentation="weather" if "place" in config else "time"
     )

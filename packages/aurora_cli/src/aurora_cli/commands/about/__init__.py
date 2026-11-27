@@ -13,9 +13,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from ...declarations import CommandContext, command_plugin
+from ...declarations import CommandContext, builtin_commands
 
-DEFINITIONS = {"about": {"help": "了解 AuroraBot 与当前运行环境"}}
 LOGO = """\
                               ▄          ▄
 ▄▀▀█ █  █ █▀▀▀ █▀▀█ █▀▀▀ ▄▀▀█ █▀▀█ █▀▀█ ▀█▀▀
@@ -73,4 +72,4 @@ def dispatch(context: CommandContext) -> int:
 
 
 def plugin():
-    return command_plugin(__name__, {"about": {**DEFINITIONS["about"], "executor": dispatch}})
+    return builtin_commands(__name__, {"about": dispatch})

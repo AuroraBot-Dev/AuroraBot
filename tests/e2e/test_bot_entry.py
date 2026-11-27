@@ -45,7 +45,7 @@ def test_default_paths_are_project_relative_and_process_environment_wins(tmp_pat
     if override:
         monkeypatch.setenv(TOKEN_ENV, expected)
 
-    async def capture(argv):
+    async def capture(argv, *, runtime):
         assert os.environ[TOKEN_ENV] == expected
         assert argv[argv.index("--root") + 1] == str(project)
         assert argv[argv.index("--data-dir") + 1] == str(project / "data")
@@ -54,7 +54,7 @@ def test_default_paths_are_project_relative_and_process_environment_wins(tmp_pat
 
     monkeypatch.setattr(bot, "run_cli", capture)
     assert asyncio.run(bot.run(["--token-env", TOKEN_ENV])) == 0
-    assert not (project / "data").exists()
+    assert (project / "data/config/assembly.toml").is_file()
 
 
 @pytest.mark.parametrize("value", [None, "bad-token"])
@@ -75,7 +75,7 @@ def test_explicit_missing_environment_file_is_an_error(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(("edit_config", "archived_event"), [(False, False), (True, True)])
-def test_full_product_from_incomplete_host_config(tmp_path, monkeypatch, edit_config, archived_event):
+def test_full_product_from_explicit_host_config(tmp_path, monkeypatch, edit_config, archived_event):
     monkeypatch.setenv(TOKEN_ENV, TOKEN)
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
@@ -83,11 +83,14 @@ def test_full_product_from_incomplete_host_config(tmp_path, monkeypatch, edit_co
     async def scenario():
         async with service(tmp_path, "local") as (server, calls):
             name = seed(tmp_path, server)
-            host_path = tmp_path / "config/host.toml"
-            host_path.write_text(
-                'plugins = ["test.product"]\nassembly = "org.aurora.bot:assemblies/default"\n', encoding="utf-8"
-            )
-            world = tmp_path / "config/org.aurora.world/config.toml"
+            assembly_path = tmp_path / "config/assembly.toml"
+            from importlib.resources import files
+
+            assembly = __import__("tomllib").loads(files("aurora_bot").joinpath("presets/bot.toml").read_text())
+            assembly["plugins"] = [*assembly["plugins"], "test.product"]
+            assembly["instances"]["chat"]["options"]["profile"] = "test"
+            assembly_path.write_text(tomli_w.dumps(assembly), encoding="utf-8")
+            world = tmp_path / "config/org.aurora.world/plugin.config.toml"
             world.parent.mkdir(exist_ok=True)
             sources = [{"source": "org.aurora.world:sources/environment/time", "source_id": "clock"}]
             if archived_event:
@@ -98,13 +101,25 @@ def test_full_product_from_incomplete_host_config(tmp_path, monkeypatch, edit_co
                         "presentation": "events",
                     }
                 )
+                (tmp_path / "config/org.aurora.bot").mkdir(exist_ok=True)
                 (tmp_path / "config/org.aurora.bot/cadence.toml").write_text("", encoding="utf-8")
             world.write_text(tomli_w.dumps({"sources": sources}), encoding="utf-8")
             before = {path: path.read_bytes() for path in (tmp_path / "config").rglob("*.toml")}
             clients = []
 
-            async def with_fake_model(argv):
-                return await run_cli(argv, plugins=[fake_plugin(name, clients)], output=StringIO())
+            create_host = bot.Host.create
+            monkeypatch.setattr(
+                bot.Host,
+                "create",
+                classmethod(
+                    lambda cls, plan, plugins, root, *, workspace_root: create_host(
+                        plan, [fake_plugin(name, clients)], root, workspace_root=workspace_root
+                    )
+                ),
+            )
+
+            async def with_fake_model(argv, *, runtime):
+                return await run_cli(argv, runtime=runtime, output=StringIO())
 
             monkeypatch.setattr(bot, "run_cli", with_fake_model)
             with socket.socket() as available:

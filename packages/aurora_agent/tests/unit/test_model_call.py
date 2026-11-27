@@ -3,10 +3,8 @@
 import asyncio
 
 import pytest
-from aurora_adapter.model import ChatCapabilities, ModelError, ToolCall, UnsupportedCapability
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import ModelCall
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_control import CONTROL_STATE, ExecutionRequest, ExecutionSlot, Serial, StateBinding, plugin
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
@@ -15,6 +13,9 @@ from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
 from aurora_core.json_data import encode_json
 from aurora_core.registry import RegistryEntry
+from aurora_model import ChatCapabilities, ModelError, UnsupportedCapability
+from aurora_model.testing import FakeModel, FakeReply
+from aurora_tools.contract import ToolCall
 
 INPUT = Id("dev.model:state/input")
 OUTPUT = Id("dev.model:state/output")
@@ -37,8 +38,9 @@ def assemble(ctx, hooks, client, *, streaming=True):
     input_state = StateBinding(INPUT)
     output_state = StateBinding(OUTPUT, (("instance_id", "model"),))
     component = ModelCall(
-        ctx, client, instance_id="model", request_state=input_state, output_state=output_state, streaming=streaming
+        ctx, instance_id="model", request_state=input_state, output_state=output_state, streaming=streaming
     )
+    component.bind(client)
     slot = ExecutionSlot(Serial.definition_id, hooks, instance_id="root")
     link = slot.connect(component.plug)
     assert link.connection.handler == Id("org.aurora.agent:handlers/model_call/execute")
@@ -51,8 +53,10 @@ def assemble(ctx, hooks, client, *, streaming=True):
 def test_model_instances_generate_stable_independent_ids(runtime):
     ctx, _ = runtime
     client = FakeModel(lambda _: FakeReply(("回答",)))
-    first = ModelCall(ctx, client, request_state=StateBinding(INPUT), output_state=StateBinding(OUTPUT))
-    second = ModelCall(ctx, client, request_state=StateBinding(INPUT), output_state=StateBinding(OUTPUT))
+    first = ModelCall(ctx, request_state=StateBinding(INPUT), output_state=StateBinding(OUTPUT))
+    first.bind(client)
+    second = ModelCall(ctx, request_state=StateBinding(INPUT), output_state=StateBinding(OUTPUT))
+    second.bind(client)
     assert first.instance_id != second.instance_id
     assert first.plug.instance_id == first.plug.instance_id == first.instance_id
     assert first.plug.definition_id == second.plug.definition_id == ModelCall.definition_id

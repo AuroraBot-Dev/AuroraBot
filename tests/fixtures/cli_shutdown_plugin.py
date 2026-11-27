@@ -5,7 +5,8 @@ import os
 import signal
 from dataclasses import replace
 
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
+from aurora_core.components import ComponentDeclaration, ComponentExport, ComponentFactory, InstanceExport
 from aurora_core.ctx import StateKey
 from aurora_core.discovery import Plugin
 from aurora_core.lifecycle import PREPARE, START, STOP, LifecycleComponent
@@ -13,7 +14,6 @@ from aurora_core.registry import RegistryEntry
 from aurora_core.snapshots import JsonSnapshotStore
 
 KEY = Id("dev.cli_shutdown:state/value")
-ASSEMBLY = Id("dev.cli_shutdown:assemblies/watch")
 
 
 def assemble(*, registry, ctx, hooks, storage, workspace_root):
@@ -44,7 +44,7 @@ def assemble(*, registry, ctx, hooks, storage, workspace_root):
         path = storage.snapshot_store().path
         storage.snapshot_store = lambda: FailingStore(path)
 
-    @hook_handler("dev.cli_shutdown:handlers/prepare", slot=PREPARE)
+    @plug("dev.cli_shutdown:handlers/prepare")
     def prepare():
         nonlocal subscription
         subscription = ctx.subscribe(lambda change: record(change.value), key=KEY)
@@ -57,12 +57,12 @@ def assemble(*, registry, ctx, hooks, storage, workspace_root):
         await asyncio.sleep(0)
         signal.raise_signal(signal.SIGINT)
 
-    @hook_handler("dev.cli_shutdown:handlers/start", slot=START)
+    @plug("dev.cli_shutdown:handlers/start")
     def start():
         nonlocal worker
         worker = asyncio.create_task(produce())
 
-    @hook_handler("dev.cli_shutdown:handlers/stop", slot=STOP)
+    @plug("dev.cli_shutdown:handlers/stop")
     async def stop():
         if worker is not None:
             await worker
@@ -77,14 +77,17 @@ def assemble(*, registry, ctx, hooks, storage, workspace_root):
         entry = entry_from(handler, provider="cli_shutdown_fixture")
         registry.register(entry)
         hooks.connect(phase, entry.id, slot_instance="app", handler_instance="app")
-    return [LifecycleComponent("app", stop_accepting=lambda: record("gate:closed"))]
+    return LifecycleComponent("app", stop_accepting=lambda: record("gate:closed"))
 
 
 def plugin():
     return Plugin(
         "cli_shutdown_fixture",
-        (
-            RegistryEntry(KEY, "state_key", StateKey(), "cli_shutdown_fixture"),
-            RegistryEntry(ASSEMBLY, "assembly", assemble, "cli_shutdown_fixture"),
-        ),
+        (RegistryEntry(KEY, "state_key", StateKey(), "cli_shutdown_fixture"),),
+        components={
+            "watch": ComponentExport(
+                ComponentFactory(assemble, lambda component: InstanceExport(stop_accepting=component.stop_accepting)),
+                ComponentDeclaration(inject=("registry", "ctx", "hooks", "storage", "workspace_root")),
+            )
+        },
     )

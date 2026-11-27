@@ -2,8 +2,8 @@
 
 import base64
 
-from aurora_adapter.model import ContentPart, MessageContent
-from aurora_adapter.model.content import validate_content
+from aurora_model import ContentPart, MessageContent
+from aurora_model.content import validate_content
 
 MEDIA_TYPES = (
     "image/png",

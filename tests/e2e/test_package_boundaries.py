@@ -13,7 +13,7 @@ import importlib.abc
 import runpy
 import sys
 
-blocked = {'aurora_agent', 'aurora_bot', 'aurora_adapter', 'aurora_cli', 'aurora_api'}
+blocked = {'aurora_agent', 'aurora_bot', 'aurora_model', 'aurora_mcp', 'aurora_cli', 'aurora_api'}
 
 class AbsentPackages(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
@@ -42,6 +42,35 @@ assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
     assert '"status": "completed"' in (tmp_path / "framework" / "ctx.json").read_text(encoding="utf-8")
 
 
+def test_tools_roundtrip_without_agent_model_or_hosts():
+    launcher = """
+import importlib.abc
+import runpy
+import sys
+
+blocked = {'aurora_agent', 'aurora_model', 'aurora_mcp', 'aurora_bot', 'aurora_cli', 'aurora_api', 'litellm', 'mcp'}
+
+class AbsentPackages(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in blocked:
+            raise ModuleNotFoundError('独立工具环境不提供：' + fullname)
+
+sys.meta_path.insert(0, AbsentPackages())
+runpy.run_path(sys.argv[1], run_name='__main__')
+assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
+"""
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "tools_roundtrip.py"
+    result = subprocess.run(
+        [sys.executable, "-c", launcher, str(fixture)], capture_output=True, text=True, timeout=15, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "events": ["before", "tool", "after"],
+        "result": 5,
+        "working_states_cleared": True,
+    }
+
+
 def test_agent_roundtrip_and_restore_without_bot_or_hosts(tmp_path):
     launcher = """
 import importlib.abc
@@ -59,9 +88,12 @@ sys.meta_path.insert(0, AbsentPackages())
 from aurora_agent.runtime import AgentRuntime
 from aurora_core.discovery import load_plugins
 plugins = load_plugins(enabled=[
-    'aurora_agent.model', 'aurora_agent.react', 'aurora_agent.tools', 'aurora_agent.react_defaults',
+    'aurora_agent.model', 'aurora_agent.react', 'aurora_tools', 'aurora_agent.react_defaults',
 ])
-assert all(entry.provider == 'aurora_agent' for plugin in plugins for entry in plugin.entries)
+assert all(
+    entry.provider == plugin.name
+    for plugin in plugins for entry in plugin.entries
+)
 source = sys.argv.pop(1)
 runpy.run_path(source, run_name='__main__')
 assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
@@ -92,30 +124,34 @@ def test_model_protocol_and_plugin_discovery_do_not_import_sdks():
     launcher = """
 import importlib.abc
 import sys
-blocked = {'litellm', 'mcp', 'httpx', 'httpx2', 'aurora_agent', 'aurora_bot', 'aurora_world'}
+blocked = {'litellm', 'mcp', 'httpx', 'httpx2', 'aurora_agent', 'aurora_bot', 'aurora_world', 'aurora_mcp', 'aurora_config'}
 class AbsentPackages(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname.split('.')[0] in blocked:
             raise ModuleNotFoundError('模型发现环境不提供：' + fullname)
 sys.meta_path.insert(0, AbsentPackages())
-from aurora_adapter.model.testing import FakeModel, FakeReply
-from aurora_adapter.model.config import ADAPTERS, ModelAdapter
+from aurora_model.testing import FakeModel, FakeReply
+from aurora_model.registry import ADAPTERS, ModelAdapter
 from aurora_core.discovery import load_plugins
-plugins = load_plugins(enabled=['aurora_config', 'aurora_adapter.model'])
-plugin = next(item for item in plugins if item.name == 'aurora_adapter.model')
+assert [plugin.name for plugin in load_plugins(enabled=['aurora_model'])] == ['aurora_model']
+assert 'aurora_tools.execution' not in sys.modules
+blocked.remove('aurora_config')
+plugins = load_plugins(enabled=['aurora_config', 'aurora_model', 'aurora_model.configuration', 'aurora_model.litellm'])
+entries = [entry for plugin in plugins if plugin.name.startswith('aurora_model') for entry in plugin.entries]
 assert {
-    'org.aurora.adapter:registries/model/adapters',
-    'org.aurora.adapter:services/model/chat_client',
-    'org.aurora.adapter:services/model/choice_client',
-    'org.aurora.adapter:adapters/model/litellm/choice',
-    'org.aurora.adapter:services/model/embedding_client',
-    'org.aurora.adapter:adapters/model/litellm/chat',
-    'org.aurora.adapter:adapters/model/litellm/embedding',
-} <= {str(entry.id) for entry in plugin.entries}
-adapters = [entry for entry in plugin.entries if entry.kind == 'adapter']
+    'org.aurora.model:registries/adapters',
+    'org.aurora.model:services/chat_client',
+    'org.aurora.model:services/choice_client',
+    'org.aurora.model:adapters/litellm/choice',
+    'org.aurora.model:services/embedding_client',
+    'org.aurora.model:adapters/litellm/chat',
+    'org.aurora.model:adapters/litellm/embedding',
+} <= {str(entry.id) for entry in entries}
+adapters = [entry for entry in entries if entry.kind == 'adapter']
 assert all(isinstance(entry.target, ModelAdapter) and entry.register_to == ADAPTERS for entry in adapters)
 assert {entry.target.kind for entry in adapters} == {'chat', 'choice', 'embedding'}
-assert all(entry.id.namespace == 'org.aurora.adapter' for entry in plugin.entries)
+assert all(entry.id.namespace == 'org.aurora.model' for entry in entries)
+assert 'aurora_tools.execution' not in sys.modules
 assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
 """
     result = subprocess.run([sys.executable, "-c", launcher], capture_output=True, text=True, timeout=15, check=False)
@@ -153,3 +189,29 @@ assert not any(name.split('.')[0] in {'aurora_cli', 'aurora_api'} for name in sy
     assert result.returncode == 0, result.stderr
     assert "内部输出: 模型一:回显:隔离验收" in result.stdout
     assert (tmp_path / "framework" / "ctx.json").is_file()
+
+
+def test_memory_tools_and_restore_without_bot_agent_or_application_host(tmp_path):
+    launcher = """
+import importlib.abc
+import runpy
+import sys
+blocked = {'aurora_agent', 'aurora_bot', 'aurora_host', 'aurora_cli', 'aurora_api', 'litellm', 'mcp'}
+class AbsentPackages(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in blocked:
+            raise ModuleNotFoundError('记忆基础环境不提供：' + fullname)
+sys.meta_path.insert(0, AbsentPackages())
+runpy.run_path(sys.argv.pop(1), run_name='__main__')
+assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
+"""
+    fixture = Path(__file__).resolve().parents[1] / "fixtures/memory_roundtrip.py"
+    result = subprocess.run(
+        [sys.executable, "-c", launcher, str(fixture), str(tmp_path)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"tools": 5, "restored": True, "embedding_closed_once": True}

@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["owner", "action"],
+  "properties": {
+    "owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action": {
+      "enum": ["write", "search", "read", "delete", "reindex"]
+    }
+  }
+}

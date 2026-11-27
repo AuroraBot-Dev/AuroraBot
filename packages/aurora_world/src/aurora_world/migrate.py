@@ -12,8 +12,7 @@ from aurora_core.discovery import register_plugins
 from aurora_core.storage import StorageService
 
 from .legacy import validate_records
-from .plugin import plugin
-from .records import RECORDS, WorldRecords, _content
+from .records import RECORDS, WorldRecords, _content, plugin
 
 
 def migrate(root: Path) -> int:

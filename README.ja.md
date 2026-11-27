@@ -53,7 +53,7 @@ uv run --locked python examples/onboarding/main.py --init
 
 ### 2. 必要な設定を記入
 
-`build/onboarding/config/org.aurora.adapter/model/profiles.toml` に `provider`、`model`、必要に応じて `base_url` を設定します。ルートの `.env` に `AURORA_MODEL_API_KEY` を設定し、`credential` には環境変数名だけを記入します。
+`build/onboarding/config/org.aurora.model/profiles.toml` に `provider`、`model`、必要に応じて `base_url` を設定します。ルートの `.env` に `AURORA_MODEL_API_KEY` を設定し、`credential` には環境変数名だけを記入します。
 
 ### 3. ターミナルから起動
 

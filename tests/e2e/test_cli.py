@@ -13,17 +13,18 @@ from pathlib import Path
 
 import pytest
 from aurora_cli.commander import run_cli
-from aurora_core import Id, entry_from, hook_handler, operation
+from aurora_core import Id, entry_from, operation, plug
 from aurora_core.discovery import Plugin
 from aurora_core.lifecycle import PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import RegistryEntry
+from aurora_host.configuration import initialize_host_config
 
 CONFIG = "org.aurora.cli:state/config"
 
 
 @pytest.mark.parametrize("flag", ["-v", "--version"])
 def test_version_exits_without_loading_plugins_or_creating_storage(tmp_path, flag):
-    result = invoke("--plugin", "missing-version-test-plugin", "--data-dir", tmp_path / "data", flag)
+    result = invoke("--assembly-file", tmp_path / "missing.toml", "--data-dir", tmp_path / "data", flag)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f"aurora {version('aurora-cli')}"
     assert not (tmp_path / "data").exists()
@@ -36,6 +37,8 @@ def invoke(*args):
 
 
 def test_cli_configuration_rebuilds_from_toml_across_processes(tmp_path):
+    initialize_host_config(tmp_path / "config")
+
     def run(*args):
         result = invoke("--data-dir", tmp_path, *args)
         assert result.returncode == 0, result.stderr
@@ -43,7 +46,7 @@ def test_cli_configuration_rebuilds_from_toml_across_processes(tmp_path):
 
     assert run("ctx", "set", CONFIG, '{"value":1}') is None
     assert run("ctx/get", CONFIG) == {}
-    (tmp_path / "config/org.aurora.cli/config.toml").write_text("value = 3\n", encoding="utf-8")
+    (tmp_path / "config/org.aurora.cli/plugin.config.toml").write_text("value = 3\n", encoding="utf-8")
     assert run("ctx/get", CONFIG) == {"value": 3}
     assert run("ctx/delete", CONFIG) is True
     assert run("ctx/get", CONFIG) == {"value": 3}
@@ -162,20 +165,20 @@ def test_run_applies_config_before_prepare_and_flushes_stop(tmp_path):
         started = asyncio.Event()
         observations = []
 
-        def factory(*, registry, ctx, hooks, storage, workspace_root):
+        def factory(*, registry, ctx, hooks, storage, workspace_root, resolve_credential):
             logging.getLogger(__name__).info("装配工厂日志")
 
-            @hook_handler("dev.test:handlers/prepare", slot=PREPARE)
+            @plug("dev.test:handlers/prepare")
             def prepare():
                 logging.getLogger(__name__).info("准备阶段日志")
                 observations.append(ctx.get(Id(CONFIG)))
 
-            @hook_handler("dev.test:handlers/start", slot=START)
+            @plug("dev.test:handlers/start")
             def start():
                 logging.getLogger(__name__).info("启动阶段日志")
                 started.set()
 
-            @hook_handler("dev.test:handlers/stop", slot=STOP)
+            @plug("dev.test:handlers/stop")
             def stop():
                 logging.getLogger(__name__).info("停止阶段日志")
                 ctx.set(Id(CONFIG), {"stopped": True})
@@ -187,12 +190,20 @@ def test_run_applies_config_before_prepare_and_flushes_stop(tmp_path):
                 hooks.connect(phase, entry.id, slot_instance="app", handler_instance="app")
             return [LifecycleComponent("app")]
 
-        plugin = Plugin("test", (RegistryEntry(Id("dev.test:assemblies/app"), "assembly", factory, "test"),))
+        from aurora_core.bootstrap import bootstrap
+        from aurora_core.lifecycle import install_lifecycle_slots
+        from aurora_host import Host
+
+        registry = bootstrap()
+        install_lifecycle_slots(registry)
+
         await run_cli(["--data-dir", str(tmp_path), "ctx/set", CONFIG, '{"old":true}'], output=StringIO())
+        runtime = Host(registry, tmp_path, workspace_root=tmp_path)
+        runtime.mount(factory(**runtime.services))
         task = asyncio.create_task(
             run_cli(
-                ["--data-dir", str(tmp_path), "--config", '{"new":true}', "run", "dev.test:assemblies/app"],
-                plugins=[plugin],
+                ["--data-dir", str(tmp_path), "--config", '{"new":true}', "run"],
+                runtime=runtime,
             )
         )
         await asyncio.wait_for(started.wait(), timeout=2)
@@ -201,11 +212,11 @@ def test_run_applies_config_before_prepare_and_flushes_stop(tmp_path):
             await task
         assert observations == [{"new": True}]
         content = (tmp_path / "logs" / "aurora.log").read_text(encoding="utf-8")
-        for message in ("装配工厂日志", "准备阶段日志", "启动阶段日志", "停止阶段日志"):
+        for message in ("准备阶段日志", "启动阶段日志", "停止阶段日志"):
             assert content.count(message) == 1
         output = StringIO()
-        await run_cli(["--data-dir", str(tmp_path), "ctx/get", CONFIG], output=output)
-        assert json.loads(output.getvalue()) == {}
+        await run_cli(["--data-dir", str(tmp_path), "ctx/list"], output=output)
+        assert json.loads(output.getvalue()) == []
 
     asyncio.run(scenario())
 
@@ -222,10 +233,12 @@ def test_real_cli_interrupt_and_shutdown_status(tmp_path, fault):
     env["PYTHONIOENCODING"] = "utf-8"
     env["AURORA_CLI_SHUTDOWN_FAULT"] = fault
     data = tmp_path / "data"
+    plan = tmp_path / "assembly.toml"
+    plan.write_text('schema_version = 2\nplugins = ["cli_shutdown_fixture"]\n[instances]\n', encoding="utf-8")
 
     def run(*args):
         return subprocess.run(
-            [sys.executable, "-m", "aurora_cli", "--plugin", "cli_shutdown_fixture", "--data-dir", str(data), *args],
+            [sys.executable, "-m", "aurora_cli", "--assembly-file", str(plan), "--data-dir", str(data), *args],
             env=env,
             capture_output=True,
             text=True,
@@ -238,9 +251,12 @@ def test_real_cli_interrupt_and_shutdown_status(tmp_path, fault):
     assert initial.returncode == 0, initial.stderr
     snapshot = data / "framework" / "ctx.json"
     before = snapshot.read_bytes()
-    result = run(
-        "--assembly", "dev.cli_shutdown:assemblies/watch", "ctx/watch", "--key", "dev.cli_shutdown:state/value"
+    plan.write_text(
+        'schema_version = 2\nplugins = ["cli_shutdown_fixture"]\n[instances.app]\nplugin = "cli_shutdown_fixture"\ncomponent = "watch"\n',
+        encoding="utf-8",
     )
+    result = run("ctx/watch", "--key", "dev.cli_shutdown:state/value")
+    plan.write_text('schema_version = 2\nplugins = ["cli_shutdown_fixture"]\n[instances]\n', encoding="utf-8")
     assert result.returncode == (1 if fault else 130), result.stderr
     events = [json.loads(line) for line in result.stdout.splitlines()]
     assert [event["value"] for event in events] == ["first", "second"]

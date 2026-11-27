@@ -1,0 +1,64 @@
+schema_version = 2
+
+[plugins.tools]
+entry_point = "aurora_mcp.tools"
+title = "MCP 工具目录"
+summary = "MCP 工具目录的公开定义与真实实例导出"
+requires = [
+    "aurora_mcp",
+    "aurora_tools",
+]
+
+[definitions.COMPONENT]
+plugin = "tools"
+id = "org.aurora.mcp:components/tool"
+kind = "component"
+summary = "单个 MCP 工具执行组件"
+
+[definitions.EXECUTE]
+plugin = "tools"
+id = "org.aurora.mcp:components/tool/execute"
+kind = "hook_handler"
+summary = "执行实例的一次调用"
+
+[definitions.EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EXECUTE.interface.definition]
+id = "org.aurora.mcp:components/tool"
+
+[definitions.PREPARE]
+plugin = "tools"
+id = "org.aurora.mcp:handlers/tools/prepare"
+kind = "hook_handler"
+summary = "准备阶段端口"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.catalog]
+plugin = "tools"
+inject = [
+    "ctx",
+    "registry",
+    "instance_id",
+]
+plugs = [
+    "PREPARE",
+]
+slots = []
+inputs = [
+    "clients",
+]
+resources = [
+    "catalog",
+]
+
+[dynamic.TOOL_DEFINITIONS]
+plugin = "tools"
+kind = "tool"
+id_root = "org.aurora.mcp:tools"
+summary = "prepare 发现的工具目录；集合显式选择后创建实际成员"
+
+[dynamic.TOOL_DEFINITIONS.register_to]
+id = "org.aurora.tools:registries/tools"

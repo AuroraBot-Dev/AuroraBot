@@ -1,0 +1,29 @@
+{
+  "name": "world_read_event",
+  "description": "按 world_event 引用的 journal_id/record_id 读取当前 world 的原始事件 JSON。offset 初始为 0，按 next_offset 继续；仅当 next_offset=null 才读至末尾，拼接各页 text 后才是完整 JSON。只读，不重放事件，不代表事项已完成；不支持环境观察或 tool_call 引用。",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["journal_id", "record_id"],
+    "properties": {
+      "journal_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "\\S"
+      },
+      "record_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "\\S"
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9223372036854775806,
+        "default": 0
+      }
+    }
+  }
+}

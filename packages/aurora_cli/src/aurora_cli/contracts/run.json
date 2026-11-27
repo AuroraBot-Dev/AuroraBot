@@ -1,0 +1,4 @@
+{
+  "help": "启动选定装配，Ctrl+C 停止",
+  "runtime": true
+}

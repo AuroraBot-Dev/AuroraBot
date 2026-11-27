@@ -1,24 +1,23 @@
 """时间与 Open-Meteo 天气观察；周期只写入 world，不激活 agent。"""
 
 import asyncio
+import json
 import math
 import random
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from importlib.resources import files
 from statistics import NormalDist
 from typing import cast
 from uuid import uuid4
 
 import httpx
 from aurora_config import ConfigSchema
-from aurora_core import Id
 from aurora_core.discovery import Plugin
-from aurora_core.registry import RegistryEntry
 
-from .sources import SOURCES, SourceEmit, SourceInstance, SourceSpec
+from .plugins.environment._meta import TIME, WEATHER, environment_plugin
+from .sources import SourceEmit, SourceInstance, SourceSpec
 
-TIME = Id("org.aurora.world:sources/environment/time")
-WEATHER = Id("org.aurora.world:sources/environment/weather")
 _CONDITIONS = {
     0: "晴",
     1: "大部晴朗",
@@ -58,30 +57,15 @@ def _time_config(value: object) -> None:
 
 
 TIME_CONFIG = ConfigSchema(
-    {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "mean_seconds": {"type": "number", "minimum": 60, "default": 1800.0},
-            "deviation_seconds": {"type": "number", "minimum": 1, "default": 300.0},
-        },
-    },
+    json.loads(
+        files("aurora_world").joinpath("plugins/environment/time_config.schema.json").read_text(encoding="utf-8")
+    ),
     check=_time_config,
 )
 WEATHER_CONFIG = ConfigSchema(
-    {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["place", "latitude", "longitude"],
-        "properties": {
-            "place": {"type": "string", "pattern": r"\S"},
-            "latitude": {"type": "number", "minimum": -90, "maximum": 90},
-            "longitude": {"type": "number", "minimum": -180, "maximum": 180},
-            "interval_seconds": {"type": "number", "minimum": 60, "maximum": 86400, "default": 900},
-            "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 30, "default": 10},
-            "temperature_change_c": {"type": "number", "minimum": 0, "maximum": 50, "default": 3},
-        },
-    }
+    json.loads(
+        files("aurora_world").joinpath("plugins/environment/weather_config.schema.json").read_text(encoding="utf-8")
+    )
 )
 
 
@@ -123,6 +107,7 @@ async def create_time(
     source_id: str,
     emit: SourceEmit,
     config: dict[str, object],
+    resources=None,
     now: Callable[[], datetime] = _now,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     uniform: Callable[[float, float], float] = random.uniform,
@@ -196,6 +181,7 @@ async def create_weather(
     source_id: str,
     emit: SourceEmit,
     config: dict[str, object],
+    resources=None,
     now: Callable[[], datetime] = _now,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     transport: httpx.AsyncBaseTransport | None = None,
@@ -262,14 +248,6 @@ async def create_weather(
 
 
 def plugin() -> Plugin:
-    """仅登记来源工厂；HTTP 客户端在 prepare 创建，网络访问在 run 内执行。"""
-    return Plugin(
-        "aurora_world.environment",
-        (
-            RegistryEntry(TIME, "source", SourceSpec(create_time), "aurora_world.environment", register_to=SOURCES),
-            RegistryEntry(
-                WEATHER, "source", SourceSpec(create_weather), "aurora_world.environment", register_to=SOURCES
-            ),
-        ),
-        requires=("aurora_world",),
+    return environment_plugin(
+        targets={TIME: SourceSpec(create_time), WEATHER: SourceSpec(create_weather)}, components={}
     )

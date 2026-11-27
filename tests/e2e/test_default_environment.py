@@ -9,7 +9,6 @@ import httpx
 import tomli_w
 from aurora_api.client import CtxClient
 from aurora_api.server import serve
-from aurora_core import entry_from
 from aurora_core.discovery import load_plugins
 from aurora_core.snapshots import JsonSnapshotStore
 from aurora_world import ENVIRONMENT, SOURCE_STATUS, SourceSpec
@@ -41,7 +40,7 @@ def weather_response(request):
 
 def test_default_assembly_exposes_environment_without_activating_model_and_restores(tmp_path):
     async def scenario():
-        path = tmp_path / "config/org.aurora.world/config.toml"
+        path = tmp_path / "config/org.aurora.world/plugin.config.toml"
         path.parent.mkdir(parents=True)
         path.write_text(
             tomli_w.dumps(
@@ -59,7 +58,8 @@ def test_default_assembly_exposes_environment_without_activating_model_and_resto
             clocks = [Period(), Period()]
             plugins = load_plugins(
                 enabled=[
-                    "aurora_world",
+                    "aurora_world.records",
+                    "aurora_world.sources",
                     "aurora_world.configuration",
                     "aurora_world.environment",
                     "aurora_config",
@@ -80,17 +80,6 @@ def test_default_assembly_exposes_environment_without_activating_model_and_resto
                 ),
             ):
                 registry.replace(replace(registry.get(identity), target=SourceSpec(factory)))
-            registry.register_many(
-                entry_from(target, provider="test")
-                for target in (
-                    ctx.get,
-                    ctx.set,
-                    ctx.delete,
-                    ctx.list,
-                    ctx.subscribe,
-                    ctx.unsubscribe,
-                )
-            )
             await host.start(configure=partial(seed, ctx, tools=False))
             try:
                 assert await clocks[0].waiting.get() == (2100 if restart else 1800)

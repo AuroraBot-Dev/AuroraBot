@@ -20,7 +20,7 @@ import runpy
 import sys
 blocked = {'aurora_cli', 'aurora_api'}
 if '--bot' not in sys.argv:
-    blocked.update({'aurora_world', 'aurora_bot'})
+    blocked.update({'aurora_world', 'aurora_bot', 'aurora_agent'})
 class AbsentPackages(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname.split('.')[0] in blocked:

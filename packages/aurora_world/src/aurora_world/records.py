@@ -13,16 +13,22 @@ from time import time
 from typing import Literal, cast
 from uuid import uuid4
 
-from aurora_core import entry_from, hook_handler
-from aurora_core.ctx import Context
-from aurora_core.hooks import HookConnections
-from aurora_core.ids import Id
+from aurora_core import plug
+from aurora_core.components import ComponentFactory, InstanceExport
+from aurora_core.ctx import Context, StateKey
 from aurora_core.json_data import decode_json, encode_json
-from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.storage import StorageService
 
-RECORDS = Id("org.aurora.world:state/records")
-ENVIRONMENT = Id("org.aurora.world:state/environment")
+from .plugins.records._meta import (
+    ENVIRONMENT,
+    RECORDS,
+    RECORDS_CLEAN,
+    RECORDS_PREPARE,
+    RECORDS_START,
+    RECORDS_STOP,
+    records_plugin,
+)
+
 Presentation = Literal["events", "time", "weather"]
 logger = logging.getLogger(__name__)
 
@@ -196,7 +202,6 @@ class WorldRecords:
         self._owner = get_ident()
         self._db: sqlite3.Connection | None = None
         self._closed = False
-        self._connected = False
         self._worker: asyncio.Task[None] | None = None
         self._presentations: dict[str, Presentation] = {}
         self.last_error: str | None = None
@@ -495,33 +500,11 @@ class WorldRecords:
                 result.append((item["received_at"], record))
         return tuple(record for _, record in sorted(result, key=lambda pair: pair[0]))
 
-    def component(
-        self, hooks: HookConnections, *, instance_id: str = "aurora_world/records", depends_on: tuple[str, ...] = ()
-    ) -> LifecycleComponent:
-        self._check_owner()
-        if self._connected:
-            raise RuntimeError("世界记录生命周期已经连接")
-        links = []
-        try:
-            for phase, method in ((PREPARE, self.prepare), (START, self.start), (STOP, self.stop), (CLEAN, self.clean)):
-                entry = entry_from(method, provider="aurora_world")
-                links.append(
-                    hooks.connect(
-                        phase, entry.id, slot_instance=instance_id, handler_instance=instance_id, target=method
-                    )
-                )
-        except Exception:
-            for link in links:
-                hooks.disconnect(link)
-            raise
-        self._connected = True
-        return LifecycleComponent(instance_id, depends_on=depends_on)
-
-    @hook_handler("org.aurora.world:handlers/records/prepare", slot=PREPARE)
+    @plug(RECORDS_PREPARE)
     def prepare(self) -> None:
         self.open()
 
-    @hook_handler("org.aurora.world:handlers/records/start", slot=START)
+    @plug(RECORDS_START)
     def start(self) -> None:
         self._connection()
         if self._worker is not None:
@@ -539,7 +522,7 @@ class WorldRecords:
             else:
                 self.last_error = None
 
-    @hook_handler("org.aurora.world:handlers/records/stop", slot=STOP)
+    @plug(RECORDS_STOP)
     async def stop(self) -> None:
         if self._worker is not None:
             self._worker.cancel()
@@ -549,7 +532,7 @@ class WorldRecords:
                 pass
             self._worker = None
 
-    @hook_handler("org.aurora.world:handlers/records/clean", slot=CLEAN)
+    @plug(RECORDS_CLEAN)
     def clean(self) -> None:
         self.close()
 
@@ -563,3 +546,24 @@ class WorldRecords:
             self._db.close()
             self._db = None
         self._closed = True
+
+
+def plugin():
+    return records_plugin(
+        targets={RECORDS: StateKey(validate_records), ENVIRONMENT: StateKey(validate_environment)},
+        components={
+            "records": ComponentFactory(
+                WorldRecords,
+                lambda instance: InstanceExport(
+                    plugs={
+                        RECORDS_PREPARE: instance.prepare,
+                        RECORDS_START: instance.start,
+                        RECORDS_STOP: instance.stop,
+                        RECORDS_CLEAN: instance.clean,
+                    },
+                    resources={"records": instance},
+                ),
+                plugs=(WorldRecords.prepare, WorldRecords.start, WorldRecords.stop, WorldRecords.clean),
+            )
+        },
+    )

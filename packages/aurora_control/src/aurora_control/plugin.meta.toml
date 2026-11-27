@@ -1,0 +1,235 @@
+schema_version = 2
+
+[plugins.control]
+entry_point = "aurora_control"
+title = "执行控制组件"
+summary = "通过实例端口和状态绑定组合执行"
+requires = []
+
+[definitions.CONTROL]
+plugin = "control"
+id = "org.aurora.control:handlers/control"
+kind = "component"
+summary = "通用控制组件"
+
+[definitions.CONTROL_EXECUTE]
+plugin = "control"
+id = "org.aurora.control:handlers/control/execute"
+kind = "hook_handler"
+summary = "通用控制执行插头"
+
+[definitions.CONTROL_EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CONTROL_EXECUTE.interface.definition]
+local = "CONTROL"
+
+[definitions.CONTROL_CHILDREN]
+plugin = "control"
+id = "org.aurora.control:handlers/control/children"
+kind = "hook_slot"
+summary = "通用控制子组件槽"
+
+[definitions.CONTROL_CHILDREN.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.SERIAL]
+plugin = "control"
+id = "org.aurora.control:handlers/control/serial"
+kind = "component"
+summary = "串行组件"
+
+[definitions.SERIAL_EXECUTE]
+plugin = "control"
+id = "org.aurora.control:handlers/control/serial/execute"
+kind = "hook_handler"
+summary = "串行执行插头"
+
+[definitions.SERIAL_EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.SERIAL_EXECUTE.interface.definition]
+local = "SERIAL"
+
+[definitions.SERIAL_CHILDREN]
+plugin = "control"
+id = "org.aurora.control:handlers/control/serial/children"
+kind = "hook_slot"
+summary = "串行子组件槽"
+
+[definitions.SERIAL_CHILDREN.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.BRANCH]
+plugin = "control"
+id = "org.aurora.control:handlers/control/branch"
+kind = "component"
+summary = "分支组件"
+
+[definitions.BRANCH_EXECUTE]
+plugin = "control"
+id = "org.aurora.control:handlers/control/branch/execute"
+kind = "hook_handler"
+summary = "分支执行插头"
+
+[definitions.BRANCH_EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.BRANCH_EXECUTE.interface.definition]
+local = "BRANCH"
+
+[definitions.BRANCH_CHILDREN]
+plugin = "control"
+id = "org.aurora.control:handlers/control/branch/children"
+kind = "hook_slot"
+summary = "分支子组件槽"
+
+[definitions.BRANCH_CHILDREN.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.WHILE]
+plugin = "control"
+id = "org.aurora.control:handlers/control/while"
+kind = "component"
+summary = "循环组件"
+
+[definitions.WHILE_EXECUTE]
+plugin = "control"
+id = "org.aurora.control:handlers/control/while/execute"
+kind = "hook_handler"
+summary = "循环执行插头"
+
+[definitions.WHILE_EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.WHILE_EXECUTE.interface.definition]
+local = "WHILE"
+
+[definitions.WHILE_CHILDREN]
+plugin = "control"
+id = "org.aurora.control:handlers/control/while/children"
+kind = "hook_slot"
+summary = "循环子组件槽"
+
+[definitions.WHILE_CHILDREN.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.PARALLEL]
+plugin = "control"
+id = "org.aurora.control:handlers/control/parallel"
+kind = "component"
+summary = "并行组件"
+
+[definitions.PARALLEL_EXECUTE]
+plugin = "control"
+id = "org.aurora.control:handlers/control/parallel/execute"
+kind = "hook_handler"
+summary = "并行执行插头"
+
+[definitions.PARALLEL_EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.PARALLEL_EXECUTE.interface.definition]
+local = "PARALLEL"
+
+[definitions.PARALLEL_CHILDREN]
+plugin = "control"
+id = "org.aurora.control:handlers/control/parallel/children"
+kind = "hook_slot"
+summary = "并行子组件槽"
+
+[definitions.PARALLEL_CHILDREN.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.CONTROL_STATE]
+plugin = "control"
+id = "org.aurora.control:state/control"
+kind = "state_key"
+summary = "在途执行状态"
+
+[definitions.CONTROL_STATE.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[components.serial]
+plugin = "control"
+summary = "串行执行显式连接的子组件"
+inject = [
+    "ctx",
+    "hooks",
+    "instance_id",
+    "states",
+    "options",
+]
+plugs = [
+    "SERIAL_EXECUTE",
+]
+slots = [
+    "SERIAL_CHILDREN",
+]
+
+[components.branch]
+plugin = "control"
+summary = "分支执行显式连接的子组件"
+inject = [
+    "ctx",
+    "hooks",
+    "instance_id",
+    "states",
+    "options",
+]
+plugs = [
+    "BRANCH_EXECUTE",
+]
+slots = [
+    "BRANCH_CHILDREN",
+]
+inputs = [
+    "select",
+]
+
+[components.while]
+plugin = "control"
+summary = "循环执行显式连接的子组件"
+inject = [
+    "ctx",
+    "hooks",
+    "instance_id",
+    "states",
+    "options",
+]
+plugs = [
+    "WHILE_EXECUTE",
+]
+slots = [
+    "WHILE_CHILDREN",
+]
+inputs = [
+    "condition",
+]
+options = "while"
+
+[components.parallel]
+plugin = "control"
+summary = "并行执行显式连接的子组件"
+inject = [
+    "ctx",
+    "hooks",
+    "instance_id",
+    "states",
+    "options",
+]
+plugs = [
+    "PARALLEL_EXECUTE",
+]
+slots = [
+    "PARALLEL_CHILDREN",
+]
+options = "parallel"
+
+[contracts.while]
+format = "json-schema"
+file = "while.schema.json"
+
+[contracts.parallel]
+format = "json-schema"
+file = "parallel.schema.json"

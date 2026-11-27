@@ -1,0 +1,73 @@
+schema_version = 2
+
+[plugins.records]
+entry_point = "aurora_world.records"
+title = "世界记录"
+summary = "归档世界事件并维护有界 ctx 视图，不创建世界来源"
+requires = []
+
+[definitions.RECORDS]
+plugin = "records"
+id = "org.aurora.world:state/records"
+kind = "state_key"
+summary = "世界事件的有界呈现状态"
+
+[definitions.ENVIRONMENT]
+plugin = "records"
+id = "org.aurora.world:state/environment"
+kind = "state_key"
+summary = "时间和天气的有界环境观察"
+
+[definitions.RECORDS_PREPARE]
+plugin = "records"
+id = "org.aurora.world:handlers/records/prepare"
+kind = "hook_handler"
+summary = "打开事件归档并恢复视图"
+
+[definitions.RECORDS_PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.RECORDS_START]
+plugin = "records"
+id = "org.aurora.world:handlers/records/start"
+kind = "hook_handler"
+summary = "启动有界视图的刷新任务"
+
+[definitions.RECORDS_START.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.RECORDS_STOP]
+plugin = "records"
+id = "org.aurora.world:handlers/records/stop"
+kind = "hook_handler"
+summary = "停止自有刷新任务"
+
+[definitions.RECORDS_STOP.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.RECORDS_CLEAN]
+plugin = "records"
+id = "org.aurora.world:handlers/records/clean"
+kind = "hook_handler"
+summary = "关闭事件数据库连接"
+
+[definitions.RECORDS_CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.records]
+plugin = "records"
+summary = "归档世界事件并维护有界 ctx 视图，不创建世界来源"
+inject = [
+    "ctx",
+    "storage",
+]
+plugs = [
+    "RECORDS_PREPARE",
+    "RECORDS_START",
+    "RECORDS_STOP",
+    "RECORDS_CLEAN",
+]
+slots = []
+resources = [
+    "records",
+]

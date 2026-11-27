@@ -15,7 +15,6 @@ class RegistryEntry:
     target: object
     provider: str
     register_to: Id | None = None
-    slot: Id | None = None
     interface: object | None = None
 
     def __post_init__(self) -> None:
@@ -23,9 +22,8 @@ class RegistryEntry:
             raise TypeError("登记项 id 必须为 Id")
         if not self.kind or not self.provider:
             raise ValueError("登记项必须声明 kind 与提供者")
-        for relation in (self.register_to, self.slot):
-            if relation is not None and not isinstance(relation, Id):
-                raise TypeError("登记关系必须为 Id")
+        if self.register_to is not None and not isinstance(self.register_to, Id):
+            raise TypeError("登记关系必须为 Id")
 
 
 class DefinitionRegistry:

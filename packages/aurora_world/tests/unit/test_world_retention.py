@@ -11,12 +11,13 @@ from aurora_core.discovery import register_plugins
 from aurora_core.storage import StorageService
 from aurora_world import ENVIRONMENT, RECORDS, CursorError, MessageConflictError, WorldPosition, WorldRecords, WorldView
 from aurora_world.migrate import migrate
-from aurora_world.plugin import plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin
 
 
 def context():
     registry = bootstrap()
-    register_plugins(registry, [plugin()])
+    register_plugins(registry, [records_plugin(), plugin()])
     return Context(registry)
 
 

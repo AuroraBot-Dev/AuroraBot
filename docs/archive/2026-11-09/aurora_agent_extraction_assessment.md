@@ -21,10 +21,10 @@
 | [react.py](../../../packages/aurora_agent/src/aurora_agent/react.py) | 六阶段 ReAct 循环；外部提供状态地址和阶段连接；执行入口等待一次激活收束 | 循环本身适合直接成为 agent 包的组件 |
 | [control/](../../../packages/aurora_control/src/aurora_control) | 执行身份、状态绑定、执行连接，以及顺序、分支、循环、并行组件 | 是模型、工具和 ReAct 共用的执行基础 |
 | [model.py](../../../packages/aurora_agent/src/aurora_agent/model.py) | 使用注入的 ModelClient 完成一次模型调用，将流式输出和终态写入 ctx | 属于 agent 执行集成，模型协议继续由 adapter 提供 |
-| [tools.py](../../../packages/aurora_agent/src/aurora_agent/tools.py) | 工具定义、实例工厂、参数校验、执行钩子、超时和结构化结果 | 可作为独立 agent 的工具执行能力 |
+| [tools.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_agent/src/aurora_agent/tools.py) | 工具定义、实例工厂、参数校验、执行钩子、超时和结构化结果 | 可作为独立 agent 的工具执行能力 |
 | [react_defaults.py](../../../packages/aurora_agent/src/aurora_agent/react_defaults.py) | 组织上下文、解释模型决定、接纳工具观察和处理未完成轮次 | 是可选的默认 agent 策略，不依赖消息平台 |
 | [runtime.py](../../../packages/aurora_agent/src/aurora_agent/runtime.py) | 提交引导、管理运行句柄、串行激活、取消和结束边界复查 | 通过显式执行入口连接宿主，不依赖 DefaultAssembly |
-| [assembly.py](../../../packages/aurora_bot/src/aurora_bot/assembly.py) | 配置读取、模型与工具创建、阶段连接、启动关闭、恢复修正和工作状态清理 | 同时承载产品装配和可复用的运行管理语义，需要按职责拆开 |
+| [assembly.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly.py) | 配置读取、模型与工具创建、阶段连接、启动关闭、恢复修正和工作状态清理 | 同时承载产品装配和可复用的运行管理语义，需要按职责拆开 |
 | [operations.py](../../../packages/aurora_bot/src/aurora_bot/operations.py) | 按实例分发提交、激活和取消操作 | 分发机制可复用，公共操作 ID 与插件登记需要单独处理兼容 |
 
 `ReActAgent` 不创建后台调度任务，也不自动订阅 world。`ReActDefaults` 将模型文本保存为内部上下文，不自动发送用户消息。这些约束适用于聊天、后台任务和命令行等不同宿主，应继续保留。

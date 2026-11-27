@@ -4,16 +4,16 @@ import asyncio
 from typing import cast
 
 import pytest
-from aurora_config import configuration_component
 from aurora_core import Id
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
 from aurora_core.hooks import HookConnections
-from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
+from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_host import configuration_component
 from aurora_world import (
     RECORDS,
     SOURCE_STATUS,
@@ -23,7 +23,9 @@ from aurora_world import (
     SourceUnavailableError,
     WorldRecords,
 )
-from aurora_world.configuration import CONFIG_STATE, configured_sources_component
+from aurora_world.configuration import CONFIG_STATE
+
+from tests.fixtures.lifecycle_graph import configured_world, wire
 
 SOURCE = Id("dev.test:sources/configured")
 
@@ -31,11 +33,16 @@ SOURCE = Id("dev.test:sources/configured")
 def environment(root, factory, text=None, *, timeout=1.0):
     registry = bootstrap()
     install_lifecycle_slots(registry)
-    register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_world", "aurora_world.configuration"]))
+    register_plugins(
+        registry,
+        load_plugins(
+            enabled=["aurora_config", "aurora_world.records", "aurora_world.sources", "aurora_world.configuration"]
+        ),
+    )
     registry.register(RegistryEntry(SOURCE, "source", SourceSpec(factory), "test", register_to=SOURCES))
     ctx, hooks, storage = Context(registry), HookConnections(registry), StorageService(root)
     records = WorldRecords(ctx, storage)
-    path = storage.configuration_directory() / "org.aurora.world" / "config.toml"
+    path = storage.configuration_directory() / "org.aurora.world" / "plugin.config.toml"
     if text is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -44,8 +51,19 @@ def environment(root, factory, text=None, *, timeout=1.0):
         ctx,
         hooks,
         [
-            records.component(hooks),
-            configured_sources_component(ctx, hooks, records, depends_on=("aurora_world/records",)),
+            wire(
+                hooks,
+                "aurora_world/records",
+                (
+                    (PREPARE, records.prepare),
+                    (START, records.start),
+                    (STOP, records.stop),
+                    (CLEAN, records.clean),
+                ),
+                depends_on=(),
+                stop_accepting=None,
+            ),
+            configured_world(ctx, hooks, records, depends_on=("aurora_world/records",)),
             configuration_component(registry, ctx, hooks, storage),
         ],
         persistence=ContextPersistence(ctx, store, interval=60),
@@ -68,7 +86,7 @@ def test_selection_precedes_all_factories_and_configuration_is_not_persisted(tmp
     async def scenario():
         captures = []
 
-        async def factory(*, source_id, emit, config):
+        async def factory(*, source_id, emit, config, resources):
             captures.append((source_id, config))
             assert cast(dict, ctx.get(CONFIG_STATE))["sources"][0]["source_id"] == "chosen"
 
@@ -108,7 +126,7 @@ def test_background_exit_closes_only_its_source_and_observes_error(tmp_path, end
         captures, tasks = {}, {}
         entered, release = asyncio.Event(), asyncio.Event()
 
-        async def factory(*, source_id, emit, config):
+        async def factory(*, source_id, emit, config, resources):
             captures[source_id] = emit
 
             async def run():
@@ -155,7 +173,7 @@ def test_partial_start_failure_waits_for_already_running_source(tmp_path, cancel
         entered = asyncio.Event()
         events = []
 
-        async def factory(*, source_id, emit, config):
+        async def factory(*, source_id, emit, config, resources):
             async def start():
                 if source_id == "b":
                     await entered.wait()
@@ -192,7 +210,7 @@ def test_shutdown_preserves_resources_until_background_finally_finishes(tmp_path
         entered, finishing, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
         events = []
 
-        async def factory(*, source_id, emit, config):
+        async def factory(*, source_id, emit, config, resources):
             async def run():
                 entered.set()
                 emit(message_id="accepted", payload=True)

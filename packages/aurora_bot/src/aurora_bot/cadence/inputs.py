@@ -3,9 +3,9 @@
 from collections.abc import Iterable
 from typing import cast
 
-from aurora_adapter.model import ContentPart, JsonValue
-from aurora_adapter.model.content import MAX_CONTENT_PARTS, validate_content
-from aurora_core.json_data import encode_json
+from aurora_core.json_data import JsonValue, encode_json
+from aurora_model import ContentPart
+from aurora_model.content import MAX_CONTENT_PARTS, validate_content
 from aurora_world import WorldRecord
 
 

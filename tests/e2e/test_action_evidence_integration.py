@@ -6,19 +6,21 @@ import sqlite3
 from typing import cast
 
 import pytest
-from aurora_adapter.model.testing import FakeReply
-from aurora_bot.assembly_config import CONFIG, WORK
+from aurora_bot.runtime import WORK
 from aurora_bot.work_notes import WorkNotes
 from aurora_control import ExecutionRequest
+from aurora_model.testing import FakeReply
 from test_default_assembly import seed, setup
+
+from tests.fixtures.bot_graph import bot_options, configure_bot
 
 
 def configure(ctx, **options):
     seed(ctx)
-    ctx.set(
-        CONFIG,
+    configure_bot(
+        ctx,
         {
-            **cast(dict, ctx.get(CONFIG)),
+            **cast(dict, bot_options(ctx)),
             "actions": {"enabled": True, "max_chars": 1024},
             "notes": {"enabled": True},
             "max_iterations": 32,
@@ -211,11 +213,12 @@ def test_disabled_does_not_create_database_or_advertise_tool(tmp_path):
 
 def test_all_view_sections_fit_minimum_budget_and_query_errors_are_explicit(tmp_path):
     from aurora_world.configuration import plugin as configuration_plugin
-    from aurora_world.plugin import plugin as world_plugin
+    from aurora_world.records import plugin as records_plugin
+    from aurora_world.sources import plugin as world_plugin
 
     async def scenario():
         host, assembly, ctx, _, clients, _, _, _ = setup(
-            tmp_path, extra_plugins=(world_plugin(), configuration_plugin())
+            tmp_path, extra_plugins=(records_plugin(), world_plugin(), configuration_plugin())
         )
         await host.start(configure=lambda: configure(ctx, archive={"enabled": True}, context_view={"max_chars": 1024}))
 

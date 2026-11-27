@@ -1,5 +1,7 @@
 # 插件能力归属与包及宿主装配拆分方案
 
+> **迁移前历史盘点。** 正文中的“当前”指 `d6217150`，并非 W08 后的代码；原 18 个入口和 145 项定义保留作为迁移对账依据。W01–W08 已完成后的职责见[当前架构](aurorabot-design-v0.2.3.md)，实际端口见[公共 ID 目录](aurorabot-id-catalog-v0.2.3.md)，清单格式见[元信息约定](aurora-meta-proposal.md)。本页目标图不是当前运行图。
+
 核对日期：2026-11-27。代码基线：合并 PR #107 后的 `d6217150`。状态：待审查的拆分方案，仅新增本文；其他插件元信息迁移暂停。第 2—6 节与附录描述当前实现，第 7—10 节描述建议目标，不能把目标中的包名、插件名和连接当成已存在接口。
 
 核心判断：先按能力确定插件，再按安装依赖和发布责任组织 package，应用组合独立归宿主与产品预设。无需让一个包只包含一个插件，也不能让“装配插件”长期拥有全部产品能力。
@@ -45,7 +47,7 @@
 | `aurora_client` 与 `apps/*`      | TS ctx 客户端、TUI、Panel、文档站与落地页                                                                     | 不是 Python 插件装配层；界面消费描述和状态，不持有后端对象或代做 Python 接线                                                    |
 | 根安装包与 `examples/onboarding` | 依赖集合、安装配置助手、用户侧启动预设                                                                        | 产品分发与应用组合；不能反过来成为 core/agent 的依赖                                                                            |
 
-依据：[各包发行声明](../packages/)、[core](../packages/aurora_core/src/aurora_core/)、[CLI 宿主](../packages/aurora_cli/src/aurora_cli/host.py)、[当前配置装配器](../packages/aurora_config/src/aurora_config/assembly.py)、[Bot 装配](../packages/aurora_bot/src/aurora_bot/assembly.py)。
+依据：[各包发行声明](../packages/)、[core](../packages/aurora_core/src/aurora_core/)、[CLI 宿主](../packages/aurora_cli/src/aurora_cli/host.py)、[当前配置装配器](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_config/src/aurora_config/assembly.py)、[Bot 装配](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly.py)。
 
 ### 2.1 当前插件启用边界
 
@@ -203,7 +205,7 @@ flowchart LR
 
 这里 world.configuration 与 world 两个插件共同服务一个 A/world 生命周期组件，是“一个插件一个实例”不成立的现成例子。API、模型协议、environment、memory、MCP world 和 MCP Bot 这些插件也不能凭插件名各画一套生命周期线：有些只提供协议/工厂，有些复用上述所有者。
 
-来源：[DefaultAssembly.components](../packages/aurora_bot/src/aurora_bot/assembly.py)、[MCP Bot](../packages/aurora_adapter/src/aurora_adapter/mcp/bot.py)、[MCPClients](../packages/aurora_adapter/src/aurora_adapter/mcp/clients.py)、[MCPTools](../packages/aurora_adapter/src/aurora_adapter/mcp/tools.py)、[world 配置](../packages/aurora_world/src/aurora_world/configuration.py)、[cadence](../packages/aurora_bot/src/aurora_bot/cadence/forwarder.py)。
+来源：[DefaultAssembly.components](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly.py)、[MCP Bot](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/bot.py)、[MCPClients](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/clients.py)、[MCPTools](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/tools.py)、[world 配置](../packages/aurora_world/src/aurora_world/configuration.py)、[cadence](../packages/aurora_bot/src/aurora_bot/cadence/forwarder.py)。
 
 ## 5 当前业务执行与数据接线
 
@@ -240,7 +242,7 @@ infer 槽先调用模型，后解释响应。默认图没有给 `react/finish`�
 
 `org.aurora.agent:handlers/react_agent/execute` 已导出，但默认 Bot 是通过 `_activate → agent.execute` 普通调用进入，没有一条“AgentRuntime 插槽 → ReAct 插头”的真实 hook 连接。目标若要把这条边转成端口，需要单独定义和迁移，不能在现状图中补造。
 
-来源：[ReActDefaults.connect](../packages/aurora_agent/src/aurora_agent/react_defaults.py)、[ReActAgent](../packages/aurora_agent/src/aurora_agent/react.py)、[AgentRuntime](../packages/aurora_agent/src/aurora_agent/runtime.py)、[DefaultAssembly._activate](../packages/aurora_bot/src/aurora_bot/assembly.py)。
+来源：[ReActDefaults.connect](../packages/aurora_agent/src/aurora_agent/react_defaults.py)、[ReActAgent](../packages/aurora_agent/src/aurora_agent/react.py)、[AgentRuntime](../packages/aurora_agent/src/aurora_agent/runtime.py)、[DefaultAssembly._activate](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly.py)。
 
 ### 5.2 工具实例插入执行器
 
@@ -313,7 +315,7 @@ WorldSources 负责 SourceInstance.start/stop/aclose 和可选 run 主循环；e
 
 自动压缩记忆由 DefaultAssembly 给 HistoryCompactor 注入 CompactionMemory；它不是 tools/before_call 或 after_call 上的现有处理器。动作证据通过 ToolExecutor.recorder、观察转换通过回调注入，也不能伪装成已存在的 hook。
 
-来源：[来源协议与托管](../packages/aurora_world/src/aurora_world/sources.py)、[事件记录](../packages/aurora_world/src/aurora_world/records.py)、[MCP world](../packages/aurora_adapter/src/aurora_adapter/mcp/world.py)、[记忆工具](../packages/aurora_bot/src/aurora_bot/memory/__init__.py)、[自动压缩记忆](../packages/aurora_bot/src/aurora_bot/memory/automatic.py)。
+来源：[来源协议与托管](../packages/aurora_world/src/aurora_world/sources.py)、[事件记录](../packages/aurora_world/src/aurora_world/records.py)、[MCP world](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/world.py)、[记忆工具](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/memory/__init__.py)、[自动压缩记忆](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/memory/automatic.py)。
 
 ### 5.5 API 与命令的真实连接
 
@@ -332,7 +334,7 @@ flowchart LR
 
 ### 5.6 正式 onboarding 与控制回归图
 
-[onboarding host.toml](../examples/onboarding/config.tomls/host.toml) 启用 MCP Bot、配置、模型、agent 和 API 共 11 个入口。它不启用 world、cadence、memory；业务 B=onboarding，生命周期 A=default。实际生命周期为 `aurora_config → MCPClients → MCPTools → default/model → default/bot` 的依赖链；执行图使用第 5.1 节的 B=onboarding，加上筛选出的 terminal MCP 工具。API 是否监听取决于启动命令，不由这 11 个插件自动决定。
+[onboarding host.toml](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/examples/onboarding/config.tomls/host.toml) 启用 MCP Bot、配置、模型、agent 和 API 共 11 个入口。它不启用 world、cadence、memory；业务 B=onboarding，生命周期 A=default。实际生命周期为 `aurora_config → MCPClients → MCPTools → default/model → default/bot` 的依赖链；执行图使用第 5.1 节的 B=onboarding，加上筛选出的 terminal MCP 工具。API 是否监听取决于启动命令，不由这 11 个插件自动决定。
 
 control 的五种组件没有进入默认 Bot 的当前 hook 拓扑。其真实组合示例保存在[控制流回归夹具](../tests/fixtures/runtime_apps/control_flow/main.py)，不是新增用户示例。以下实线表示执行插头插入 children 槽：
 
@@ -645,7 +647,7 @@ flowchart LR
 
 ### A.1 aurora_adapter.mcp
 
-入口：`aurora_adapter.mcp:plugin`；[定义来源](../packages/aurora_adapter/src/aurora_adapter/mcp/__init__.py)。requires：`aurora_config`。
+入口：`aurora_adapter.mcp:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/__init__.py)。requires：`aurora_config`。
 
 实例 `aurora_adapter/mcp`，生命周期接线见第 4.4 节；工具与 world 来源借用同一个 MCPClients。
 
@@ -668,7 +670,7 @@ flowchart LR
 
 ### A.2 aurora_adapter.mcp.bot
 
-入口：`aurora_adapter.mcp.bot:plugin`；[定义来源](../packages/aurora_adapter/src/aurora_adapter/mcp/bot.py)。requires：`aurora_adapter.mcp.tools`、`aurora_bot.assembly`。
+入口：`aurora_adapter.mcp.bot:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/bot.py)。requires：`aurora_adapter.mcp.tools`、`aurora_bot.assembly`。
 
 没有自己的 hook 实例；装配工厂创建第 4.3—4.4 节的组件，并提供第 5.2 节的动态工具追加策略。
 
@@ -684,7 +686,7 @@ flowchart LR
 
 ### A.3 aurora_adapter.mcp.tools
 
-入口：`aurora_adapter.mcp.tools:plugin`；[定义来源](../packages/aurora_adapter/src/aurora_adapter/mcp/tools.py)。requires：`aurora_adapter.mcp`、`aurora_agent.tools`。
+入口：`aurora_adapter.mcp.tools:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/tools.py)。requires：`aurora_adapter.mcp`、`aurora_agent.tools`。
 
 目录实例 `aurora_adapter/mcp/tools` 接 prepare；工具实例 `B/tool/tools/mcp/<name>` 接 ToolExecutor.children，见第 4.4、5.2 节。
 
@@ -705,7 +707,7 @@ flowchart LR
 
 ### A.4 aurora_adapter.mcp.world
 
-入口：`aurora_adapter.mcp.world:plugin`；[定义来源](../packages/aurora_adapter/src/aurora_adapter/mcp/world.py)。requires：`aurora_adapter.mcp`、`aurora_world.configuration`。
+入口：`aurora_adapter.mcp.world:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/world.py)。requires：`aurora_adapter.mcp`、`aurora_world.configuration`。
 
 工厂生成 `source_id` 对应的 SourceInstance，由 A/world 托管；经 MCP world 组件注入 MCPClients，没有额外 hook，见第 5.4 节。
 
@@ -722,7 +724,7 @@ flowchart LR
 
 ### A.5 aurora_adapter.model
 
-入口：`aurora_adapter.model.plugin:plugin`；[定义来源](../packages/aurora_adapter/src/aurora_adapter/model/plugin.py)。requires：`aurora_config`。
+入口：`aurora_adapter.model.plugin:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/model/plugin.py)。requires：`aurora_config`。
 
 导出模型契约、配置和适配器；客户端由 A/model 普通调用工厂创建，B/model 借用。没有独立模型协议生命周期实例。
 
@@ -817,7 +819,7 @@ flowchart LR
 
 ### A.9 aurora_agent.tools
 
-入口：`aurora_agent.tools:plugin`；[定义来源](../packages/aurora_agent/src/aurora_agent/tools.py)。requires：无。
+入口：`aurora_agent.tools:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_agent/src/aurora_agent/tools.py)。requires：无。
 
 执行实例 `B/tools` 接 ReAct.act，children 接所选工具；before_call/after_call 默认均为空，见第 5.1—5.2 节。
 
@@ -856,7 +858,7 @@ flowchart LR
 
 ### A.11 aurora_bot.assembly
 
-入口：`aurora_bot.assembly:plugin`；[定义来源](../packages/aurora_bot/src/aurora_bot/assembly.py)。requires：`aurora_config`、`aurora_adapter.model`、`aurora_agent.model`、`aurora_agent.react`、`aurora_agent.tools`、`aurora_agent.react_defaults`。
+入口：`aurora_bot.assembly:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly.py)。requires：`aurora_config`、`aurora_adapter.model`、`aurora_agent.model`、`aurora_agent.react`、`aurora_agent.tools`、`aurora_agent.react_defaults`。
 
 A/model 与 A/bot 承载生命周期；B 及其工具承载业务执行；映射见第 4.3—5.3 节。
 
@@ -937,7 +939,7 @@ A/cadence 承载四阶段生命周期；内部 ctx 订阅和 runtime.submit 是�
 
 ### A.13 aurora_bot.memory
 
-入口：`aurora_bot.memory:plugin`；[定义来源](../packages/aurora_bot/src/aurora_bot/memory/__init__.py)。requires：`aurora_bot.assembly`、`aurora_adapter.model`、`aurora_config`、`aurora_agent.tools`。
+入口：`aurora_bot.memory:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/memory/__init__.py)。requires：`aurora_bot.assembly`、`aurora_adapter.model`、`aurora_config`、`aurora_agent.tools`。
 
 显式工具实例为 `B/tool/<selection.instance_id>`；自动压缩记忆另走普通 recorder 注入，没有自己的 lifecycle hook，见第 5.2、5.4 节。
 
@@ -1016,7 +1018,7 @@ LOAD 由 `@plug` 绑定，清单不限制目标槽；当前配置预设把它接
 
 ### A.16 aurora_world
 
-入口：`aurora_world.plugin:plugin`；[定义来源](../packages/aurora_world/src/aurora_world/plugin.py)。requires：无。
+入口：`aurora_world.plugin:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_world/src/aurora_world/plugin.py)。requires：无。
 
 记录实例 A/records、来源托管实例 A/world 各有四阶段生命周期；来源与订阅关系见第 4.4、5.4 节。
 

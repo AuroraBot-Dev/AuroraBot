@@ -1,6 +1,6 @@
 # 操作指南
 
-核对日期：2026-11-09。首次使用先运行[安装配置助手](../examples/START.md)。本文保留日常操作边界，不要求新用户一次启用全部能力。
+核对基线：W08（2026-11-27）。首次使用先运行[安装配置助手](../examples/START.md)。本文保留日常操作边界，不要求新用户一次启用全部能力。
 
 ## 连接安装助手
 
@@ -34,9 +34,9 @@ uv run --locked python examples/onboarding/main.py --token-env AURORA_API_TOKEN 
 uv run --locked aurora bot
 ```
 
-此快捷入口调用 scripts/bot.py，默认加载根目录 `.env` 和 `data`，监听 127.0.0.1:10270，要求 AURORA_API_TOKEN。它显式启用完整产品插件，包括 MCP、world、cadence 和 API；实际外部服务和来源由配置选择。
+此快捷入口调用 scripts/bot.py，默认加载根目录 `.env` 和 `data`，监听 127.0.0.1:10270，要求 AURORA_API_TOKEN。首次运行且没有 `config/host.toml` 时，它初始化 bot 预设，包含 MCP、world、cadence 和 API；外部服务和来源仍需明确配置。
 
-它与最小助手不同：插件集和产品装配由脚本选择，并合并 host.toml 的额外插件。需要完全遵循 host.toml 的插件与装配时，使用通用 CLI 的 `--root`、`--data-dir` 和运行命令，参见 `aurora --help`、`aurora serve --help`。
+已有 `config/host.toml` 时，它直接使用其中 `assembly_file` 选择的装配，不合并旧插件列表。脚本的 API 开放范围面向 Bot/world/cadence 组合；使用 default、memory 或自定义最小预设时，通过通用 CLI 的 `--root`、`--data-dir`、`--assembly-file` 和运行命令选择宿主及开放范围，参见 `aurora --help`、`aurora serve --help`。这些路径选项放在子命令前，Bot 命令可通过 `--namespace org.aurora.bot` 选择。通用 CLI 不自动加载 `.env`，运行凭证须由进程环境提供。
 
 `--data-dir`、`--env-file`、`--port` 可覆盖路径和端口；`--allowed-origin`、`--allowed-host` 可重复，替换默认白名单。进程已有环境变量优先于环境文件。不要让多个后端共用数据目录。
 
@@ -59,7 +59,7 @@ uv run --locked aurora bot
 
 状态页按 ID / location 筛选；F6 编辑已有地址，Ctrl+N 新建。编辑器 F5 读取、F8 准备保存、Ctrl+D 准备删除、F9 确认、Esc 返回。默认只读开放的地址不能写入。
 
-F7 打开声明 TOML 配置。服务端只允许已登记 ConfigSpec 的文件，不能编辑 host.toml、.env 或任意路径。单文件上限 256 KiB，保存检查全部声明文件的读取修订；冲突后先重读。保存后重启后端生效，不改变当前运行。
+F7 打开声明 TOML 配置。服务端只允许已登记 ConfigSpec 的文件，不能编辑 host.toml、assembly.toml、.env 或任意路径。单文件上限 256 KiB，保存检查全部声明文件的读取修订；冲突后先重读。保存后重启后端生效，不改变当前运行。
 
 `--save-preferences` 显式保存连接选择并退出；正常退出保存页面和全局工具展开偏好。草稿、消息、凭证与请求身份不保存。Windows 默认偏好在 `%APPDATA%/AuroraBot/tui.json`，其他平台在 XDG 配置目录下；`--preferences` 可选择独立文件。
 
@@ -82,7 +82,7 @@ Panel 提供实例选择、交流与只读状态。Enter 发送、Shift+Enter �
 | 现象 | 先检查 |
 | --- | --- |
 | 助手未初始化 | 执行带相同 --data-dir 的 --init |
-| 模型启动失败 | profile、binding、credential 变量名和供应商参数；不要回显密钥 |
+| 模型启动失败 | 装配中选择的 profile、资源及配置状态绑定、credential 变量名和供应商参数；不要回显密钥 |
 | terminal MCP 启动失败 | uvx 是否在 PATH、首次下载网络、配置命令与启动超时 |
 | TUI 无法连接 | 后端是否仍运行、10270 / 10271 是否选对、实例与令牌 |
 | 浏览器 401 / 403 | 令牌、Origin、Host 与后端白名单 |

@@ -7,13 +7,14 @@ from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import register_plugins
 from aurora_world import CursorError, WorldRecords
-from aurora_world.plugin import plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin
 
 
 @pytest.fixture
 def world():
     registry = bootstrap()
-    register_plugins(registry, [plugin()])
+    register_plugins(registry, [records_plugin(), plugin()])
     ctx = Context(registry)
     records = WorldRecords(ctx, now=lambda: 10000.0)
     records.select("weather", "weather")

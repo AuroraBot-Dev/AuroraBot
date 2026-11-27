@@ -20,10 +20,14 @@
 │   ├── aurora_core/           # 微内核
 │   ├── aurora_config/         # 配置声明、校验、TOML 模板与加载服务
 │   ├── aurora_control/        # 执行契约与控制组合
-│   ├── aurora_agent/          # ReAct、模型调用、工具执行与运行调度
-│   ├── aurora_adapter/        # 模型协议、模型供应商与 MCP 适配
-│   ├── aurora_bot/            # 默认装配、配置与产品入口
-│   ├── aurora_cli/            # 命令行交互
+│   ├── aurora_tools/          # 工具契约、执行器与显式工具集合
+│   ├── aurora_agent/          # ReAct、模型调用、默认阶段与运行调度
+│   ├── aurora_model/          # 模型协议、配置与供应商适配
+│   ├── aurora_mcp/            # MCP 客户端及工具、世界桥
+│   ├── aurora_host/           # 集中装配、状态与资源绑定、宿主生命周期
+│   ├── aurora_memory/         # 长期记忆与可选压缩归档桥
+│   ├── aurora_bot/            # 产品能力插件、状态归属与文件预设
+│   ├── aurora_cli/            # 命令行交互，使用独立宿主
 │   ├── aurora_api/            # HTTP / WS 传输
 │   ├── aurora_logging/        # 日志配置
 │   ├── aurora_world/          # 世界来源、事件归档与环境观察
@@ -49,30 +53,36 @@
 | `aurora_core` | 提供 ID、登记、ctx、订阅、连接、调用、生命周期和持久化机制；不承担 TOML 加载、配置 schema 策略、模型或业务流程控制 |
 | `aurora_config` | 基于 core 提供配置声明、结构及关联校验、模板文件处理和 config 阶段服务；core 不反向依赖配置包 |
 | `aurora_control` | 提供执行身份、状态绑定、插头插槽及 Serial、Branch、While、Parallel；仅依赖 core，不依赖 agent 或模型 |
-| `aurora_adapter` | `model` 提供模型协议、能力声明、供应商适配与模型配置，`mcp` 提供外部协议及工具/世界桥；SDK 和桥依赖按 extra 安装，基础包仅依赖 core |
-| `aurora_agent` | 提供 ReAct、模型调用、工具执行、默认阶段和 AgentRuntime；不依赖 bot、CLI 或 API |
-| `aurora_bot` | 提供默认配置、产品装配、资源所有权、运行操作与命令；使用 agent，不复制 agent 的执行机制 |
-| `aurora_cli` / `aurora_api` | 提供宿主、命令交互与 HTTP/WS 传输；不重复实现 agent 业务语义 |
+| `aurora_tools` | 提供中立工具数据、执行器与工具集合；依赖 core/control，不依赖模型、agent 或 bot |
+| `aurora_model` | 提供模型协议、适配器目录与模型资源；基础依赖 core/tools，配置和供应商 SDK 按 config/litellm extra 安装 |
+| `aurora_mcp` | 提供 MCP 客户端和配置；工具桥、世界桥按 tools/world extra 安装，不依赖 model、agent 或 bot |
+| `aurora_host` | 负责读取版本 2 装配、创建实例、绑定状态和资源、建立连接及运行生命周期；只依赖 core/config/control |
+| `aurora_memory` | 提供记忆存储、工具和配置；基础记忆不依赖 bot/agent；可选 compaction 插件依赖 agent 并借用存储处理压缩归档 |
+| `aurora_agent` | 提供 ReAct、模型调用、默认阶段和 AgentRuntime，使用 aurora_tools 执行工具；不依赖 bot、CLI 或 API |
+| `aurora_bot` | 提供 runtime、conversation、commands、notes、actions、self_control、world_view、cadence 八个插件及完整文件预设；使用 agent，不复制执行机制或总装配工厂 |
+| `aurora_cli` / `aurora_api` | 分别提供命令交互与 HTTP/WS 传输，宿主装配由 aurora_host 提供；不重复实现 agent 业务语义 |
 | `aurora_logging` / `aurora_world` | 分别提供日志配置与世界来源、事件归档及有界环境观察；主动调度由 bot 的 cadence 接入 |
 | `aurora_client` / `apps/*` | 客户端复用后端 ctx 语义，界面与静态站点不承担 Python 插件装配 |
 
-执行依赖方向为 `bot → agent → control → core`；agent 和 bot 也可直接使用 core 与 aurora_adapter.model。agent 仅依赖 adapter 基础包；bot 使用 litellm extra；MCP 的工具、世界和产品桥通过独立 extra 与插件显式启用。配置能力通过 aurora_config 接入。独立 `aurora_harness` 是后续目标，不提前引入尚无实际消费者的框架抽象。
+执行依赖方向为 `bot → agent → tools → control → core`；agent 也可直接使用 control，agent 和 bot 可直接使用 core/model。基础 agent 无需配置包和供应商 SDK；Bot 的 litellm、world、memory、mcp、mcp-world 依赖通过 extra 安装，插件与实例在装配文件显式选择。配置能力通过 aurora_config 接入。独立 `aurora_harness` 是后续目标，不提前引入尚无实际消费者的框架抽象。
 
 ## 公共 ID 与插件
 
 - ID 格式为 `<namespace>:<domain>/<local_path>`。公开定义按所属包命名：`org.aurora.core`、`org.aurora.config`、`org.aurora.control`、`org.aurora.agent`、`org.aurora.bot` 等。
 - control 和 agent 的定义不能放在 bot 命名空间。bot 装配分配的配置、消息、引导、运行及工作状态地址仍归 bot，由状态绑定注入 agent。
-- 插件发现分组为 `aurora.plugins`；entry point 名称与 `Plugin.name` 一致。控制入口为 `aurora_control`，agent 入口为 `aurora_agent.model`、`aurora_agent.react`、`aurora_agent.tools`、`aurora_agent.react_defaults`。
-- 适配包名使用单数 `aurora_adapter`，模型入口为 `aurora_adapter.model`，MCP 入口为 `aurora_adapter.mcp` 及其桥插件；公共定义统一归属 `org.aurora.adapter`，local_path 按 model/mcp 区分。
+- 插件发现分组为 `aurora.plugins`；entry point 名称与 `Plugin.name` 一致。控制入口为 `aurora_control`，agent 入口为 `aurora_agent.model`、`aurora_agent.react`、`aurora_agent.react_defaults`。
+- 模型包和公共定义归 aurora_model / org.aurora.model；MCP 归 aurora_mcp / org.aurora.mcp；工具、记忆分别归 aurora_tools、aurora_memory 及同名命名空间。world 使用 records/sources/configuration/environment 四个显式插件；不保留旧 adapter 或聚合插件别名。
+- 每个公开插件一份相邻的 plugin.meta.toml，公共 ID、登记关系、端口和资源声明只在清单定义；_meta.py 和 plugin.meta.json 为生成产物。core/CLI 直接导出宿主目录，不伪造可选插件入口。pyproject.toml 独占发行信息和 entry point 工厂路径。
+- 插头通过 @plug(生成 ID) 标识，插件不声明目标槽。host.toml 只选择 assembly_file；插件、实例、状态地址、资源引用、生命周期依赖与实际连接由该装配文件明确指定。requires 不自动创建实例，提供方不通过 component() 补隐藏接线。
 - 安装包与启用插件分开；`requires` 只校验依赖插件已显式启用，不隐式加载依赖。只使用执行契约不要求启用四种控制组件。
 - 定义身份、实例身份、run_id 与 execution_id 分开管理。调用等待决定执行结束，不能用残留状态推断调用完成。
 - ID 或插件名变更须说明配置和快照的影响，不自动改写或删除用户数据；不要为通过恢复测试而静默忽略未登记的状态。
 
 ## 配置与运行约定
 
-- 配置声明、模板和通用校验使用 `aurora_config`。插件通过 `ConfigSpec`、`ConfigSchema`、`ConfigTemplate` 和 `config_entries` 声明配置及对应的非持久状态，避免各包重复实现加载和默认值处理。
+- 配置声明、模板和通用校验使用 `aurora_config`。公开插件通过清单生成的定义绑定 `ConfigSpec`、`ConfigSchema`、`ConfigTemplate` 及对应的非持久状态，避免各包重复实现加载和默认值处理。
 - TOML 是配置的持久来源；ctx 中的配置状态设置 `persistent=False`。运行期覆盖不自动写回文件，不把配置混入业务快照。
-- 模板使用包内 `config.toml` 或 `config.tomls/`，同一包不同时提供两种形式；发布时包含模板资源。只复制缺失的用户文件，不覆盖已有配置。
+- 模板使用所属资源模块内 `plugin.config.toml` 或 `plugin.config.tomls/`，同一资源模块不同时提供两种形式；发布时包含模板资源。只复制缺失的用户文件，不覆盖已有配置。
 - 宿主在恢复业务状态后执行 config 阶段，完成配置校验与注入，再执行 prepare/start。资源在配置就绪后创建；插件发现和定义查询不启动模型、工具或后台任务。
 - 运行期凭证单独解析，不进入 TOML 模板、ctx、快照或日志。
 - 每个 agent 实例只有一个调度所有者。AgentRuntime 的 execute 等待激活和清理完成，is_executing 覆盖整个占用期间；引导 progress 表示已接纳，不表示业务完成。
@@ -93,7 +103,8 @@ uv run --locked aurora check --full
 # 按影响范围先运行针对性测试
 uv run --locked pytest packages/aurora_agent/tests/unit/test_agent_runtime.py tests/e2e/test_package_boundaries.py -q
 # 验证分发包与资源
-uv build --all-packages --wheel --out-dir build/wheels
+uv build tooling/aurora_meta_build --wheel --out-dir build/meta
+uv build --all-packages --wheel --find-links build/meta --out-dir build/wheels
 ```
 
 - 根据改动选择有意义的验证。日常 `aurora check` 只收集快速边界测试，`--test` 跳过静态检查，`--full` 显式启用完整测试，`--coverage` 也使用完整测试范围。纯文档修改检查链接与差异，不为此运行无关测试；涉及跨包契约、生命周期或配置行为时完成相关回归和 `aurora check --full`。

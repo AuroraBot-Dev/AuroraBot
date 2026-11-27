@@ -4,7 +4,7 @@ import asyncio
 import inspect
 
 import pytest
-from aurora_core import Id, entry_from, hook_handler, operation
+from aurora_core import Id, entry_from, operation, plug
 from aurora_core.admission import AdmissionStatus, inspect_admissions
 from aurora_core.bootstrap import bootstrap
 from aurora_core.discovery import Plugin, register_plugins
@@ -62,25 +62,23 @@ def test_bound_method_keeps_its_instance():
         registry.register_many((first, second))
 
 
-def test_handler_declaration_keeps_optional_slot_unconnected():
-    @hook_handler("dev.example:handlers/prepare", slot="org.aurora.agent:react/prepare", interface="双方约定")
+def test_plug_declaration_does_not_choose_a_target_slot():
+    @plug("dev.example:handlers/prepare")
     def prepare(value):
         return value
 
     registry = bootstrap()
     entry = entry_from(prepare, provider="example")
     registry.register(entry)
-    assert entry.interface == "双方约定"
     assert entry.kind == "hook_handler"
-    results = inspect_admissions(registry)[-2:]
-    assert [result.status for result in results] == [AdmissionStatus.ACCEPTED, AdmissionStatus.UNCONNECTED]
+    assert inspect_admissions(registry)[-1].status == AdmissionStatus.ACCEPTED
 
 
 def test_invalid_and_duplicate_declarations_fail_early():
     with pytest.raises(ValueError, match="无效"):
         operation("invalid")
     with pytest.raises(ValueError, match="无效"):
-        hook_handler("dev.example:handlers/test", slot="invalid")
+        plug("invalid")
 
     @operation("dev.example:operations/test")
     def function():
@@ -96,7 +94,13 @@ def test_invalid_and_duplicate_declarations_fail_early():
 
 def test_plug_identity_binds_independent_methods_without_declaring_a_target_slot():
     from aurora_core import plug
-    from aurora_core.components import ComponentDeclaration, ComponentFactory, Definition, PluginDeclaration
+    from aurora_core.components import (
+        ComponentDeclaration,
+        ComponentFactory,
+        Definition,
+        InstanceExport,
+        PluginDeclaration,
+    )
     from aurora_core.declarations import plug_id
 
     identity = Id("dev.example:handlers/read")
@@ -116,11 +120,23 @@ def test_plug_identity_binds_independent_methods_without_declaring_a_target_slot
     declaration = PluginDeclaration(
         "example",
         (Definition(identity, "hook_handler", "example"),),
-        components={"service": ComponentDeclaration(plugs=(identity,))},
+        components={"service": ComponentDeclaration(inject=("value",), plugs=(identity,))},
     )
-    factory = ComponentFactory(Service, (Service.read,))
+    factory = ComponentFactory(
+        Service, lambda instance: InstanceExport(plugs={identity: instance.read}), (Service.read,)
+    )
     plugin = declaration.bind(targets={}, components={"service": factory})
     assert plugin.entries[0].target is Service.read
-    assert plugin.entries[0].slot is None
+
+    first = plugin.components["service"].create({"value": 7}, instance_id="first")
+    second = plugin.components["service"].create({"value": 8}, instance_id="second")
+    assert asyncio.run(first.exports.plugs[identity]()) == 7
+    assert asyncio.run(second.exports.plugs[identity]()) == 8
+    incomplete = ComponentFactory(Service, lambda instance: InstanceExport(), (Service.read,))
+    incomplete_plugin = declaration.bind(targets={}, components={"service": incomplete})
+    with pytest.raises(ValueError, match="导出"):
+        incomplete_plugin.components["service"].create({"value": 1}, instance_id="incomplete")
     with pytest.raises(ValueError, match="插头导出"):
-        declaration.bind(targets={}, components={"service": ComponentFactory(Service)})
+        declaration.bind(
+            targets={}, components={"service": ComponentFactory(Service, lambda instance: InstanceExport())}
+        )

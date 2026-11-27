@@ -1,0 +1,40 @@
+{
+  "help": "默认运行静态检查与快速边界测试；--full 运行完整测试，--coverage 统计完整覆盖率",
+  "arguments": [
+    {
+      "name": "lint",
+      "type": "flag",
+      "option": true
+    },
+    {
+      "name": "test",
+      "type": "flag",
+      "option": true
+    },
+    {
+      "name": "full",
+      "type": "flag",
+      "option": true
+    },
+    {
+      "name": "coverage",
+      "type": "flag",
+      "option": true
+    },
+    {
+      "name": "fix",
+      "type": "flag",
+      "option": true
+    },
+    {
+      "name": "unsafe_fixes",
+      "type": "flag",
+      "option": true
+    },
+    {
+      "name": "check",
+      "type": "flag",
+      "option": true
+    }
+  ]
+}

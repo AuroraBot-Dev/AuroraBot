@@ -1,0 +1,11 @@
+# 显式添加 [decision] 才启用 ctx 刺激节律与 choice 决策；省略时沿用原样转发。
+# 所有世界事件和环境变化均参与唤醒；决策模式也读取已启用的工作笔记。
+# 决策模型和视图通过装配文件显式绑定到 choice 与 view 资源。
+# 首次切换模式使用独立数据目录；不自动转换已有消费快照。
+# [decision]
+# active_seconds = 5.0
+# idle_seconds = 180.0
+# half_life_seconds = 60.0
+# jitter_ratio = 0.2
+# timeout_seconds = 15.0
+# max_chars = 12000

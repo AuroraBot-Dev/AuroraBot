@@ -5,9 +5,8 @@ from dataclasses import replace
 from aurora_config import ConfigSpec, ConfigTemplate
 
 _RESOURCES = {
-    "org.aurora.bot:state/config": "bot.toml",
-    "org.aurora.adapter:state/model/config": "model/profiles.toml",
-    "org.aurora.adapter:state/model/bindings": "model/bindings.toml",
+    "org.aurora.model:state/config": "model/profiles.toml",
+    "org.aurora.model:state/bindings": "model/bindings.toml",
 }
 
 
@@ -16,7 +15,7 @@ def configured_plugins(plugins):
         entries = []
         for entry in plugin.entries:
             if isinstance(entry.target, ConfigSpec) and str(entry.target.state) in _RESOURCES:
-                template = ConfigTemplate(__name__, "config.tomls/" + _RESOURCES[str(entry.target.state)])
+                template = ConfigTemplate(__name__, "plugin.config.tomls/" + _RESOURCES[str(entry.target.state)])
                 entry = replace(entry, target=replace(entry.target, template=template))
             entries.append(entry)
         yield replace(plugin, entries=tuple(entries))

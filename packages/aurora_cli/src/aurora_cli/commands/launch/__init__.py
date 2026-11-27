@@ -2,7 +2,7 @@
 
 from functools import partial
 
-from ...declarations import CommandContext, command_plugin
+from ...declarations import CommandContext, builtin_commands
 from ...utils.process import run_process
 
 
@@ -16,18 +16,7 @@ def dispatch(name: str, context: CommandContext, *, passthrough: list[str]) -> i
 
 
 def plugin():
-    return command_plugin(
+    return builtin_commands(
         __name__,
-        {
-            name: {
-                "help": description,
-                "executor": partial(dispatch, name),
-                "passthrough": f"参数原样交给 scripts/{name}.py；无参数使用项目默认配置",
-            }
-            for name, description in (
-                ("bot", "快速启动完整 Bot 后端，读取项目 .env 与 data"),
-                ("panel", "快速启动 Panel 开发服务器，连接已有后端"),
-                ("tui", "快速启动 TUI，使用项目 .env 中的访问令牌"),
-            )
-        },
+        {"bot": partial(dispatch, "bot"), "panel": partial(dispatch, "panel"), "tui": partial(dispatch, "tui")},
     )

@@ -2,49 +2,55 @@
 
 import asyncio
 import json
+import tomllib
+from importlib.resources import files
 from io import StringIO
 from pathlib import Path
 from typing import cast
 
 import httpx
 import pytest
-import tomli_w
 from aiohttp import ClientSession
-from aurora_adapter.model import ChatCapabilities, JsonValue, ToolDefinition, UnsupportedCapability
-from aurora_adapter.model.config import ADAPTERS, BINDINGS, ModelAdapter
-from aurora_adapter.model.config import CONFIG as MODEL_CONFIG
-from aurora_adapter.model.plugin import plugin as adapter_plugin
-from aurora_adapter.model.testing import FakeModel, FakeReply
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import AgentBusyError
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_agent.runtime import RunHandle, Submission
-from aurora_agent.tools import TOOLS, ToolInstance, ToolSpec
-from aurora_agent.tools import plugin as tools_plugin
 from aurora_api.contract import describe_contract
 from aurora_api.server import serve
-from aurora_bot.assembly import ASSEMBLY, DefaultAssembly
-from aurora_bot.assembly import plugin as assembly_plugin
-from aurora_bot.assembly_config import AGENTS, CONFIG, RUN, WORK
+from aurora_bot.cli import plugin as commands_plugin
 from aurora_bot.conversation import CONVERSATION
+from aurora_bot.conversation import plugin as conversation_plugin
 from aurora_bot.conversation_contract import describe_conversation
 from aurora_bot.operations import RUN_ACTIVATE, RUN_CANCEL, RUN_CONTROL, RUN_SUBMIT
-from aurora_cli.commander import run_cli
-from aurora_config import configuration_component
+from aurora_bot.runtime import AGENTS, RUN, WORK
+from aurora_bot.runtime import plugin as runtime_plugin
+from aurora_cli.commander import run_cli as execute_cli
+from aurora_cli.parsing import root_parser
 from aurora_config import plugin as configuration_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, component_entries
 from aurora_core.bootstrap import bootstrap
-from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin, register_plugins
-from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
 from aurora_core.invocation import invoke_operation
-from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
-from aurora_core.persistence import ContextPersistence
+from aurora_core.json_data import JsonValue
+from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_core.registry import RegistryEntry
-from aurora_core.storage import StorageService
+from aurora_host import AssemblyPlan, Host
+from aurora_model import ChatCapabilities, UnsupportedCapability
+from aurora_model.config import BINDINGS
+from aurora_model.config import CONFIG as MODEL_CONFIG
+from aurora_model.configuration import plugin as model_configuration_plugin
+from aurora_model.plugin import plugin as adapter_plugin
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.supplier import plugin as litellm_plugin
+from aurora_model.testing import FakeModel, FakeReply
+from aurora_tools.contract import ToolDefinition
+from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
+from aurora_tools.execution import plugin as tools_plugin
 from jsonschema import Draft202012Validator
+
+from tests.fixtures.bot_graph import bot_options, configure_bot
 
 ADAPTER = Id("dev.assembly:adapters/fake")
 TOOL = Id("dev.assembly:tools/echo")
@@ -54,7 +60,7 @@ COMPONENT = Id("dev.assembly:handlers/echo")
 @pytest.mark.parametrize("streaming,provider", [(False, "openai"), (True, "compatible")])
 def test_litellm_default_assembly_tool_roundtrip_and_restore(tmp_path, monkeypatch, streaming, provider):
     monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-    from aurora_adapter.model.litellm import LiteLLMClient
+    from aurora_model.litellm import LiteLLMClient
 
     original = LiteLLMClient.__init__
     transports, requests = [], []
@@ -103,9 +109,9 @@ def test_litellm_default_assembly_tool_roundtrip_and_restore(tmp_path, monkeypat
         host, assembly, ctx, _, _, _, _, _ = setup(tmp_path)
 
         def configure():
-            ctx.set(CONFIG, {**settings(), "streaming": streaming})
+            configure_bot(ctx, {**settings(), "streaming": streaming})
             profile: dict[str, object] = {
-                "adapter": "org.aurora.adapter:adapters/model/litellm/chat",
+                "adapter": "org.aurora.model:adapters/litellm/chat",
                 "model": "openai/gpt-4o-mini",
                 "credential": "MODEL_TEST_KEY",
             }
@@ -151,6 +157,27 @@ def test_litellm_default_assembly_tool_roundtrip_and_restore(tmp_path, monkeypat
     asyncio.run(scenario())
 
 
+async def run_cli(argv, *, plugins=(), output=None):
+    options = root_parser().parse_args(argv)
+    if options.data_dir is None or options.command[:1] == ["id"]:
+        return await execute_cli(argv, plugins=(configuration_plugin(), *plugins), output=output)
+    from aurora_host import read_assembly
+
+    plan = read_assembly(options.data_dir / "config/assembly.toml")
+    selected = tuple({p.name: p for p in (configuration_plugin(), *plugins)}.values())
+    plan = AssemblyPlan(
+        tuple(dict.fromkeys([*plan.plugins, *(p.name for p in selected)])),
+        plan.instances,
+        plan.connections,
+        plan.collection_connections,
+    )
+    runtime = Host.create(plan, selected, options.data_dir, workspace_root=options.root)
+    try:
+        return await execute_cli(argv, runtime=runtime, output=output)
+    finally:
+        await runtime.stop()
+
+
 def settings(*, tools=True):
     return {
         "instance_id": "main",
@@ -160,7 +187,7 @@ def settings(*, tools=True):
 
 
 def seed(ctx, *, tools=True, credential=False, model="first"):
-    ctx.set(CONFIG, settings(tools=tools))
+    configure_bot(ctx, settings(tools=tools))
     profile = {"adapter": str(ADAPTER), "model": model}
     if credential:
         profile["credential"] = "MODEL_TEST_KEY"
@@ -169,17 +196,41 @@ def seed(ctx, *, tools=True, credential=False, model="first"):
 
 
 def setup(
-    root, *, behavior="normal", capabilities=None, secret="runtime-secret", extra_plugins=(), assembly_options=None
+    root,
+    *,
+    behavior="normal",
+    capabilities=None,
+    secret="runtime-secret",
+    extra_plugins=(),
+    assembly_options=None,
+    extra_components=None,
 ):
     registry = bootstrap()
-    register_plugins(registry, (configuration_plugin(),))
-    register_plugins(registry, extra_plugins)
-    register_plugins(
-        registry,
-        (adapter_plugin(), model_plugin(), react_plugin(), tools_plugin(), defaults_plugin(), assembly_plugin()),
+    from aurora_core.discovery import load_plugins
+
+    from tests.fixtures.bot_graph import FixtureHost
+
+    base = tomllib.loads(files("aurora_bot").joinpath("presets/default.toml").read_text())["plugins"]
+    selected = load_plugins(
+        explicit=extra_plugins,
+        enabled=tuple(
+            dict.fromkeys(
+                [
+                    *base,
+                    "aurora_bot.notes",
+                    "aurora_bot.actions",
+                    "aurora_bot.self_control",
+                    "aurora_bot.world_view",
+                    "aurora_world.records",
+                    *(p.name for p in extra_plugins),
+                ]
+            )
+        ),
     )
+    register_plugins(registry, selected)
     install_lifecycle_slots(registry)
-    ctx, hooks = Context(registry), HookConnections(registry)
+    host = FixtureHost(registry, root, workspace_root=root)
+    ctx = host.ctx
     events, clients, model_calls = [], [], []
     entered = asyncio.Event()
     close_attempts = []
@@ -209,7 +260,7 @@ def setup(
         clients.append(client)
         return client
 
-    async def tool_factory(*, ctx, storage, instance_id, input_state, output_state, config):
+    async def tool_factory(*, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
         events.append("tool.created")
 
         async def execute(request):
@@ -256,42 +307,10 @@ def setup(
     registry.register(
         RegistryEntry(TOOL, "tool", ToolSpec(COMPONENT, definition, factory=tool_factory), "test", register_to=TOOLS)
     )
-    storage = StorageService(root)
-    assembly = DefaultAssembly(
-        registry=registry,
-        ctx=ctx,
-        hooks=hooks,
-        storage=storage,
-        credential_resolver=lambda _: secret,
-        **(assembly_options or {}),
-    )
-
-    class ConfiguredLifecycle(Lifecycle):
-        """将各用例声明的初始配置写入 TOML，供后续宿主从文件加载。"""
-
-        async def start(self, *, configure=None):
-            def configure_files():
-                if configure is not None:
-                    configure()
-                    for key, relative in (
-                        (CONFIG, "org.aurora.bot/config.toml"),
-                        (MODEL_CONFIG, "org.aurora.adapter/model/profiles.toml"),
-                        (BINDINGS, "org.aurora.adapter/model/bindings.toml"),
-                    ):
-                        path = root / "config" / relative
-                        path.parent.mkdir(parents=True, exist_ok=True)
-                        path.write_text(tomli_w.dumps(cast(dict, ctx.get(key))), encoding="utf-8")
-
-            await super().start(configure=configure_files)
-
-    host = ConfiguredLifecycle(
-        ctx,
-        hooks,
-        (configuration_component(registry, ctx, hooks, storage), *assembly.components()),
-        persistence=ContextPersistence(ctx, storage.snapshot_store()),
-        storage=storage,
-        timeout=0.05 if behavior == "wait" else 10,
-    )
+    host.initialize_fixture(selected, secret=secret, options=assembly_options, components=extra_components)
+    if "aurora_world.records" not in [p.name for p in extra_plugins]:
+        host.bot.world_records = None
+    assembly = host.bot
     return host, assembly, ctx, registry, clients, model_calls, events, entered
 
 
@@ -322,7 +341,7 @@ def test_factory_creation_follows_restore_and_configure_and_start_does_not_activ
         assert cast(dict, other.defaults.context_state.get(other_ctx, request))["messages"] == messages
         assert other.agent.progress.get(other_ctx, request) == 1
         assert other.storage.get("dev.assembly", "last_close") == "main/tool/echo"
-        assert other.defaults.model.output_state.get(other_ctx, request)
+        assert other.defaults.states["model_output"].get(other_ctx, request)
         await restored.stop()
         # 没有新激活的启动/关闭保留最近模型结果。
         saved = json.loads((tmp_path / "framework" / "ctx.json").read_text(encoding="utf-8"))
@@ -339,7 +358,7 @@ def test_overlapping_instance_names_preserve_model_cleanup(tmp_path, identity, b
 
         def configure():
             seed(ctx)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "instance_id": identity})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "instance_id": identity})
 
         store = assembly.storage.snapshot_store()
         original_save = type(store).save
@@ -361,7 +380,7 @@ def test_overlapping_instance_names_preserve_model_cleanup(tmp_path, identity, b
         assert events[-3:] == ["tool.closed", "model.closed", "snapshot.saved"]
         assert events.count("tool.closed") == 1
         with pytest.raises(RuntimeError, match="关闭"):
-            ctx.get(CONFIG)
+            ctx.get(MODEL_CONFIG)
 
     asyncio.run(scenario())
 
@@ -428,7 +447,7 @@ def test_partial_tool_creation_failure_closes_owned_resources(tmp_path):
             seed(ctx)
             value = settings()
             value["tools"].append({"tool": str(other_id), "instance_id": "broken", "config": {}})
-            ctx.set(CONFIG, value)
+            configure_bot(ctx, value)
 
         with pytest.raises(RuntimeError, match="创建失败"):
             await host.start(configure=configure)
@@ -445,7 +464,7 @@ def test_failed_model_close_can_retry_without_reclosing_tools(tmp_path):
         with pytest.raises(RuntimeError, match="模型关闭失败"):
             await host.stop()
         assert not clients[0].closed and assembly.client is clients[0]
-        assert ctx.get(CONFIG) and host.state == "failed"
+        assert bot_options(ctx) and host.state == "failed"
         await host.stop()
         assert clients[0].closed and events.count("tool.closed") == 1 and host.state == "stopped"
 
@@ -509,19 +528,23 @@ def test_registered_assembly_runs_through_cli_host_without_bot_cli_dependency(tm
         )
         output = StringIO()
         status = await run_cli(
-            ["--data-dir", str(tmp_path), "--assembly", str(ASSEMBLY), "ctx", "get", str(CONFIG)],
+            ["--data-dir", str(tmp_path), "ctx", "get", str(MODEL_CONFIG)],
             plugins=(
                 adapter_plugin(),
+                model_configuration_plugin(),
+                litellm_plugin(),
                 model_plugin(),
                 react_plugin(),
                 tools_plugin(),
                 defaults_plugin(),
-                assembly_plugin(),
+                runtime_plugin(),
+                conversation_plugin(),
+                commands_plugin(),
                 providers,
             ),
             output=output,
         )
-        assert status == 0 and json.loads(output.getvalue())["instance_id"] == "main"
+        assert status == 0 and json.loads(output.getvalue())["primary"]["model"] == "first"
         assert len(clients) == 2 and all(client.closed and not client.requests for client in clients)
 
     asyncio.run(scenario())
@@ -553,8 +576,6 @@ def gate_model(client, monkeypatch, *, cleanup=None):
 def test_runtime_submission_receipts_sequences_and_repeated_activation(tmp_path):
     async def scenario():
         host, assembly, ctx, _, clients, _, _, _ = setup(tmp_path)
-        with pytest.raises(RuntimeError):
-            assembly.runtime.submit("尚未启动")
         await host.start(configure=lambda: seed(ctx, tools=False))
         try:
             assert clients[0].requests == [] and assembly.runtime.current is None
@@ -938,7 +959,7 @@ def test_public_run_operations_bind_to_started_bot_and_unbind_on_stop(tmp_path, 
             release.set()
             run = await invoke_operation(registry, RUN_ACTIVATE, instance_id="main")
             assert isinstance(run, RunHandle) and (await run.wait()).status == "completed"
-            assembly.stop_accepting()
+            assembly.owner.stop_accepting()
             with pytest.raises(RuntimeError, match="关闭"):
                 await invoke_operation(registry, RUN_SUBMIT, "关闭后拒绝", instance_id="main")
         finally:
@@ -961,8 +982,8 @@ def test_public_run_operations_route_instances_without_overwriting_owner(tmp_pat
 
         def configure_b():
             seed(ctx_b, tools=False)
-            config = cast(dict, ctx_b.get(CONFIG))
-            ctx_b.set(CONFIG, {**config, "instance_id": other_identity})
+            config = cast(dict, bot_options(ctx_b))
+            configure_bot(ctx_b, {**config, "instance_id": other_identity})
 
         await first.start(configure=lambda: seed(ctx_a, tools=False))
         try:
@@ -1013,11 +1034,15 @@ def test_run_operations_are_visible_in_cli_without_starting_assembly(tmp_path, m
             ["--data-dir", str(data), "id", "list"],
             plugins=(
                 adapter_plugin(),
+                model_configuration_plugin(),
+                litellm_plugin(),
                 model_plugin(),
                 react_plugin(),
                 tools_plugin(),
                 defaults_plugin(),
-                assembly_plugin(),
+                runtime_plugin(),
+                conversation_plugin(),
+                commands_plugin(),
             ),
             output=output,
         )
@@ -1035,7 +1060,7 @@ async def cli_setup(root, *, behavior="normal"):
     def configure():
         seed(ctx)
         if behavior == "tool_timeout":
-            ctx.set(CONFIG, {**settings(), "tool_timeout": 0.01})
+            configure_bot(ctx, {**settings(), "tool_timeout": 0.01})
 
     await host.start(configure=configure)
     await host.stop()
@@ -1043,14 +1068,18 @@ async def cli_setup(root, *, behavior="normal"):
     events.clear()
     plugins = (
         adapter_plugin(),
+        model_configuration_plugin(),
+        litellm_plugin(),
         model_plugin(),
         react_plugin(),
         tools_plugin(),
         defaults_plugin(),
-        assembly_plugin(),
+        runtime_plugin(),
+        conversation_plugin(),
+        commands_plugin(),
         Plugin("cli_fixture", tuple(entry for entry in registry.entries() if entry.provider == "test")),
     )
-    argv = ["--data-dir", str(root), "--assembly", str(ASSEMBLY), "--namespace", "org.aurora.bot"]
+    argv = ["--data-dir", str(root), "--namespace", "org.aurora.bot"]
     return plugins, argv, clients, events, entered
 
 
@@ -1086,7 +1115,7 @@ def test_bot_cli_submit_tool_loop_and_activate_restore(tmp_path):
 
 @pytest.mark.parametrize("failure", [False, True])
 def test_bot_cli_streams_before_completion_and_reports_failure(tmp_path, monkeypatch, failure):
-    from aurora_adapter.model import ModelError
+    from aurora_model import ModelError
 
     async def scenario():
         plugins, argv, clients, _, _ = await cli_setup(tmp_path)
@@ -1221,7 +1250,6 @@ def test_bot_cli_interrupt_cancels_tool_and_persists_terminal(tmp_path):
 def test_bot_cli_output_failure_releases_subscription_and_run(tmp_path):
     from aurora_bot.cli import submit
     from aurora_cli.declarations import CommandContext
-    from aurora_core import entry_from
 
     async def scenario():
         host, assembly, ctx, registry, clients, _, _, _ = setup(tmp_path)
@@ -1233,9 +1261,7 @@ def test_bot_cli_output_failure_releases_subscription_and_run(tmp_path):
             subscriptions.append(handle)
             return handle
 
-        registry.register(entry_from(ctx.subscribe, provider="test"))
         registry.replace(RegistryEntry(Id("org.aurora.core:operations/ctx/subscribe"), "operation", tracked, "test"))
-        registry.register(entry_from(ctx.unsubscribe, provider="test"))
 
         class BrokenOutput(StringIO):
             def write(self, text):
@@ -1268,7 +1294,7 @@ import runpy
 import signal
 import sys
 from pathlib import Path
-from aurora_adapter.model.testing import FakeModel
+from aurora_model.testing import FakeModel
 
 source = runpy.run_path(sys.argv[1])
 entry = importlib.import_module("aurora_cli.main")
@@ -1483,14 +1509,14 @@ def test_compaction_failure_preserves_execution_failure_and_releases_ownership(t
 
         with monkeypatch.context() as patch:
             patch.setattr(assembly.agent, "execute", execute)
-            patch.setattr(assembly, "_compact", compact)
+            patch.setattr(assembly.owner, "_compact", compact)
             expected = cleanup if outcome == "completed" else original
             with pytest.raises(type(expected)) as raised:
                 await assembly.activate(ExecutionRequest("cleanup-test"))
             assert raised.value is expected
             if outcome != "completed":
                 assert raised.value.__cause__ is cleanup
-            assert not assembly._executing
+            assert not assembly.owner._executing
         await host.stop()
 
     asyncio.run(scenario())

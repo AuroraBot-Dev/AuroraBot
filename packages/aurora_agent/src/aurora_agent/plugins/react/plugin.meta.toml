@@ -1,0 +1,128 @@
+schema_version = 2
+
+[plugins.react]
+entry_point = "aurora_agent.react"
+title = "ReAct 执行"
+summary = "ReAct 执行的公开定义与真实实例导出"
+requires = []
+
+[definitions.REACT]
+plugin = "react"
+id = "org.aurora.agent:handlers/react_agent"
+kind = "component"
+summary = "可重复激活的 ReAct 组件"
+
+[definitions.EXECUTE]
+plugin = "react"
+id = "org.aurora.agent:handlers/react_agent/execute"
+kind = "hook_handler"
+summary = "执行实例的一次调用"
+
+[definitions.EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EXECUTE.interface.definition]
+id = "org.aurora.agent:handlers/react_agent"
+
+[definitions.PREPARE]
+plugin = "react"
+id = "org.aurora.agent:react/prepare"
+kind = "hook_slot"
+summary = "准备阶段端口"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.INFER]
+plugin = "react"
+id = "org.aurora.agent:react/infer"
+kind = "hook_slot"
+summary = "推理阶段执行槽"
+
+[definitions.INFER.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.ACT]
+plugin = "react"
+id = "org.aurora.agent:react/act"
+kind = "hook_slot"
+summary = "行动阶段执行槽"
+
+[definitions.ACT.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.OBSERVE]
+plugin = "react"
+id = "org.aurora.agent:react/observe"
+kind = "hook_slot"
+summary = "观察阶段执行槽"
+
+[definitions.OBSERVE.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.FINISH]
+plugin = "react"
+id = "org.aurora.agent:react/finish"
+kind = "hook_slot"
+summary = "完成阶段执行槽"
+
+[definitions.FINISH.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.ERROR]
+plugin = "react"
+id = "org.aurora.agent:react/error"
+kind = "hook_slot"
+summary = "错误阶段执行槽"
+
+[definitions.ERROR.register_to]
+id = "org.aurora.core:registries/hook_slots"
+
+[definitions.CONFIGURE]
+plugin = "react"
+id = "org.aurora.agent:handlers/react/configure"
+kind = "hook_handler"
+summary = "读取显式绑定的 ReAct 参数"
+
+[definitions.CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.react]
+plugin = "react"
+inject = [
+    "ctx",
+    "hooks",
+    "instance_id",
+    "states",
+    "options",
+]
+plugs = [
+    "EXECUTE",
+    "CONFIGURE",
+]
+slots = [
+    "PREPARE",
+    "INFER",
+    "ACT",
+    "OBSERVE",
+    "FINISH",
+    "ERROR",
+]
+states = [
+    "inbox",
+    "progress",
+    "runtime",
+    "batch",
+    "decision",
+]
+resources = [
+    "agent",
+]
+options = "options"
+optional_states = [
+    "config",
+]
+
+[contracts.options]
+format = "json-schema"
+export = "aurora_agent.parameters:react_options"

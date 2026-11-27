@@ -1,203 +1,5 @@
 {
-  "schema_version": 1,
-  "plugins": {
-    "configuration": {
-      "entry_point": "aurora_config",
-      "title": "声明配置服务",
-      "summary": "加载已登记的 TOML 配置，完成校验并注入 ctx",
-      "description": "只补齐缺失模板；运行配置状态不持久化；提供声明配置编辑入口。",
-      "requires": [],
-      "factory": "aurora_config:plugin"
-    }
-  },
-  "definitions": {
-    "CONFIGS": {
-      "plugin": "configuration",
-      "id": "org.aurora.config:registries/configs",
-      "kind": "registry",
-      "summary": "接收各插件提供的 ConfigSpec",
-      "register_to": {
-        "id": "org.aurora.core:registries/registries"
-      }
-    },
-    "LOAD": {
-      "plugin": "configuration",
-      "id": "org.aurora.config:handlers/load",
-      "kind": "hook_handler",
-      "summary": "加载全部声明配置并注入 ctx，准备配置编辑服务",
-      "description": "无参数调用；配置错误正常传播；具体状态由已登记的 ConfigSpec 决定。",
-      "register_to": {
-        "id": "org.aurora.core:registries/hook_handlers"
-      }
-    },
-    "CONFIGURATION": {
-      "plugin": "configuration",
-      "id": "org.aurora.config:endpoints/configuration",
-      "kind": "endpoint",
-      "summary": "列出、读取和保存已声明的 TOML 配置",
-      "register_to": {
-        "id": "org.aurora.api:registries/endpoints"
-      },
-      "contract": "configuration_http"
-    }
-  },
-  "contracts": {
-    "configuration_http": {
-      "format": "aurora-http",
-      "export": "aurora_config.editor_contract:describe_configuration",
-      "content": {
-        "$defs": {
-          "ConfigurationFile": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "$ref": "#/$defs/StateId"
-              },
-              "state": {
-                "$ref": "#/$defs/StateId"
-              },
-              "path": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "state", "path"],
-            "additionalProperties": false
-          },
-          "ConfigurationDocument": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "$ref": "#/$defs/StateId"
-              },
-              "content": {
-                "type": "string"
-              },
-              "revision": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "content", "revision"],
-            "additionalProperties": false
-          },
-          "ConfigurationListRequest": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": false
-          },
-          "ConfigurationListResponse": {
-            "type": "object",
-            "properties": {
-              "result": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ConfigurationFile"
-                }
-              }
-            },
-            "required": ["result"],
-            "additionalProperties": false
-          },
-          "ConfigurationGetRequest": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "$ref": "#/$defs/StateId"
-              }
-            },
-            "required": ["id"],
-            "additionalProperties": false
-          },
-          "ConfigurationGetResponse": {
-            "type": "object",
-            "properties": {
-              "result": {
-                "$ref": "#/$defs/ConfigurationDocument"
-              }
-            },
-            "required": ["result"],
-            "additionalProperties": false
-          },
-          "ConfigurationSaveRequest": {
-            "$ref": "#/$defs/ConfigurationDocument"
-          },
-          "ConfigurationSaveResponse": {
-            "type": "object",
-            "properties": {
-              "result": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "$ref": "#/$defs/StateId"
-                  },
-                  "restart_required": {
-                    "const": true
-                  }
-                },
-                "required": ["id", "restart_required"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["result"],
-            "additionalProperties": false
-          }
-        },
-        "http": {
-          "configurationList": {
-            "method": "POST",
-            "path": "/configuration/list",
-            "operation": null,
-            "request": {
-              "$ref": "#/$defs/ConfigurationListRequest"
-            },
-            "response": {
-              "$ref": "#/$defs/ConfigurationListResponse"
-            },
-            "error": {
-              "$ref": "#/$defs/ErrorResponse"
-            }
-          },
-          "configurationGet": {
-            "method": "POST",
-            "path": "/configuration/get",
-            "operation": null,
-            "request": {
-              "$ref": "#/$defs/ConfigurationGetRequest"
-            },
-            "response": {
-              "$ref": "#/$defs/ConfigurationGetResponse"
-            },
-            "error": {
-              "$ref": "#/$defs/ErrorResponse"
-            }
-          },
-          "configurationSave": {
-            "method": "POST",
-            "path": "/configuration/save",
-            "operation": null,
-            "request": {
-              "$ref": "#/$defs/ConfigurationSaveRequest"
-            },
-            "response": {
-              "$ref": "#/$defs/ConfigurationSaveResponse"
-            },
-            "error": {
-              "$ref": "#/$defs/ErrorResponse"
-            }
-          }
-        }
-      }
-    }
-  },
-  "components": {
-    "configuration": {
-      "plugin": "configuration",
-      "summary": "持有当前宿主的配置加载与编辑服务",
-      "inject": ["registry", "ctx", "storage"],
-      "plugs": ["LOAD"],
-      "slots": []
-    }
-  },
+  "schema_version": 2,
   "distribution": {
     "name": "aurora-config",
     "version": "0.1.0",
@@ -207,6 +9,210 @@
     "entry-points": {
       "aurora.plugins": {
         "aurora_config": "aurora_config:plugin"
+      }
+    }
+  },
+  "manifests": {
+    "src/aurora_config/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "configuration": {
+          "entry_point": "aurora_config",
+          "title": "声明配置服务",
+          "summary": "加载已登记的 TOML 配置，完成校验并注入 ctx",
+          "description": "只补齐缺失模板；运行配置状态不持久化；提供声明配置编辑入口。",
+          "requires": [],
+          "factory": "aurora_config:plugin"
+        }
+      },
+      "definitions": {
+        "CONFIGS": {
+          "plugin": "configuration",
+          "id": "org.aurora.config:registries/configs",
+          "kind": "registry",
+          "summary": "接收各插件提供的 ConfigSpec",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "LOAD": {
+          "plugin": "configuration",
+          "id": "org.aurora.config:handlers/load",
+          "kind": "hook_handler",
+          "summary": "加载全部声明配置并注入 ctx，准备配置编辑服务",
+          "description": "无参数调用；配置错误正常传播；具体状态由已登记的 ConfigSpec 决定。",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CONFIGURATION": {
+          "plugin": "configuration",
+          "id": "org.aurora.config:endpoints/configuration",
+          "kind": "endpoint",
+          "summary": "列出、读取和保存已声明的 TOML 配置",
+          "register_to": {
+            "id": "org.aurora.api:registries/endpoints"
+          },
+          "contract": "configuration_http"
+        }
+      },
+      "contracts": {
+        "configuration_http": {
+          "format": "aurora-http",
+          "export": "aurora_config.editor_contract:describe_configuration",
+          "content": {
+            "$defs": {
+              "ConfigurationFile": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/StateId"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/StateId"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "state", "path"],
+                "additionalProperties": false
+              },
+              "ConfigurationDocument": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/StateId"
+                  },
+                  "content": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "content", "revision"],
+                "additionalProperties": false
+              },
+              "ConfigurationListRequest": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+              },
+              "ConfigurationListResponse": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/ConfigurationFile"
+                    }
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              },
+              "ConfigurationGetRequest": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/StateId"
+                  }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+              },
+              "ConfigurationGetResponse": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "$ref": "#/$defs/ConfigurationDocument"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              },
+              "ConfigurationSaveRequest": {
+                "$ref": "#/$defs/ConfigurationDocument"
+              },
+              "ConfigurationSaveResponse": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "$ref": "#/$defs/StateId"
+                      },
+                      "restart_required": {
+                        "const": true
+                      }
+                    },
+                    "required": ["id", "restart_required"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              }
+            },
+            "http": {
+              "configurationList": {
+                "method": "POST",
+                "path": "/configuration/list",
+                "operation": null,
+                "request": {
+                  "$ref": "#/$defs/ConfigurationListRequest"
+                },
+                "response": {
+                  "$ref": "#/$defs/ConfigurationListResponse"
+                },
+                "error": {
+                  "$ref": "#/$defs/ErrorResponse"
+                }
+              },
+              "configurationGet": {
+                "method": "POST",
+                "path": "/configuration/get",
+                "operation": null,
+                "request": {
+                  "$ref": "#/$defs/ConfigurationGetRequest"
+                },
+                "response": {
+                  "$ref": "#/$defs/ConfigurationGetResponse"
+                },
+                "error": {
+                  "$ref": "#/$defs/ErrorResponse"
+                }
+              },
+              "configurationSave": {
+                "method": "POST",
+                "path": "/configuration/save",
+                "operation": null,
+                "request": {
+                  "$ref": "#/$defs/ConfigurationSaveRequest"
+                },
+                "response": {
+                  "$ref": "#/$defs/ConfigurationSaveResponse"
+                },
+                "error": {
+                  "$ref": "#/$defs/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "components": {
+        "configuration": {
+          "plugin": "configuration",
+          "summary": "持有当前宿主的配置加载与编辑服务",
+          "inject": ["registry", "ctx", "storage"],
+          "plugs": ["LOAD"],
+          "slots": [],
+          "resources": ["configuration"]
+        }
       }
     }
   }

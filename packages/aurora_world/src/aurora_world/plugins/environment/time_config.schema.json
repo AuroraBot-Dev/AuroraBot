@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mean_seconds": {
+      "type": "number",
+      "minimum": 60,
+      "default": 1800.0
+    },
+    "deviation_seconds": {
+      "type": "number",
+      "minimum": 1,
+      "default": 300.0
+    }
+  }
+}

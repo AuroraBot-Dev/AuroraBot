@@ -3,10 +3,8 @@
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from .ids import Id
+from ._meta import HOST_DEFINITIONS, REGISTRY_DIRECTORY
 from .registry import DefinitionRegistry, RegistryEntry
-
-REGISTRY_DIRECTORY = Id("org.aurora.core:registries/registries")
 
 
 @runtime_checkable
@@ -29,9 +27,7 @@ class KindReceiver:
 def bootstrap() -> DefinitionRegistry:
     """直接创建总表和目录，再登记 core 分类接收方。"""
     registry = DefinitionRegistry()
-    registry.register(
-        RegistryEntry(REGISTRY_DIRECTORY, "registry", KindReceiver(frozenset({"registry"})), "aurora_core")
-    )
+    registry.register(HOST_DEFINITIONS[REGISTRY_DIRECTORY].bind(KindReceiver(frozenset({"registry"}))))
     kinds = {
         "plugins": {"plugin"},
         "operations": {"operation"},
@@ -44,13 +40,8 @@ def bootstrap() -> DefinitionRegistry:
         "events": {"event"},
     }
     registry.register_many(
-        RegistryEntry(
-            Id(f"org.aurora.core:registries/{name}"),
-            "registry",
-            KindReceiver(frozenset(accepted)),
-            "aurora_core",
-            register_to=REGISTRY_DIRECTORY,
-        )
-        for name, accepted in kinds.items()
+        definition.bind(KindReceiver(frozenset(kinds[identity.local_path])))
+        for identity, definition in HOST_DEFINITIONS.items()
+        if definition.kind == "registry" and identity != REGISTRY_DIRECTORY
     )
     return registry

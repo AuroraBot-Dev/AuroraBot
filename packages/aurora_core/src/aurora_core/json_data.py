@@ -3,6 +3,8 @@
 import json
 import math
 
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+
 
 def _validate_json(value: object, ancestors: set[int] | None = None) -> None:
     """仅接收可无损往返的 JSON 数据类型，拒绝对象、元组、非字符串键和循环。"""

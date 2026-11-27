@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from aurora_core._meta import STATE_KEYS
 from aurora_core.ctx import StateKey
 from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
@@ -31,7 +32,7 @@ def config_entries(identity: Id, spec: ConfigSpec, *, provider: str) -> tuple[Re
             "state_key",
             StateKey(spec.schema.validate, persistent=False),
             provider,
-            register_to=Id("org.aurora.core:registries/state_keys"),
+            register_to=STATE_KEYS,
         ),
     )
 

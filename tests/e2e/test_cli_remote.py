@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from aurora_host.configuration import initialize_host_config
 
 CONFIG = "org.aurora.cli:state/config"
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "api_cli_process.py"
@@ -58,6 +59,7 @@ def test_remote_watch_and_commands_share_one_host_with_transient_configuration(t
 
     async def scenario():
         data = tmp_path / "host-data"
+        initialize_host_config(data / "config")
         client_dir = tmp_path / "client"
         client_dir.mkdir()
         host_stop = tmp_path / "stop-host"

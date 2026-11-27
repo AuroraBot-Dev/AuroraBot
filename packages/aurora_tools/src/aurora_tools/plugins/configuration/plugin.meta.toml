@@ -1,0 +1,30 @@
+schema_version = 2
+
+[plugins.configuration]
+entry_point = "aurora_tools.configuration"
+title = "执行参数配置"
+summary = "按实际消费者登记非持久配置；不创建业务实例"
+requires = [
+    "aurora_config",
+    "aurora_tools",
+]
+
+[definitions.EXECUTOR]
+plugin = "configuration"
+id = "org.aurora.tools:configs/executor"
+kind = "config"
+summary = "executor 的行为参数"
+contract = "executor"
+
+[definitions.EXECUTOR.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.EXECUTOR_STATE]
+plugin = "configuration"
+id = "org.aurora.tools:state/executor/config"
+kind = "state_key"
+summary = "executor 的非持久配置状态"
+
+[contracts.executor]
+format = "json-schema"
+export = "aurora_tools.parameters:executor"

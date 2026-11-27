@@ -10,36 +10,42 @@ from functools import partial
 from typing import cast
 from uuid import uuid4
 
-from aurora_adapter.model.config import ADAPTERS, BINDINGS, ModelAdapter
-from aurora_adapter.model.config import CONFIG as MODEL_CONFIG
-from aurora_adapter.model.plugin import plugin as adapter_plugin
-from aurora_adapter.model.testing import FakeModel, FakeReply
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.configuration import plugin as agent_configuration_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import ReActContext
 from aurora_agent.react_defaults import plugin as defaults_plugin
-from aurora_agent.tools import TOOLS, ToolInstance, ToolSpec
-from aurora_agent.tools import plugin as tools_plugin
-from aurora_bot.assembly import DefaultAssembly
-from aurora_bot.assembly import plugin as assembly_plugin
-from aurora_bot.assembly_config import AGENTS, CONFIG, MESSAGES, RUN, WORK
 from aurora_bot.cadence import plugin as cadence_plugin
 from aurora_bot.cadence.state import CHECKPOINT
 from aurora_bot.cadence.state import CONFIG_STATE as CADENCE_CONFIG
+from aurora_bot.cli import plugin as commands_plugin
+from aurora_bot.conversation import plugin as conversation_plugin
+from aurora_bot.runtime import AGENTS, MESSAGES, RUN, WORK
+from aurora_bot.runtime import plugin as runtime_plugin
 from aurora_cli.declarations import CONFIG as CLI_CONFIG
 from aurora_config import ConfigSpec, ConfigTemplate
 from aurora_control import CONTROL_STATE, ExecutionPlug, component_entries
 from aurora_control import plugin as control_plugin
-from aurora_core import Id, entry_from, hook_handler
+from aurora_core import Id, entry_from, plug
 from aurora_core.ctx import StateKey
 from aurora_core.discovery import Plugin
 from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import RegistryEntry
+from aurora_model.config import BINDINGS
+from aurora_model.config import CONFIG as MODEL_CONFIG
+from aurora_model.configuration import plugin as model_configuration_plugin
+from aurora_model.plugin import plugin as adapter_plugin
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.supplier import plugin as litellm_plugin
+from aurora_model.testing import FakeModel, FakeReply
+from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
+from aurora_tools.execution import plugin as tools_plugin
+from aurora_tools.plugins.configuration import plugin as tools_configuration_plugin
 from aurora_world import RECORDS, SOURCE_STATUS, SOURCES, SourceInstance, SourceSpec
 from aurora_world.configuration import CONFIG_STATE as WORLD_CONFIG
-from aurora_world.configuration import configured_sources_component
 from aurora_world.configuration import plugin as world_configuration_plugin
-from aurora_world.plugin import plugin as world_plugin
+from aurora_world.records import plugin as records_plugin
+from aurora_world.sources import plugin as world_plugin
 from pipeline import INSPECT, PIPELINE, STEPS, create_inspector, declared
 
 NAMESPACE = "dev.example.workshop"
@@ -137,7 +143,7 @@ async def create_model(config, *, api_key=None, ctx=None):
     return model
 
 
-async def create_reporter(*, ctx, storage, instance_id, input_state, output_state, config):
+async def create_reporter(*, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
     async def execute(request):
         arguments = input_state.get(ctx, request)["arguments"]
         try:
@@ -160,22 +166,14 @@ async def create_reporter(*, ctx, storage, instance_id, input_state, output_stat
 class Workshop:
     """模拟来源与观察视图；引导和激活由正式 cadence、conversation 及 runtime 持有。"""
 
-    def __init__(self, registry, ctx, hooks, storage):
+    def __init__(self, registry, ctx, hooks, storage, bot):
         self.ctx, self.hooks, self.storage = ctx, hooks, storage
-        self.bot = DefaultAssembly(
-            registry=registry,
-            ctx=ctx,
-            hooks=hooks,
-            storage=storage,
-            world_component_factory=partial(
-                configured_sources_component, source_factories={SOURCE: self.create_source}
-            ),
-        )
+        self.bot = bot
         self.changed = asyncio.Event()
         self.subscription = None
         self.finish_link = None
 
-    @hook_handler(f"{NAMESPACE}:handlers/prepare", slot=PREPARE)
+    @plug(f"{NAMESPACE}:handlers/prepare")
     def prepare(self):
         try:
             initial = self.ctx.get(CLI_CONFIG)
@@ -199,7 +197,7 @@ class Workshop:
             for address in self.ctx.list(key=key):
                 self.ctx.delete(key, location=dict(address.location))
 
-    @hook_handler(f"{NAMESPACE}:handlers/start_observer", slot=START)
+    @plug(f"{NAMESPACE}:handlers/start_observer")
     def start_observer(self):
         assert self.bot.agent is not None
         self.finish_link = self.bot.agent.slots["finish"].connect(
@@ -249,7 +247,7 @@ class Workshop:
             },
         )
 
-    async def create_source(self, *, source_id, emit, config):
+    async def create_source(self, *, source_id, emit, config, resources):
         if config:
             raise ValueError("巡检来源参数通过 settings 状态管理")
 
@@ -279,13 +277,13 @@ class Workshop:
 
         return SourceInstance(start=noop, stop=noop, aclose=noop, run=produce)
 
-    @hook_handler(f"{NAMESPACE}:handlers/stop_observer", slot=STOP)
+    @plug(f"{NAMESPACE}:handlers/stop_observer")
     def stop_observer(self):
         if self.subscription is not None:
             self.ctx.unsubscribe(self.subscription)
             self.subscription = None
 
-    @hook_handler(f"{NAMESPACE}:handlers/clean_observer", slot=CLEAN)
+    @plug(f"{NAMESPACE}:handlers/clean_observer")
     def clean_observer(self):
         self.stop_observer()
         if self.finish_link is not None:
@@ -294,11 +292,14 @@ class Workshop:
             self.finish_link = None
 
 
-async def declared_source(*, source_id, emit, config):
-    raise RuntimeError("巡检来源需要示例装配注入业务环境")
+async def declared_source(*, source_id, emit, config, resources):
+    return await resources["workshop"].create_source(source_id=source_id, emit=emit, config=config, resources=resources)
 
 
-def assemble(*, registry, ctx, hooks, storage, workspace_root):
+def assemble(host):
+    from types import SimpleNamespace
+
+    registry, ctx, hooks, storage = host.registry, host.ctx, host.hooks, host.storage
     entry = registry.get(INSPECT_TOOL)
     registry.replace(
         replace(
@@ -307,7 +308,17 @@ def assemble(*, registry, ctx, hooks, storage, workspace_root):
         )
     )
     registry.replace(replace(registry.get(ADAPTER), target=ModelAdapter("chat", partial(create_model, ctx=ctx))))
-    app = Workshop(registry, ctx, hooks, storage)
+    app = Workshop(
+        registry,
+        ctx,
+        hooks,
+        storage,
+        SimpleNamespace(
+            agent=host.graph.instances["main"].instance, defaults=host.graph.instances["defaults"].instance
+        ),
+    )
+    if "world_configuration" in host.graph.instances:
+        host.graph.instances["world_configuration"].instance.source_resources = {SOURCE: {"workshop": app}}
     for owner, phase, method in (
         ("workshop/settings", PREPARE, app.prepare),
         ("workshop/observer", START, app.start_observer),
@@ -316,16 +327,9 @@ def assemble(*, registry, ctx, hooks, storage, workspace_root):
     ):
         definition = entry_from(method, provider=NAMESPACE)
         hooks.connect(phase, definition.id, slot_instance=owner, handler_instance=owner, target=method)
-    components = app.bot.components(depends_on=("workshop/settings",))
     return (
         LifecycleComponent("workshop/settings"),
-        *(
-            replace(component, depends_on=(*component.depends_on, "workshop/observer"))
-            if component.instance_id == "default/world"
-            else component
-            for component in components
-        ),
-        LifecycleComponent("workshop/observer", depends_on=("default/bot",)),
+        LifecycleComponent("workshop/observer", depends_on=("runtime",)),
     )
 
 
@@ -402,17 +406,22 @@ def plugins(*, with_world=True):
     )
     selected = (
         adapter_plugin(),
+        model_configuration_plugin(),
+        litellm_plugin(),
         control_plugin(),
         model_plugin(),
         react_plugin(),
         tools_plugin(),
         defaults_plugin(),
-        assembly_plugin(),
-        *((world_plugin(), world_configuration_plugin(), cadence_plugin()) if with_world else ()),
+        runtime_plugin(),
+        conversation_plugin(),
+        commands_plugin(),
+        agent_configuration_plugin(),
+        tools_configuration_plugin(),
+        *((records_plugin(), world_plugin(), world_configuration_plugin(), cadence_plugin()) if with_world else ()),
         example,
     )
     resources = {
-        CONFIG: "bot.toml",
         MODEL_CONFIG: "model/profiles.toml",
         BINDINGS: "model/bindings.toml",
         WORLD_CONFIG: "world.toml",
@@ -425,7 +434,8 @@ def plugins(*, with_world=True):
                 replace(
                     entry,
                     target=replace(
-                        entry.target, template=ConfigTemplate(__name__, "config.tomls/" + resources[entry.target.state])
+                        entry.target,
+                        template=ConfigTemplate(__name__, "plugin.config.tomls/" + resources[entry.target.state]),
                     ),
                 )
                 if isinstance(entry.target, ConfigSpec) and entry.target.state in resources

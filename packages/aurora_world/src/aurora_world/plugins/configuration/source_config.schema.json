@@ -1,0 +1,74 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "recent_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 3600
+        },
+        "weather_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 3600
+        },
+        "refresh_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 30
+        },
+        "max_chars": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 32000
+        },
+        "max_event_chars": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 8000
+        },
+        "time_count": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "weather_count": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "source_id"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "format": "aurora-id"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "presentation": {
+            "type": "string",
+            "enum": ["events", "time", "weather"]
+          },
+          "config": {
+            "type": "object",
+            "default": {}
+          }
+        }
+      }
+    }
+  }
+}

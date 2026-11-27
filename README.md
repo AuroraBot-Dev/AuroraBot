@@ -53,7 +53,7 @@ uv run --locked python examples/onboarding/main.py --init
 
 ### 2. 填写必要配置
 
-在 `build/onboarding/config/org.aurora.adapter/model/profiles.toml` 中填写模型的 `provider`、`model` 和必要的 `base_url`；在根目录 `.env` 中设置 `AURORA_MODEL_API_KEY`，`credential` 只填环境变量名。
+在 `build/onboarding/config/org.aurora.model/profiles.toml` 中填写模型的 `provider`、`model` 和必要的 `base_url`；在根目录 `.env` 中设置 `AURORA_MODEL_API_KEY`，`credential` 只填环境变量名。
 
 ### 3. 从终端启动
 

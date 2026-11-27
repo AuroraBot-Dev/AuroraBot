@@ -5,14 +5,16 @@ from dataclasses import asdict
 from typing import Protocol, TextIO, cast
 
 from aurora_agent.runtime import RunHandle, Submission
+from aurora_core._meta import CTX_SUBSCRIBE, CTX_UNSUBSCRIBE
 from aurora_core.ctx import StateChange
 from aurora_core.ids import Id
 from aurora_core.invocation import invoke_operation
 from aurora_core.json_data import encode_json
-from aurora_core.registry import DefinitionRegistry, RegistryEntry
+from aurora_core.registry import DefinitionRegistry
 
-from .assembly_config import RUN, WORK
 from .operations import RUN_ACTIVATE, RUN_CANCEL, RUN_SUBMIT
+from .plugins.commands._meta import ACTIVATE, CANCEL, SUBMIT, commands_plugin
+from .plugins.runtime._meta import RUN, WORK
 
 
 class CommandContext(Protocol):
@@ -72,7 +74,7 @@ async def _follow(context: CommandContext, operation: Id, instance_id: str, **va
         ):
             changes.put_nowait(change)
 
-    subscription = await invoke_operation(context.registry, Id("org.aurora.core:operations/ctx/subscribe"), observe)
+    subscription = await invoke_operation(context.registry, CTX_SUBSCRIBE, observe)
     handle: RunHandle | None = None
     waiter = None
     try:
@@ -100,7 +102,7 @@ async def _follow(context: CommandContext, operation: Id, instance_id: str, **va
             _write(context, {"event": "result", "instance_id": instance_id, **asdict(result)})
         raise
     finally:
-        await invoke_operation(context.registry, Id("org.aurora.core:operations/ctx/unsubscribe"), subscription)
+        await invoke_operation(context.registry, CTX_UNSUBSCRIBE, subscription)
         if handle is not None and not handle.done:
             await invoke_operation(context.registry, RUN_CANCEL, handle.run_id, instance_id=instance_id)
         if waiter is not None:
@@ -124,25 +126,22 @@ async def cancel(context: CommandContext, run_id: str, *, instance_id: str) -> N
     _write(context, {"event": "cancel", "instance_id": instance_id, "run_id": run_id, "cancelled": cancelled})
 
 
-def command_entries() -> tuple[RegistryEntry, ...]:
+def plugin():
     """CLI 缺席时声明保留为未连接，不影响装配和进程内操作。"""
     instance = {"name": "instance_id", "option": True, "required": True}
-    return tuple(
-        RegistryEntry(
-            Id(f"org.aurora.bot:commands/run/{name}"),
-            "command",
-            {"help": help_text, "executor": executor, "runtime": True, "arguments": [*arguments, instance]},
-            "aurora_bot",
-            register_to=Id("org.aurora.cli:registries/commands"),
-        )
-        for name, help_text, executor, arguments in (
-            (
-                "submit",
-                "提交文本引导并观察内部运行；Ctrl+C 取消本次运行",
-                submit,
-                [{"name": "payload"}, {"name": "sequence", "type": "integer", "option": True}],
-            ),
-            ("activate", "显式激活已有输入并观察内部运行", activate, []),
-            ("cancel", "按 run_id 取消当前宿主中的运行", cancel, [{"name": "run_id"}]),
-        )
+    return commands_plugin(
+        targets={
+            identity: {"help": help_text, "executor": executor, "runtime": True, "arguments": [*arguments, instance]}
+            for identity, help_text, executor, arguments in (
+                (
+                    SUBMIT,
+                    "提交文本引导并观察内部运行；Ctrl+C 取消本次运行",
+                    submit,
+                    [{"name": "payload"}, {"name": "sequence", "type": "integer", "option": True}],
+                ),
+                (ACTIVATE, "显式激活已有输入并观察内部运行", activate, []),
+                (CANCEL, "按 run_id 取消当前宿主中的运行", cancel, [{"name": "run_id"}]),
+            )
+        },
+        components={},
     )

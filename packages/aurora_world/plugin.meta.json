@@ -1,0 +1,403 @@
+{
+  "schema_version": 2,
+  "distribution": {
+    "name": "aurora-world",
+    "version": "0.1.0",
+    "description": "AuroraBot world inputs and shared environment state",
+    "requires-python": ">=3.12",
+    "dependencies": ["aurora-core>=0.1.0"],
+    "optional-dependencies": {
+      "config": ["aurora-config>=0.1.0"],
+      "environment": ["aurora-config>=0.1.0", "httpx>=0.28,<1"]
+    },
+    "entry-points": {
+      "aurora.plugins": {
+        "aurora_world.records": "aurora_world.records:plugin",
+        "aurora_world.sources": "aurora_world.sources:plugin",
+        "aurora_world.configuration": "aurora_world.configuration:plugin",
+        "aurora_world.environment": "aurora_world.environment:plugin"
+      }
+    }
+  },
+  "manifests": {
+    "src/aurora_world/plugins/records/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "records": {
+          "entry_point": "aurora_world.records",
+          "title": "世界记录",
+          "summary": "归档世界事件并维护有界 ctx 视图，不创建世界来源",
+          "requires": [],
+          "factory": "aurora_world.records:plugin"
+        }
+      },
+      "definitions": {
+        "RECORDS": {
+          "plugin": "records",
+          "id": "org.aurora.world:state/records",
+          "kind": "state_key",
+          "summary": "世界事件的有界呈现状态"
+        },
+        "ENVIRONMENT": {
+          "plugin": "records",
+          "id": "org.aurora.world:state/environment",
+          "kind": "state_key",
+          "summary": "时间和天气的有界环境观察"
+        },
+        "RECORDS_PREPARE": {
+          "plugin": "records",
+          "id": "org.aurora.world:handlers/records/prepare",
+          "kind": "hook_handler",
+          "summary": "打开事件归档并恢复视图",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "RECORDS_START": {
+          "plugin": "records",
+          "id": "org.aurora.world:handlers/records/start",
+          "kind": "hook_handler",
+          "summary": "启动有界视图的刷新任务",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "RECORDS_STOP": {
+          "plugin": "records",
+          "id": "org.aurora.world:handlers/records/stop",
+          "kind": "hook_handler",
+          "summary": "停止自有刷新任务",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "RECORDS_CLEAN": {
+          "plugin": "records",
+          "id": "org.aurora.world:handlers/records/clean",
+          "kind": "hook_handler",
+          "summary": "关闭事件数据库连接",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        }
+      },
+      "components": {
+        "records": {
+          "plugin": "records",
+          "summary": "归档世界事件并维护有界 ctx 视图，不创建世界来源",
+          "inject": ["ctx", "storage"],
+          "plugs": ["RECORDS_PREPARE", "RECORDS_START", "RECORDS_STOP", "RECORDS_CLEAN"],
+          "slots": [],
+          "resources": ["records"]
+        }
+      }
+    },
+    "src/aurora_world/plugins/sources/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "sources": {
+          "entry_point": "aurora_world.sources",
+          "title": "世界来源",
+          "summary": "选择来源工厂、管理任务与接纳入口，借用记录服务",
+          "requires": ["aurora_world.records"],
+          "factory": "aurora_world.sources:plugin"
+        }
+      },
+      "definitions": {
+        "SOURCE_STATUS": {
+          "plugin": "sources",
+          "id": "org.aurora.world:state/sources",
+          "kind": "state_key",
+          "summary": "来源实例的非持久运行诊断"
+        },
+        "SOURCES": {
+          "plugin": "sources",
+          "id": "org.aurora.world:registries/sources",
+          "kind": "registry",
+          "summary": "世界来源工厂登记目录",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "SOURCES_PREPARE": {
+          "plugin": "sources",
+          "id": "org.aurora.world:handlers/sources/prepare",
+          "kind": "hook_handler",
+          "summary": "按选择创建来源并传入资源引用",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "SOURCES_START": {
+          "plugin": "sources",
+          "id": "org.aurora.world:handlers/sources/start",
+          "kind": "hook_handler",
+          "summary": "开放接纳入口并启动所选来源",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "SOURCES_STOP": {
+          "plugin": "sources",
+          "id": "org.aurora.world:handlers/sources/stop",
+          "kind": "hook_handler",
+          "summary": "停止接纳并结束所选来源任务",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "SOURCES_CLEAN": {
+          "plugin": "sources",
+          "id": "org.aurora.world:handlers/sources/clean",
+          "kind": "hook_handler",
+          "summary": "释放各来源持有的资源",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        }
+      },
+      "components": {
+        "sources": {
+          "plugin": "sources",
+          "summary": "选择来源工厂、管理任务与接纳入口，借用记录服务",
+          "inject": ["ctx", "instance_id"],
+          "plugs": ["SOURCES_PREPARE", "SOURCES_START", "SOURCES_STOP", "SOURCES_CLEAN"],
+          "slots": [],
+          "resources": ["sources"],
+          "inputs": ["records"]
+        }
+      }
+    },
+    "src/aurora_world/plugins/configuration/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "configuration": {
+          "entry_point": "aurora_world.configuration",
+          "title": "世界配置",
+          "summary": "声明来源选择与视图参数，在 config 阶段配置已绑定的来源所有者",
+          "requires": ["aurora_config", "aurora_world.records", "aurora_world.sources"],
+          "factory": "aurora_world.configuration:plugin"
+        }
+      },
+      "definitions": {
+        "CONFIG_STATE": {
+          "plugin": "configuration",
+          "id": "org.aurora.world:state/config",
+          "kind": "state_key",
+          "summary": "非持久的来源与视图配置"
+        },
+        "CONFIGURATION": {
+          "plugin": "configuration",
+          "id": "org.aurora.world:configs/sources",
+          "kind": "config",
+          "summary": "来源选择与视图参数声明",
+          "contract": "source_config",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "CONFIGURE": {
+          "plugin": "configuration",
+          "id": "org.aurora.world:handlers/sources/configure",
+          "kind": "hook_handler",
+          "summary": "读取配置并向来源所有者提交明确的来源选择",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        }
+      },
+      "components": {
+        "configuration": {
+          "plugin": "configuration",
+          "summary": "声明来源选择与视图参数，在 config 阶段配置已绑定的来源所有者",
+          "inject": ["ctx"],
+          "plugs": ["CONFIGURE"],
+          "slots": [],
+          "inputs": ["sources"],
+          "resources": [],
+          "resource_maps": ["source_resources"]
+        }
+      },
+      "contracts": {
+        "source_config": {
+          "format": "json-schema",
+          "file": "source_config.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "view": {
+                "type": "object",
+                "additionalProperties": false,
+                "default": {},
+                "properties": {
+                  "recent_seconds": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "default": 3600
+                  },
+                  "weather_seconds": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "default": 3600
+                  },
+                  "refresh_seconds": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "default": 30
+                  },
+                  "max_chars": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 32000
+                  },
+                  "max_event_chars": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 8000
+                  },
+                  "time_count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1
+                  },
+                  "weather_count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 4
+                  }
+                }
+              },
+              "sources": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["source", "source_id"],
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "format": "aurora-id"
+                    },
+                    "source_id": {
+                      "type": "string"
+                    },
+                    "presentation": {
+                      "type": "string",
+                      "enum": ["events", "time", "weather"]
+                    },
+                    "config": {
+                      "type": "object",
+                      "default": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_world/plugins/environment/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "environment": {
+          "entry_point": "aurora_world.environment",
+          "title": "环境观察",
+          "summary": "提供时间与天气观察工厂，实例创建时才初始化外部资源",
+          "requires": ["aurora_world.sources"],
+          "factory": "aurora_world.environment:plugin"
+        }
+      },
+      "definitions": {
+        "TIME": {
+          "plugin": "environment",
+          "id": "org.aurora.world:sources/environment/time",
+          "kind": "source",
+          "summary": "周期时间观察来源",
+          "contract": "time_config",
+          "register_to": {
+            "id": "org.aurora.world:registries/sources"
+          }
+        },
+        "WEATHER": {
+          "plugin": "environment",
+          "id": "org.aurora.world:sources/environment/weather",
+          "kind": "source",
+          "summary": "Open-Meteo 天气观察来源",
+          "contract": "weather_config",
+          "register_to": {
+            "id": "org.aurora.world:registries/sources"
+          }
+        }
+      },
+      "components": {},
+      "contracts": {
+        "time_config": {
+          "format": "json-schema",
+          "file": "time_config.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mean_seconds": {
+                "type": "number",
+                "minimum": 60,
+                "default": 1800.0
+              },
+              "deviation_seconds": {
+                "type": "number",
+                "minimum": 1,
+                "default": 300.0
+              }
+            }
+          }
+        },
+        "weather_config": {
+          "format": "json-schema",
+          "file": "weather_config.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["place", "latitude", "longitude"],
+            "properties": {
+              "place": {
+                "type": "string",
+                "pattern": "\\S"
+              },
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "interval_seconds": {
+                "type": "number",
+                "minimum": 60,
+                "maximum": 86400,
+                "default": 900
+              },
+              "timeout_seconds": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 30,
+                "default": 10
+              },
+              "temperature_change_c": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 50,
+                "default": 3
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
