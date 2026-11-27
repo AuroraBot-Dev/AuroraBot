@@ -1,0 +1,42 @@
+schema_version = 1
+
+[plugins.configuration]
+entry_point = "aurora_config"
+title = "声明配置服务"
+summary = "加载已登记的 TOML 配置，完成校验并注入 ctx"
+description = "只补齐缺失模板；运行配置状态不持久化；提供声明配置编辑入口。"
+requires = []
+
+[definitions.CONFIGS]
+plugin = "configuration"
+id = "org.aurora.config:registries/configs"
+kind = "registry"
+summary = "接收各插件提供的 ConfigSpec"
+register_to = { id = "org.aurora.core:registries/registries" }
+
+[definitions.LOAD]
+plugin = "configuration"
+id = "org.aurora.config:handlers/load"
+kind = "hook_handler"
+summary = "加载全部声明配置并注入 ctx，准备配置编辑服务"
+description = "无参数调用；配置错误正常传播；具体状态由已登记的 ConfigSpec 决定。"
+register_to = { id = "org.aurora.core:registries/hook_handlers" }
+
+[definitions.CONFIGURATION]
+plugin = "configuration"
+id = "org.aurora.config:endpoints/configuration"
+kind = "endpoint"
+summary = "列出、读取和保存已声明的 TOML 配置"
+register_to = { id = "org.aurora.api:registries/endpoints" }
+contract = "configuration_http"
+
+[contracts.configuration_http]
+format = "aurora-http"
+export = "aurora_config.editor_contract:describe_configuration"
+
+[components.configuration]
+plugin = "configuration"
+summary = "持有当前宿主的配置加载与编辑服务"
+inject = ["registry", "ctx", "storage"]
+plugs = ["LOAD"]
+slots = []

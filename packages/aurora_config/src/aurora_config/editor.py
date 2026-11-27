@@ -5,8 +5,6 @@ from aurora_core.ids import Id
 from .editor_contract import describe_configuration
 from .files import ConfigurationConflict, ConfigurationFiles
 
-CONFIGURATION = Id("org.aurora.config:endpoints/configuration")
-
 
 class ConfigurationEndpoint:
     def __init__(self) -> None:

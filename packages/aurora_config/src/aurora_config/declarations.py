@@ -7,10 +7,9 @@ from aurora_core.ctx import StateKey
 from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
 
+from ._meta import CONFIGS
 from .schema import ConfigSchema
 from .templates import ConfigTemplate
-
-CONFIGS = Id("org.aurora.config:registries/configs")
 
 
 @dataclass(frozen=True)

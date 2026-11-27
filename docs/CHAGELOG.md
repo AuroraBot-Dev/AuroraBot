@@ -1,5 +1,25 @@
 # 变更记录
 
+## 2026-11-27
+
+### 修复 CI 中 ESLint 配置测试的冷启动超时
+
+- Python 3.12 CI 作业的 1228 项 Python 测试均通过；失败发生在 ESLint 声明文件测试，第一次加载完整配置和插件被计入单条测试，耗时 5.6 秒超过默认 5 秒限制。
+- 两条配置用例改为在 `beforeAll` 中共用真实 ESLint 实例，只初始化一次。保留三斜线类型引用、普通注释修复和脚本排序的全部断言，不调整超时、不增加重试或跳过用例。
+- 验证：针对性 ESLint 配置测试 2 项通过；`uv run --locked aurora check --full` 通过，墙钟 38.06 秒，1228 项 Python、131 项前端和 5 项原生终端测试通过，保留 1 项既有平台跳过与 38 条既有依赖警告。
+
+### 落地配置插件元信息与集中装配首条链路
+
+- `aurora_config` 用 `plugin.meta.toml` 统一声明三个既有公共定义、配置服务组件和 HTTP 契约来源。生成包内 `_meta.py` 与静态 `plugin.meta.json`；`pyproject.toml` 继续独占发行与 entry point 信息。快速契约测试和构建钩子只读核对生成物，wheel 的 `.dist-info/extra_metadata/` 包含静态目录、清单和纯契约导出文件，查询不导入插件。
+- core 增加只标记身份的 `@plug(ID)`、组件工厂导出和已解析清单绑定，不解析 TOML。配置服务导出加载方法及本地停止接收动作，不声明目标槽、不自行建立连接；公共 ID、entry point、安装依赖及已有配置/快照身份不变。
+- 配置层读取集中 `assembly.toml`，CLI 提供 `--assembly-file` 和 host.toml 的 `assembly_file` 入口。装配文件统一选择插件、实例、生命周期依赖、连接及优先级；显式传入的插件对象也须被文件选中。文件模式不自动注入配置服务，与代码装配模式互斥；程序化宿主显式使用包内同一配置服务预设，不维护第二套接线。
+- 首轮只支持方法插头接入 core 的五个生命周期槽；其他插件、执行端口、状态绑定和 `plugin.config.toml(s)` 模板命名等待审查后迁移。world 仅作为既有配置声明消费者验证，未迁移 world 插件或创建来源实例。配置服务在同一 registry 中仍按单实例使用。
+- 修复 config 失败后的停止接收缺口：已进入 config 的组件会执行 stop_accepting，防止先前已就绪的配置编辑入口继续可用；未进入 prepare 的组件仍不执行 stop，保留既有 clean 与重试语义。
+- 新增 6 个测试函数：装饰器绑定和导出一致性、清单/静态目录/运行定义一致性，以及 4 条文件装配用例，分别覆盖真实 world 配置注入与关闭、删除/改接连接与显式插件选择、宿主相对路径与选择互斥、装配失败后释放存储。扩展现有宿主校验的 2 个冲突输入和生命周期失败收尾用例，不增加跨层重复行为矩阵。
+- Python 3.12 已安装开发环境验收：日常 `uv run --locked aurora check` 12.66 秒；完整 `uv run --locked aurora check --full` 39.91 秒，1228 项 Python、131 项前端和 5 项原生终端测试通过，1 项既有 Windows 专属用例在 Linux 上跳过，38 条既有依赖警告保留。保持原有 4 worker，未跳过检查或调用真实模型。
+- 11 个 wheel 构建成功，配置包另完成 sdist → wheel 构建。临时干净环境从 wheel 安装，验证 control 无需 agent/adapter，agent 无需 Bot/CLI/API/模型 SDK，并运行既有控制流和 ReAct 工具夹具；从发行元数据读取插件目录时没有任何 Aurora 模块导入。最终安装 CLI 后跑通文件装配、world TOML 注入、配置不入快照和关闭。实际用户数据未改动。
+- [方案及运行入口](aurora-meta-proposal.md) 已标明本轮已实现范围和待审查部分；README.md、AGENTS.md 未改动。
+
 ## 2026-11-25
 
 ### 接入完整开发历史并适配社区与 CI

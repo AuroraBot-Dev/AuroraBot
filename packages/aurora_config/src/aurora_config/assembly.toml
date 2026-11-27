@@ -1,0 +1,12 @@
+schema_version = 1
+plugins = ["aurora_config"]
+
+[instances.aurora_config]
+plugin = "aurora_config"
+component = "configuration"
+depends_on = []
+
+[[connections]]
+plug = { instance = "aurora_config", id = "org.aurora.config:handlers/load" }
+slot = { instance = "aurora_config", id = "org.aurora.core:lifecycle/config" }
+priority = 0

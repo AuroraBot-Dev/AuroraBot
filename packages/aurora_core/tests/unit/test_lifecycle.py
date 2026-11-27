@@ -344,10 +344,13 @@ def test_configuration_failure_does_not_prepare_components():
 
 def test_failed_config_cleans_only_entered_components_without_prepare_or_stop():
     async def scenario():
-        registry, _, hooks, lifecycle = environment(
-            [LifecycleComponent("a"), LifecycleComponent("b"), LifecycleComponent("c")]
-        )
         calls = []
+        registry, _, hooks, lifecycle = environment(
+            [
+                LifecycleComponent(name, stop_accepting=lambda name=name: calls.append(("quiesce", name)))
+                for name in ("a", "b", "c")
+            ]
+        )
 
         def fail():
             raise ValueError("配置失败")
@@ -364,7 +367,7 @@ def test_failed_config_cleans_only_entered_components_without_prepare_or_stop():
                 )
         with pytest.raises(ValueError, match="配置失败"):
             await lifecycle.start()
-        assert calls == [(CLEAN, "b"), (CLEAN, "a")]
+        assert calls == [("quiesce", "b"), ("quiesce", "a"), (CLEAN, "b"), (CLEAN, "a")]
 
     asyncio.run(scenario())
 

@@ -7,6 +7,7 @@ from importlib.metadata import version
 from typing import TextIO, cast
 
 from aurora_config import plugin as configuration_plugin
+from aurora_config.assembly import read_assembly
 from aurora_core.admission import AdmissionStatus, inspect_admissions
 from aurora_core.bootstrap import bootstrap
 from aurora_core.discovery import Plugin, load_plugins, register_plugins
@@ -43,21 +44,36 @@ async def run_cli(
     if options.connect_token_env is not None and options.connect is None:
         parser.error("--connect-token-env 必须与 --connect 同时使用")
     if options.connect is not None and (
-        options.data_dir is not None or options.assembly is not None or options.config is not None or options.plugin
+        options.data_dir is not None
+        or options.assembly is not None
+        or options.assembly_file is not None
+        or options.config is not None
+        or options.plugin
     ):
-        parser.error("--connect 不能与 --data-dir、--assembly、--config 或 --plugin 同时使用")
+        parser.error("--connect 不能与 --data-dir、--assembly、--assembly-file、--config 或 --plugin 同时使用")
     registry = bootstrap()
     if options.connect is None and options.data_dir is not None:
         configured = read_host_config(options.data_dir)
-        options.plugin = options.plugin or cast(list[str], configured.get("plugins", []))
-        if options.assembly is None and "assembly" in configured:
-            options.assembly = Id(cast(str, configured["assembly"]))
+        if options.assembly is None and options.assembly_file is None:
+            if "assembly" in configured:
+                options.assembly = Id(cast(str, configured["assembly"]))
+            elif "assembly_file" in configured:
+                options.assembly_file = options.data_dir / "config" / cast(str, configured["assembly_file"])
+        if options.assembly_file is None:
+            options.plugin = options.plugin or cast(list[str], configured.get("plugins", []))
+    plan = None
+    if options.assembly_file is not None:
+        if options.plugin:
+            parser.error("--assembly-file 模式的插件由装配文件统一选择，不能同时使用 --plugin")
+        plan = read_assembly(options.assembly_file)
+        options.plugin = list(plan.plugins)
     install_commands(registry)
     install_lifecycle_slots(registry)
-    plugins = tuple(plugins)
-    if not any(item.name == "aurora_config" for item in plugins):
+    plugins = tuple(item for item in plugins if plan is None or item.name in plan.plugins)
+    if plan is None and not any(item.name == "aurora_config" for item in plugins):
         plugins = (configuration_plugin(), *plugins)
-    register_plugins(registry, load_plugins(explicit=(*discover_commands(), *plugins), enabled=options.plugin))
+    loaded = load_plugins(explicit=(*discover_commands(), *plugins), enabled=options.plugin)
+    register_plugins(registry, loaded)
     accepted = {
         admission.source
         for admission in inspect_admissions(registry)
@@ -105,8 +121,8 @@ async def run_cli(
     if command.assembly_argument is not None:
         selected = values.pop(command.assembly_argument, None)
         if selected is not None:
-            if requested_assembly is not None:
-                parser.error("命令的装配参数与 --assembly 不能同时使用")
+            if requested_assembly is not None or plan is not None:
+                parser.error("命令的装配参数与 --assembly 或集中装配文件不能同时使用")
             assembly = selected
     configure_logging(
         log_dir=options.data_dir.resolve() / "logs",
@@ -114,5 +130,12 @@ async def run_cli(
         console_tracebacks=console_tracebacks,
     )
     return await host.execute(
-        context, command, values, data_dir=options.data_dir, assembly=assembly, config=options.config
+        context,
+        command,
+        values,
+        data_dir=options.data_dir,
+        assembly=assembly,
+        config=options.config,
+        plan=plan,
+        plugins=loaded,
     )

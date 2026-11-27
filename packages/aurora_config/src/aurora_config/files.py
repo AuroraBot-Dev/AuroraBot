@@ -13,7 +13,8 @@ from aurora_core.ctx import StateAddress, StateKey, StateRecord
 from aurora_core.ids import Id
 from aurora_core.registry import DefinitionRegistry
 
-from .declarations import CONFIGS, ConfigReceiver, ConfigSpec
+from ._meta import CONFIGS
+from .declarations import ConfigReceiver, ConfigSpec
 from .templates import checked_path, copy_missing, read_toml
 
 

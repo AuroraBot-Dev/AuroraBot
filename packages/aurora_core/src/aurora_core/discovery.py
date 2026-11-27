@@ -1,10 +1,13 @@
 """显式选择插件并收集定义；entry point 仅承担发现职责。"""
 
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
 from importlib.metadata import EntryPoint, entry_points
 
+from .components import ComponentExport, ComponentFactory
 from .registry import DefinitionRegistry, RegistryEntry
+
+__all__ = ["ComponentFactory", "Plugin", "load_plugins", "register_plugins"]
 
 ENTRY_POINT_GROUP = "aurora.plugins"
 
@@ -16,6 +19,7 @@ class Plugin:
     name: str
     entries: tuple[RegistryEntry, ...] = ()
     requires: tuple[str, ...] = ()
+    components: Mapping[str, ComponentExport] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.name:
