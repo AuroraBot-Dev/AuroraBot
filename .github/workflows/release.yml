@@ -47,7 +47,7 @@ jobs:
           subprocess.run(['git', 'merge-base', '--is-ancestor', sha, 'origin/main'], check=True)
           paths = ['pyproject.toml', 'tooling/aurora_meta_build/pyproject.toml'] + [
               f'packages/{name}/pyproject.toml'
-              for name in ('aurora_core', 'aurora_config', 'aurora_control', 'aurora_agent',
+              for name in ('aurora_core', 'aurora_config', 'aurora_host', 'aurora_control', 'aurora_agent',
                            'aurora_tools', 'aurora_model', 'aurora_mcp', 'aurora_bot', 'aurora_cli', 'aurora_api',
                            'aurora_logging', 'aurora_world')
           ]

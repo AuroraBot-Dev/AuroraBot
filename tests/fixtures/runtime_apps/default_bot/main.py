@@ -12,7 +12,7 @@ from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_bot.assembly import DefaultAssembly
 from aurora_bot.assembly import plugin as assembly_plugin
-from aurora_config import CONFIGURATION, configuration_component
+from aurora_config import CONFIGURATION
 from aurora_config import plugin as configuration_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, component_entries
 from aurora_core.bootstrap import bootstrap
@@ -24,6 +24,7 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_host import configuration_component
 from aurora_model import ChatRequest, ModelConfig
 from aurora_model.config import BINDINGS
 from aurora_model.configuration import plugin as model_configuration_plugin

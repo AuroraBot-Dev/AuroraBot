@@ -49,7 +49,7 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
 
             if phase == "write":
                 files = {
-                    "org.aurora.bot/config.toml": {
+                    "org.aurora.bot/plugin.config.toml": {
                         **settings(tools=False),
                         "tools": [
                             {"tool": str(identity), "instance_id": f"memory/{action}"}
@@ -169,7 +169,7 @@ def test_unbounded_task_archives_during_index_outage_and_recovers_queue_on_resta
                 encoding="utf-8",
             )
             for value, relative in (
-                (config, "org.aurora.bot/config.toml"),
+                (config, "org.aurora.bot/plugin.config.toml"),
                 (profiles, "org.aurora.model/profiles.toml"),
                 (bindings, "org.aurora.model/bindings.toml"),
             ):

@@ -49,3 +49,18 @@ def assemble(
         world_component_factory=sources,
     )
     return (clients.component(), tools.component(), *bot.components(depends_on=(tools.instance_id,)))
+
+
+def create_host(root: Path, *, workspace_root: Path, plugins=()):
+    """产品入口显式构造 MCP 与 Bot 组件，交由通用宿主管理。"""
+    from aurora_host import Host, read_assembly
+    from aurora_host.configuration import select_assembly
+
+    plan = read_assembly(select_assembly(root))
+    host = Host.create(plan, plugins, root, workspace_root=workspace_root)
+    try:
+        host.mount(assemble(**host.services))
+    except BaseException:
+        host.close()
+        raise
+    return host

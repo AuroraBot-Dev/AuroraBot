@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import cast
 
 import uvicorn
-from aurora_config import configuration_component
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
@@ -18,6 +17,18 @@ from aurora_core.persistence import ContextPersistence
 from aurora_core.storage import StorageService
 from aurora_mcp import CLIENT_STATUS, CONFIG_STATE, PROTOCOL_VERSION, MCPClientError, MCPClients
 from mcp.server import MCPServer
+
+
+def configuration_component(registry, ctx, hooks, storage):
+    from aurora_config._meta import LOAD
+    from aurora_config.service import ConfigurationService
+    from aurora_core.lifecycle import CONFIG, LifecycleComponent
+
+    service = ConfigurationService(registry, ctx, storage)
+    hooks.connect(
+        CONFIG, LOAD, slot_instance="aurora_config", handler_instance="aurora_config", target=service.configure
+    )
+    return LifecycleComponent("aurora_config", stop_accepting=service.close)
 
 
 async def run(root: Path) -> dict:
@@ -50,7 +61,7 @@ async def run(root: Path) -> dict:
         install_lifecycle_slots(registry)
         register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_mcp"]))
         ctx, hooks, storage = Context(registry), HookConnections(registry), StorageService(root)
-        config = storage.configuration_directory() / "org.aurora.mcp" / "config.toml"
+        config = storage.configuration_directory() / "org.aurora.mcp" / "plugin.config.toml"
         config.parent.mkdir(parents=True, exist_ok=True)
         text = (
             f'schema_version = 2\n[servers.local]\ntype = "remote"\nprotocol = "2026-07-28"\nurl = "http://127.0.0.1:{port}/mcp"\n'

@@ -16,7 +16,7 @@ def configured_plugins(plugins):
         entries = []
         for entry in plugin.entries:
             if isinstance(entry.target, ConfigSpec) and str(entry.target.state) in _RESOURCES:
-                template = ConfigTemplate(__name__, "config.tomls/" + _RESOURCES[str(entry.target.state)])
+                template = ConfigTemplate(__name__, "plugin.config.tomls/" + _RESOURCES[str(entry.target.state)])
                 entry = replace(entry, target=replace(entry.target, template=template))
             entries.append(entry)
         yield replace(plugin, entries=tuple(entries))

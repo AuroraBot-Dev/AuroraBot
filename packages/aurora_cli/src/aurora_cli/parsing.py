@@ -75,11 +75,8 @@ def root_parser() -> argparse.ArgumentParser:
     parser.add_argument("-d", "--data-dir", type=Path, help="宿主独占的数据目录；本地宿主命令必填")
     parser.add_argument("--connect", help="连接已有宿主的 HTTP 地址，执行 ctx 命令，无需数据目录")
     parser.add_argument("--connect-token-env", help="连接认证所用的运行期令牌环境变量名")
-    parser.add_argument("--plugin", action="append", default=[], help="启用 aurora.plugins 入口，可重复")
     parser.add_argument("--namespace", default="org.aurora.cli", help="交互短名的命名空间")
-    assembly = parser.add_mutually_exclusive_group()
-    assembly.add_argument("--assembly", type=Id, help="命令运行期间启动的装配完整 ID")
-    assembly.add_argument("--assembly-file", type=Path, help="集中装配 TOML 文件；插件与实例连接均由该文件选择")
+    parser.add_argument("--assembly-file", type=Path, help="集中装配 TOML 文件；插件与实例连接均由该文件选择")
     parser.add_argument("-c", "--config", type=json_object, help="恢复后、prepare 前写入 CLI 配置状态的 JSON 对象")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="命令与原始参数；全局选项须放在命令前")
     return parser

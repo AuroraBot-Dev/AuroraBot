@@ -5,7 +5,12 @@ from importlib import metadata
 from aurora_core.discovery import ENTRY_POINT_GROUP, load_plugins
 
 
-def test_control_distribution_owns_its_plugin_and_definitions():
+def test_host_dependencies_and_control_distribution_boundary():
+    assert set(metadata.requires("aurora-host") or ()) == {
+        "aurora-core>=0.1.0",
+        "aurora-config>=0.1.0",
+        "aurora-control>=0.1.0",
+    }
     assert metadata.requires("aurora-control") == ["aurora-core>=0.1.0"]
     entries = [point for point in metadata.entry_points(group=ENTRY_POINT_GROUP) if point.name == "aurora_control"]
     assert len(entries) == 1
@@ -110,7 +115,7 @@ def test_model_and_mcp_templates_belong_to_independent_distributions(tmp_path):
     assert {item.path.relative_to(tmp_path).as_posix() for item in files} == {
         "org.aurora.model/profiles.toml",
         "org.aurora.model/bindings.toml",
-        "org.aurora.mcp/config.toml",
+        "org.aurora.mcp/plugin.config.toml",
     }
     assert {item.spec.template.package for item in files} == {"aurora_model", "aurora_mcp"}
     assert all(item.spec.template.source().read_bytes() for item in files)

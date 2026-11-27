@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import tomllib
+from importlib.resources import files
 from io import StringIO
 from pathlib import Path
 from typing import cast
@@ -17,14 +19,14 @@ from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_agent.runtime import RunHandle, Submission
 from aurora_api.contract import describe_contract
 from aurora_api.server import serve
-from aurora_bot.assembly import ASSEMBLY, DefaultAssembly
+from aurora_bot.assembly import DefaultAssembly, assemble
 from aurora_bot.assembly import plugin as assembly_plugin
 from aurora_bot.assembly_config import AGENTS, CONFIG, RUN, WORK
 from aurora_bot.conversation import CONVERSATION
 from aurora_bot.conversation_contract import describe_conversation
 from aurora_bot.operations import RUN_ACTIVATE, RUN_CANCEL, RUN_CONTROL, RUN_SUBMIT
-from aurora_cli.commander import run_cli
-from aurora_config import configuration_component
+from aurora_cli.commander import run_cli as execute_cli
+from aurora_cli.parsing import root_parser
 from aurora_config import plugin as configuration_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, component_entries
 from aurora_core.bootstrap import bootstrap
@@ -38,6 +40,7 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_host import AssemblyPlan, Host, configuration_component
 from aurora_model import ChatCapabilities, UnsupportedCapability
 from aurora_model.config import BINDINGS
 from aurora_model.config import CONFIG as MODEL_CONFIG
@@ -154,6 +157,23 @@ def test_litellm_default_assembly_tool_roundtrip_and_restore(tmp_path, monkeypat
         assert len(transports) == 2 and all(transport.is_closed() for transport in transports)
 
     asyncio.run(scenario())
+
+
+async def run_cli(argv, *, plugins=(), output=None):
+    options = root_parser().parse_args(argv)
+    if options.data_dir is None or options.command[:1] == ["id"]:
+        return await execute_cli(argv, plugins=(configuration_plugin(), *plugins), output=output)
+    plan = AssemblyPlan.parse(
+        tomllib.loads(files("aurora_config").joinpath("assembly.toml").read_text(encoding="utf-8"))
+    )
+    selected = (configuration_plugin(), *plugins)
+    plan = AssemblyPlan(tuple(item.name for item in selected), plan.instances, plan.connections)
+    runtime = Host.create(plan, selected, options.data_dir, workspace_root=options.root)
+    try:
+        runtime.mount(assemble(**runtime.services))
+        return await execute_cli(argv, runtime=runtime, output=output)
+    finally:
+        await runtime.stop()
 
 
 def settings(*, tools=True):
@@ -288,7 +308,7 @@ def setup(
                 if configure is not None:
                     configure()
                     for key, relative in (
-                        (CONFIG, "org.aurora.bot/config.toml"),
+                        (CONFIG, "org.aurora.bot/plugin.config.toml"),
                         (MODEL_CONFIG, "org.aurora.model/profiles.toml"),
                         (BINDINGS, "org.aurora.model/bindings.toml"),
                     ):
@@ -523,7 +543,7 @@ def test_registered_assembly_runs_through_cli_host_without_bot_cli_dependency(tm
         )
         output = StringIO()
         status = await run_cli(
-            ["--data-dir", str(tmp_path), "--assembly", str(ASSEMBLY), "ctx", "get", str(CONFIG)],
+            ["--data-dir", str(tmp_path), "ctx", "get", str(CONFIG)],
             plugins=(
                 adapter_plugin(),
                 model_configuration_plugin(),
@@ -1070,7 +1090,7 @@ async def cli_setup(root, *, behavior="normal"):
         assembly_plugin(),
         Plugin("cli_fixture", tuple(entry for entry in registry.entries() if entry.provider == "test")),
     )
-    argv = ["--data-dir", str(root), "--assembly", str(ASSEMBLY), "--namespace", "org.aurora.bot"]
+    argv = ["--data-dir", str(root), "--namespace", "org.aurora.bot"]
     return plugins, argv, clients, events, entered
 
 

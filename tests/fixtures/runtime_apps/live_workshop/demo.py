@@ -430,7 +430,8 @@ def plugins(*, with_world=True):
                 replace(
                     entry,
                     target=replace(
-                        entry.target, template=ConfigTemplate(__name__, "config.tomls/" + resources[entry.target.state])
+                        entry.target,
+                        template=ConfigTemplate(__name__, "plugin.config.tomls/" + resources[entry.target.state]),
                     ),
                 )
                 if isinstance(entry.target, ConfigSpec) and entry.target.state in resources

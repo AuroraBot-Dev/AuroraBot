@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import cast
 
 import uvicorn
-from aurora_config import configuration_component
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
@@ -44,6 +43,18 @@ class CountingBus(InMemorySubscriptionBus):
             unsubscribe()
 
         return close
+
+
+def configuration_component(registry, ctx, hooks, storage):
+    from aurora_config._meta import LOAD
+    from aurora_config.service import ConfigurationService
+    from aurora_core.lifecycle import CONFIG, LifecycleComponent
+
+    service = ConfigurationService(registry, ctx, storage)
+    hooks.connect(
+        CONFIG, LOAD, slot_instance="aurora_config", handler_instance="aurora_config", target=service.configure
+    )
+    return LifecycleComponent("aurora_config", stop_accepting=service.close)
 
 
 async def until(predicate):
@@ -109,8 +120,8 @@ async def run(root: Path) -> dict:
             )
             ctx, hooks, storage = Context(registry), HookConnections(registry), StorageService(root)
             directory = storage.configuration_directory()
-            connection_path = directory / "org.aurora.mcp" / "config.toml"
-            source_path = directory / "org.aurora.world" / "config.toml"
+            connection_path = directory / "org.aurora.mcp" / "plugin.config.toml"
+            source_path = directory / "org.aurora.world" / "plugin.config.toml"
             connection_path.parent.mkdir(parents=True, exist_ok=True)
             source_path.parent.mkdir(parents=True, exist_ok=True)
             connection_path.write_text(

@@ -24,7 +24,6 @@ def install_commands(registry: DefinitionRegistry) -> None:
                 "operation": "完整操作 ID，与 executor 二选一",
                 "executor": "接收 CommandContext 与命名参数的同步或异步 callable",
                 "runtime": "是否需要运行期宿主；operation 固定为 true，executor 默认为 false",
-                "assembly_argument": "作为宿主装配选择的 id 参数名，传递后不再交给执行器",
                 "arguments": "name/type/option/required 参数列表",
                 "passthrough": "可选的非空透传帮助文本；执行器或 operation 接收原样字符串列表 passthrough",
             },

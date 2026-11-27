@@ -49,7 +49,7 @@ def test_file_assembly_loads_world_configuration_and_closes_editor(tmp_path):
     asyncio.run(run_cli([*arguments, "probe"], plugins=[probe], output=output))
     assert endpoints[0].files is None
     assembly_file(tmp_path, world=True)
-    path = data / "config/org.aurora.world/config.toml"
+    path = data / "config/org.aurora.world/plugin.config.toml"
     expected = SOURCE_CONFIG.parse(read_toml(path))
     output = StringIO()
     asyncio.run(run_cli([*arguments, "ctx/get", str(CONFIG_STATE)], output=output))
@@ -59,7 +59,7 @@ def test_file_assembly_loads_world_configuration_and_closes_editor(tmp_path):
     assert not (data / "config/org.aurora.bot").exists()
 
 
-def test_missing_connection_does_not_implicitly_run_configuration(tmp_path):
+def test_missing_instance_or_connection_does_not_implicitly_run_configuration(tmp_path):
     assembly = assembly_file(tmp_path, world=True, connected=False)
     data = tmp_path / "data"
     output = StringIO()
@@ -78,7 +78,16 @@ def test_missing_connection_does_not_implicitly_run_configuration(tmp_path):
         run_cli(["-d", str(data), "--assembly-file", str(assembly), "ctx/get", str(CONFIG_STATE)], output=output)
     )
     assert json.loads(output.getvalue())["sources"] == []
-    assembly.write_text("schema_version = 1\nplugins = []\n[instances]\n", encoding="utf-8")
+    assembly.write_text(
+        'schema_version = 2\nplugins = ["aurora_config", "aurora_world", "aurora_world.configuration"]\n[instances]\n',
+        encoding="utf-8",
+    )
+    output = StringIO()
+    bare = tmp_path / "without-instance"
+    asyncio.run(run_cli(["-d", str(bare), "--assembly-file", str(assembly), "ctx/list"], output=output))
+    assert json.loads(output.getvalue()) == []
+    assert not (bare / "config").exists()
+    assembly.write_text("schema_version = 2\nplugins = []\n[instances]\n", encoding="utf-8")
     output = StringIO()
     asyncio.run(run_cli(["--assembly-file", str(assembly), "id/list"], plugins=[plugin()], output=output))
     assert str(CONFIGURATION) not in output.getvalue()

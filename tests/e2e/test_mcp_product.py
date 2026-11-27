@@ -13,8 +13,10 @@ import httpx
 import pytest
 import tomli_w
 import uvicorn
+from aurora_bot.mcp import create_host
 from aurora_bot.mcp_preset import initialize
-from aurora_cli.commander import run_cli
+from aurora_cli.commander import run_cli as execute_cli
+from aurora_cli.parsing import root_parser
 from aurora_core import Id
 from aurora_core.discovery import Plugin
 from aurora_core.registry import RegistryEntry
@@ -24,6 +26,15 @@ from aurora_model.testing import FakeModel, FakeReply
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_tools_roundtrip.py"
 ADAPTER = Id("dev.product:adapters/fake")
+
+
+async def run_cli(argv, *, plugins=(), output=None):
+    options = root_parser().parse_args(argv)
+    runtime = create_host(options.data_dir, workspace_root=options.root, plugins=plugins)
+    try:
+        return await execute_cli(argv, runtime=runtime, output=output)
+    finally:
+        await runtime.stop()
 
 
 @asynccontextmanager
@@ -58,12 +69,19 @@ async def service(root, transport):
 
 def seed(root, server, *, explicit=False):
     assert initialize(root, api=True, output=StringIO()) == 0
+    assembly = root / "config/assembly.toml"
+    assembly.write_text(
+        assembly.read_text(encoding="utf-8").replace("plugins = [", 'plugins = ["test.product", '), encoding="utf-8"
+    )
     name = automatic_name("sample", "echo")
     values = {
-        "org.aurora.mcp/config.toml": {"schema_version": 2, "servers": {"sample": {**server, "protocol": "auto"}}},
+        "org.aurora.mcp/plugin.config.toml": {
+            "schema_version": 2,
+            "servers": {"sample": {**server, "protocol": "auto"}},
+        },
         "org.aurora.model/profiles.toml": {"test": {"adapter": str(ADAPTER), "model": "fake"}},
         "org.aurora.model/bindings.toml": {"reasoning": "test"},
-        "org.aurora.bot/config.toml": {
+        "org.aurora.bot/plugin.config.toml": {
             "instance_id": "main",
             "model_role": "reasoning",
             "streaming": False,

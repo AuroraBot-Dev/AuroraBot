@@ -357,7 +357,7 @@ def test_source_lifecycle_and_partial_start_cleanup(tmp_path, fail_start):
 
         for relative, value in (
             ("org.aurora.bot/cadence.toml", {}),
-            ("org.aurora.world/config.toml", {"sources": [{"source": str(source), "source_id": "selected"}]}),
+            ("org.aurora.world/plugin.config.toml", {"sources": [{"source": str(source), "source_id": "selected"}]}),
         ):
             path = tmp_path / "config" / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -454,7 +454,7 @@ def test_environment_sources_wake_without_changing_world_presentation(tmp_path, 
     from aurora_world.environment import plugin as environment_plugin
 
     async def scenario():
-        path = tmp_path / "config/org.aurora.world/config.toml"
+        path = tmp_path / "config/org.aurora.world/plugin.config.toml"
         path.parent.mkdir(parents=True)
         source = {"source": str(TIME), "source_id": "selected"}
         if archive:

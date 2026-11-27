@@ -25,6 +25,18 @@ from aurora_world import (
 )
 
 
+def configuration_component(registry, ctx, hooks, storage):
+    from aurora_config._meta import LOAD
+    from aurora_config.service import ConfigurationService
+    from aurora_core.lifecycle import CONFIG, LifecycleComponent
+
+    service = ConfigurationService(registry, ctx, storage)
+    hooks.connect(
+        CONFIG, LOAD, slot_instance="aurora_config", handler_instance="aurora_config", target=service.configure
+    )
+    return LifecycleComponent("aurora_config", stop_accepting=service.close)
+
+
 async def main(root, *, configured=False):
     registry = bootstrap()
     enabled = ["aurora_world"]
@@ -52,11 +64,11 @@ async def main(root, *, configured=False):
     storage = StorageService(root)
     records = WorldRecords(ctx, storage)
     if configured:
-        from aurora_config import configuration_component, copy_missing
+        from aurora_config import copy_missing
         from aurora_world.configuration import configured_sources_component
 
         copy_missing(
-            storage.configuration_directory() / "org.aurora.world" / "config.toml",
+            storage.configuration_directory() / "org.aurora.world" / "plugin.config.toml",
             f'[[sources]]\nsource = "{identity}"\nsource_id = "workshop/sensor"\n'.encode(),
         )
         components = [

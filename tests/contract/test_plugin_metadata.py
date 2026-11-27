@@ -10,16 +10,12 @@ from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.plugins.model._meta import EXECUTE
 from aurora_config import plugin as config_plugin
 from aurora_config.editor_contract import describe_configuration
-from aurora_control import ExecutionPlug, ExecutionRequest, ExecutionSlot, StateBinding
+from aurora_control import ExecutionPlug, ExecutionRequest, ExecutionSlot
 from aurora_control import plugin as control_plugin
 from aurora_control._meta import SERIAL_CHILDREN, SERIAL_EXECUTE
-from aurora_core.bootstrap import bootstrap
-from aurora_core.ctx import Context, StateKey
-from aurora_core.discovery import register_plugins
-from aurora_core.hooks import HookConnections
+from aurora_core.ctx import StateKey
 from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
-from aurora_core.storage import StorageService
 from aurora_meta_build import generate, outputs
 from aurora_model.testing import FakeModel, FakeReply
 
@@ -99,42 +95,100 @@ module = "src/aurora_agent/plugins/model/_meta.py"
         generate(tmp_path, check=True)
 
 
-def test_serial_and_model_exports_preserve_state_handshake_and_explicit_resource_binding(tmp_path):
-    config, control, model = config_plugin(), control_plugin(), model_plugin()
-    registry = bootstrap()
-    register_plugins(registry, (config, control, model))
-    key = Id("dev.metadata:state/work")
-    registry.register(RegistryEntry(key, "state_key", StateKey(), "test"))
-    ctx, hooks = Context(registry), HookConnections(registry)
-    states = {role: StateBinding(key, (("role", role),)) for role in ("input", "output")}
-    services = {"ctx": ctx, "hooks": hooks, "registry": registry, "storage": StorageService(tmp_path)}
-    configuration = config.components["configuration"].create(services, instance_id="configuration")
-    assert configuration.exports.resources["configuration"] is configuration.instance
-    serial = control.components["serial"].create(services, instance_id="sequence", states=states)
-    call = model.components["model_call"].create(
-        services, instance_id="inference", states=states, options={"streaming": False}
-    )
-    assert not hooks.for_slot(SERIAL_CHILDREN, "sequence")
-    with pytest.raises(KeyError, match="chat"):
-        call.bind({})
+def test_host_file_assembly_connects_real_ports_states_and_resource_owner(tmp_path):
+    import tomli_w
+    from aurora_core.components import ComponentDeclaration, ComponentExport, ComponentFactory, InstanceExport
+    from aurora_core.discovery import Plugin
+    from aurora_core.lifecycle import CLEAN
+    from aurora_host import Host, read_assembly
+
     client = FakeModel(lambda _: FakeReply(("已绑定",)))
-    call.bind({"chat": client})
-    slot = cast(ExecutionSlot, serial.exports.slots[SERIAL_CHILDREN])
-    plug = cast(ExecutionPlug, call.exports.plugs[EXECUTE])
-    link = slot.connect(plug)
-    assert link.slot_states == states == plug.states
-    assert slot is serial.instance.slot
-    request = ExecutionRequest("run")
-    states["input"].set(ctx, request, {"messages": [{"role": "user", "content": "测试"}]})
+    key = Id("dev.metadata:state/work")
+    close = Id("dev.metadata:handlers/close")
+    resource = Plugin(
+        "test.resource",
+        (
+            RegistryEntry(key, "state_key", StateKey(), "test.resource"),
+            RegistryEntry(
+                close,
+                "hook_handler",
+                client.aclose,
+                "test.resource",
+                register_to=Id("org.aurora.core:registries/hook_handlers"),
+            ),
+        ),
+        components={
+            "client": ComponentExport(
+                ComponentFactory(
+                    lambda: client, lambda value: InstanceExport(resources={"chat": value}, plugs={close: value.aclose})
+                ),
+                ComponentDeclaration(resources=("chat",), plugs=(close,)),
+            )
+        },
+    )
+    states = {
+        "input": {"key": str(key), "scope": "instance", "location": {"instance_id": "conversation", "part": "input"}},
+        "output": {"key": str(key), "scope": "run", "location": {"part": "output"}},
+    }
+    path = tmp_path / "assembly.toml"
+    path.write_text(
+        tomli_w.dumps(
+            {
+                "schema_version": 2,
+                "plugins": ["aurora_control", "aurora_agent.model", "test.resource"],
+                "instances": {
+                    "sequence": {
+                        "plugin": "aurora_control",
+                        "component": "serial",
+                        "states": states,
+                        "depends_on": ["inference"],
+                    },
+                    "inference": {
+                        "plugin": "aurora_agent.model",
+                        "component": "model_call",
+                        "states": states,
+                        "options": {"streaming": False},
+                        "resources": {"chat": {"instance": "client", "export": "chat"}},
+                        "depends_on": ["client"],
+                    },
+                    "client": {"plugin": "test.resource", "component": "client"},
+                },
+                "connections": [
+                    {
+                        "plug": {"instance": "inference", "id": str(EXECUTE)},
+                        "slot": {"instance": "sequence", "id": str(SERIAL_CHILDREN)},
+                        "priority": 7,
+                    },
+                    {
+                        "plug": {"instance": "client", "id": str(close)},
+                        "slot": {"instance": "client", "id": str(CLEAN)},
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     async def run():
-        await cast(ExecutionPlug, serial.exports.plugs[SERIAL_EXECUTE])(request)
-        assert cast(dict, states["output"].get(ctx, request))["text"] == "已绑定"
-        assert not client.closed
-        await client.aclose()
+        host = Host.create(read_assembly(path), [resource], tmp_path / "data", workspace_root=tmp_path)
+        try:
+            sequence, call = (host.graph.instances[name] for name in ("sequence", "inference"))
+            slot = cast(ExecutionSlot, sequence.exports.slots[SERIAL_CHILDREN])
+            plug = cast(ExecutionPlug, call.exports.plugs[EXECUTE])
+            assert slot is sequence.instance.slot
+            assert host.graph.instances["client"].exports.resources["chat"] is client
+            assert len(host.graph.connections) == 2
+            await host.start()
+            first, second = ExecutionRequest("first"), ExecutionRequest("second")
+            plug.states["input"].set(host.ctx, first, {"messages": [{"role": "user", "content": "测试"}]})
+            assert plug.states["input"].address(first) == plug.states["input"].address(second)
+            assert plug.states["output"].address(first) != plug.states["output"].address(second)
+            for request in (first, second):
+                await host.run(cast(ExecutionPlug, sequence.exports.plugs[SERIAL_EXECUTE]), request)
+                assert cast(dict, plug.states["output"].get(host.ctx, request))["text"] == "已绑定"
+            assert not client.closed
+        finally:
+            await host.stop()
+        assert client.closed
 
-    try:
-        asyncio.run(run())
-    finally:
-        hooks.close()
-        ctx.close()
+    asyncio.run(run())

@@ -78,8 +78,8 @@ def test_runtime_executor_writes_transient_configuration_without_id_special_case
     )
     assert output.getvalue() == "已写入\n"
     output = StringIO()
-    asyncio.run(run_cli(["--data-dir", str(tmp_path), "ctx/get", "org.aurora.cli:state/config"], output=output))
-    assert json.loads(output.getvalue()) == {}
+    asyncio.run(run_cli(["--data-dir", str(tmp_path), "ctx/list"], output=output))
+    assert json.loads(output.getvalue()) == []
 
 
 def test_entry_point_command_is_only_loaded_when_enabled(tmp_path, monkeypatch):
@@ -102,7 +102,9 @@ def test_entry_point_command_is_only_loaded_when_enabled(tmp_path, monkeypatch):
     asyncio.run(run_cli(["--help"], output=output))
     assert "dev.test:commands/external" not in output.getvalue()
     output = StringIO()
-    assert asyncio.run(run_cli(["--plugin", "external", "dev.test:commands/external"], output=output)) == 0
+    assembly = tmp_path / "assembly.toml"
+    assembly.write_text('schema_version = 2\nplugins = ["external"]\n[instances]\n', encoding="utf-8")
+    assert asyncio.run(run_cli(["--assembly-file", str(assembly), "dev.test:commands/external"], output=output)) == 0
     assert output.getvalue() == "external\n"
 
 

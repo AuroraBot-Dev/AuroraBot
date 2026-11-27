@@ -5,11 +5,14 @@ import json
 from io import StringIO
 
 import pytest
+import tomli_w
 from aurora_cli.commander import run_cli
+from aurora_config import read_toml
 from aurora_core import Id, entry_from, hook_handler
+from aurora_core.components import ComponentDeclaration, ComponentExport, ComponentFactory, InstanceExport
 from aurora_core.discovery import Plugin
-from aurora_core.lifecycle import PREPARE, LifecycleComponent
-from aurora_core.registry import RegistryEntry
+from aurora_core.lifecycle import PREPARE
+from aurora_host.configuration import initialize_host_config
 
 CONFIG = Id("org.aurora.cli:state/config")
 
@@ -22,8 +25,12 @@ def write_host(root, content):
 
 def test_host_enables_plugins_before_discovery_without_initializing_resources(tmp_path, monkeypatch):
     monkeypatch.setenv("COLUMNS", "160")
-    content = 'plugins = ["aurora_model", "aurora_model.configuration", "aurora_model.litellm"]\nassembly = "dev.missing:assemblies/app"\n'
+    content = 'assembly_file = "app.toml"\n'
     write_host(tmp_path, content)
+    (tmp_path / "config/app.toml").write_text(
+        'schema_version = 2\nplugins = ["aurora_config", "aurora_model", "aurora_model.configuration", "aurora_model.litellm"]\n[instances]\n',
+        encoding="utf-8",
+    )
     output = StringIO()
     asyncio.run(run_cli(["-d", str(tmp_path), "id", "list"], output=output))
     assert "org.aurora.model:state/config" in output.getvalue()
@@ -34,26 +41,43 @@ def test_host_enables_plugins_before_discovery_without_initializing_resources(tm
 
 
 def test_host_default_assembly_reads_toml_before_prepare_and_keeps_runtime_edits_transient(tmp_path):
-    assembly = Id("dev.configuration:assemblies/default")
-    write_host(tmp_path, f'assembly = "{assembly}"\n')
+    initialize_host_config(tmp_path / "config")
+    assembly_path = tmp_path / "config/assembly.toml"
+    plan = read_toml(assembly_path)
+    plan["plugins"].append("probe")
+    plan["instances"]["app"] = {"plugin": "probe", "component": "probe"}
+    plan["connections"].append(
+        {
+            "plug": {"instance": "app", "id": "dev.configuration:handlers/prepare"},
+            "slot": {"instance": "app", "id": str(PREPARE)},
+        }
+    )
+    assembly_path.write_text(tomli_w.dumps(plan), encoding="utf-8")
     directory = tmp_path / "config/org.aurora.cli"
     directory.mkdir()
-    path = directory / "config.toml"
+    path = directory / "plugin.config.toml"
     path.write_text('value = "file"\n', encoding="utf-8")
     observations = []
 
-    def factory(*, registry, ctx, hooks, storage, workspace_root):
+    def factory(*, ctx):
         @hook_handler("dev.configuration:handlers/prepare", slot=PREPARE)
         def prepare():
             observations.append(ctx.get(CONFIG))
             ctx.set(CONFIG, {"value": "runtime"})
 
-        entry = entry_from(prepare, provider="测试插件")
-        registry.register(entry)
-        hooks.connect(PREPARE, entry.id, slot_instance="app", handler_instance="app")
-        return [LifecycleComponent("app")]
+        return prepare
 
-    plugin = Plugin("测试插件", (RegistryEntry(assembly, "assembly", factory, "测试插件"),))
+    definition = entry_from(factory(ctx=None), provider="probe")
+    plugin = Plugin(
+        "probe",
+        (definition,),
+        components={
+            "probe": ComponentExport(
+                ComponentFactory(factory, lambda prepare: InstanceExport(plugs={definition.id: prepare})),
+                ComponentDeclaration(inject=("ctx",), plugs=(definition.id,)),
+            )
+        },
+    )
     for _ in range(2):
         output = StringIO()
         asyncio.run(run_cli(["-d", str(tmp_path), "ctx/get", str(CONFIG)], plugins=[plugin], output=output))
@@ -62,36 +86,11 @@ def test_host_default_assembly_reads_toml_before_prepare_and_keeps_runtime_edits
     assert path.read_text(encoding="utf-8") == 'value = "file"\n'
 
 
-@pytest.mark.parametrize(
-    "arguments", [["--assembly", "dev.selected:assemblies/app", "ctx/list"], ["run", "dev.selected:assemblies/app"]]
-)
-def test_explicit_plugin_and_assembly_selection_override_host_defaults(tmp_path, monkeypatch, arguments):
-    write_host(tmp_path, 'plugins = ["missing-plugin"]\nassembly = "dev.default:assemblies/app"\n')
-    selections = []
-
-    async def execute(context, command, values, **options):
-        selections.append(options["assembly"])
-        assert context.registry.get(Id("org.aurora.model:adapters/litellm/chat"))
-        return 0
-
-    monkeypatch.setattr("aurora_cli.host.execute", execute)
-    asyncio.run(
-        run_cli(
-            [
-                "-d",
-                str(tmp_path),
-                "--plugin",
-                "aurora_model",
-                "--plugin",
-                "aurora_model.configuration",
-                "--plugin",
-                "aurora_model.litellm",
-                *arguments,
-            ],
-            output=StringIO(),
-        )
-    )
-    assert selections == [Id("dev.selected:assemblies/app")]
+def test_explicit_assembly_file_overrides_host_selection(tmp_path):
+    write_host(tmp_path, 'assembly_file = "missing.toml"\n')
+    path = tmp_path / "app.toml"
+    path.write_text("schema_version = 2\nplugins = []\n[instances]\n", encoding="utf-8")
+    assert asyncio.run(run_cli(["-d", str(tmp_path), "--assembly-file", str(path), "ctx/list"], output=StringIO())) == 0
 
 
 @pytest.mark.parametrize(

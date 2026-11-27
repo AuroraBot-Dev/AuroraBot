@@ -196,7 +196,7 @@ def plugin() -> Plugin:
                 Id("org.aurora.bot:configs/memory"),
                 ConfigSpec(
                     CONFIG,
-                    ConfigTemplate("aurora_bot.memory", "config.tomls/memory.toml"),
+                    ConfigTemplate("aurora_bot.memory", "plugin.config.tomls/memory.toml"),
                     SCHEMA,
                     check=_check_bindings,
                 ),

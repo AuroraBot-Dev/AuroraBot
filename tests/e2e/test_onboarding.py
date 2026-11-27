@@ -34,7 +34,8 @@ def test_initialization_preserves_files_and_validates_minimal_configuration(tmp_
     assert asyncio.run(source["run"](["--init", "--data-dir", str(tmp_path)])) == 0
     directory = tmp_path / "config"
     host = read_toml(directory / "host.toml")
-    assert host["assembly"] == "org.aurora.bot:assemblies/mcp"
+    assert host == {"assembly_file": "assembly.toml"}
+    host = read_toml(directory / host["assembly_file"])
     assert not {"aurora_world", "aurora_world.configuration", "aurora_bot.cadence"} & set(host["plugins"])
     registry = bootstrap()
     install_lifecycle_slots(registry)
@@ -42,10 +43,10 @@ def test_initialization_preserves_files_and_validates_minimal_configuration(tmp_
     for item in configuration_files(registry, directory):
         if item.path.exists():
             item.spec.schema.parse(read_toml(item.path))
-    bot = read_toml(directory / "org.aurora.bot/config.toml")
+    bot = read_toml(directory / "org.aurora.bot/plugin.config.toml")
     assert bot["input_budget"]["enabled"] and bot["input_budget"]["max_chars"] == 48000
     assert all(not bot[name]["enabled"] for name in ("context_view", "notes", "self_control", "archive", "actions"))
-    servers = read_toml(directory / "org.aurora.mcp/config.toml")["servers"]
+    servers = read_toml(directory / "org.aurora.mcp/plugin.config.toml")["servers"]
     assert set(servers) == {"terminal"}
     terminal = servers["terminal"]
     assert terminal["command"] == ["uvx", "--from", "terminal-mcp==0.4.7", "terminal-mcp"]
@@ -65,7 +66,7 @@ def test_onboarding_roundtrip_restores_history_without_automatic_activation(tmp_
     directory = tmp_path / "config"
     fixture = ROOT / "tests/fixtures/mcp_stdio_server.py"
     trace = tmp_path / "terminal"
-    (directory / "org.aurora.mcp/config.toml").write_text(
+    (directory / "org.aurora.mcp/plugin.config.toml").write_text(
         tomli_w.dumps(
             {
                 "schema_version": 2,
@@ -114,8 +115,19 @@ def test_onboarding_roundtrip_restores_history_without_automatic_activation(tmp_
         ),
     )
 
-    async def offline_cli(arguments):
-        return await run_cli(arguments, plugins=(plugin,))
+    assembly = directory / "assembly.toml"
+    plan = read_toml(assembly)
+    plan["plugins"].append(plugin.name)
+    assembly.write_text(tomli_w.dumps(plan), encoding="utf-8")
+    create_host = source["create_host"]
+    monkeypatch.setitem(
+        source["run"].__globals__,
+        "create_host",
+        lambda root, *, workspace_root: create_host(root, workspace_root=workspace_root, plugins=(plugin,)),
+    )
+
+    async def offline_cli(arguments, *, runtime):
+        return await run_cli(arguments, runtime=runtime)
 
     monkeypatch.setitem(source["run"].__globals__, "run_cli", offline_cli)
     monkeypatch.setitem(source["run"].__globals__, "load_dotenv", lambda *args, **kwargs: None)

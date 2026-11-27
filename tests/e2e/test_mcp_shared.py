@@ -17,7 +17,6 @@ import tomli_w
 from aurora_bot.mcp import assemble
 from aurora_bot.mcp_preset import initialize
 from aurora_bot.operations import RUN_CONTROL, RunOperations
-from aurora_config import configuration_component
 from aurora_core import Id
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
@@ -27,6 +26,7 @@ from aurora_core.lifecycle import STOP, Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_host import configuration_component
 from aurora_mcp import CLIENT_STATUS, MCPClients
 from aurora_mcp.catalog import automatic_name
 from aurora_mcp.errors import MCPClientError
@@ -96,7 +96,7 @@ async def services(root, transport):
 
 def setup(root, declarations, mode, monkeypatch, events):
     assert initialize(root, world=True, output=StringIO()) == 0
-    host_path = root / "config/host.toml"
+    host_path = root / "config/assembly.toml"
     host_config = tomllib.loads(host_path.read_text(encoding="utf-8"))
     host_config["plugins"].append("aurora_world.environment")
     registry = bootstrap()
@@ -128,11 +128,11 @@ def setup(root, declarations, mode, monkeypatch, events):
     if mode == "source_failure":
         declarations["server0"]["protocol"] = "legacy"
     values = {
-        "org.aurora.mcp/config.toml": {"schema_version": 2, "servers": declarations},
+        "org.aurora.mcp/plugin.config.toml": {"schema_version": 2, "servers": declarations},
         "org.aurora.model/profiles.toml": {"test": {"adapter": str(ADAPTER), "model": "fake"}},
         "org.aurora.model/bindings.toml": {"reasoning": "test"},
-        "org.aurora.bot/config.toml": {"instance_id": "main", "model_role": "reasoning", "streaming": False},
-        "org.aurora.world/config.toml": {
+        "org.aurora.bot/plugin.config.toml": {"instance_id": "main", "model_role": "reasoning", "streaming": False},
+        "org.aurora.world/plugin.config.toml": {
             "sources": [
                 {"source": str(TIME), "source_id": "clock", "config": {}},
                 *[

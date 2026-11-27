@@ -10,7 +10,6 @@ from aurora_config import (
     ConfigSpec,
     ConfigTemplate,
     config_entries,
-    configuration_component,
     load_configuration,
     plugin,
 )
@@ -22,6 +21,7 @@ from aurora_core.lifecycle import PREPARE, Lifecycle, LifecycleComponent, instal
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_host import configuration_component
 
 CONFIG = Id("dev.configuration:state/options")
 SECOND = Id("dev.configuration:state/bindings")
@@ -53,7 +53,7 @@ def package(tmp_path, monkeypatch):
     return create
 
 
-def definitions(name, resource="config.toml", *, owner=None, validate=None):
+def definitions(name, resource="plugin.config.toml", *, owner=None, validate=None):
     registry = bootstrap()
     registry.register_many(plugin().entries)
     registry.register_many(
@@ -67,13 +67,13 @@ def definitions(name, resource="config.toml", *, owner=None, validate=None):
 
 
 @pytest.mark.parametrize("zipped", [False, True])
-@pytest.mark.parametrize("resource", ["config.toml", "config.tomls/models/profiles.toml"])
+@pytest.mark.parametrize("resource", ["plugin.config.toml", "plugin.config.tomls/models/profiles.toml"])
 def test_copy_resources_preserves_comments_and_user_files(tmp_path, package, resource, zipped):
     content = '# 模板注释\n[primary]\nmodel = "example"\n'
     name = package({resource: content, "config/__init__.py": ""}, zipped=zipped)
     registry = definitions(name, resource)
     directory = tmp_path / "data/config"
-    path = directory / CONFIG.namespace / resource.removeprefix("config.tomls/")
+    path = directory / CONFIG.namespace / resource.removeprefix("plugin.config.tomls/")
     records = load_configuration(registry, directory)
     assert records == (StateRecord(StateAddress(CONFIG), {"primary": {"model": "example"}}),)
     assert path.read_text(encoding="utf-8") == content
@@ -86,12 +86,12 @@ def test_copy_resources_preserves_comments_and_user_files(tmp_path, package, res
 
 
 def test_explicit_owner_and_multiple_files(tmp_path, package):
-    name = package({"config.tomls/first.toml": "value = 1", "config.tomls/second.toml": "value = 2"})
-    registry = definitions(name, "config.tomls/first.toml", owner="dev.owner")
+    name = package({"plugin.config.tomls/first.toml": "value = 1", "plugin.config.tomls/second.toml": "value = 2"})
+    registry = definitions(name, "plugin.config.tomls/first.toml", owner="dev.owner")
     registry.register_many(
         config_entries(
             Id("dev.configuration:configs/bindings"),
-            ConfigSpec(SECOND, ConfigTemplate(name, "config.tomls/second.toml"), ConfigSchema({})),
+            ConfigSpec(SECOND, ConfigTemplate(name, "plugin.config.tomls/second.toml"), ConfigSchema({})),
             provider="测试插件",
         )
     )
@@ -105,12 +105,12 @@ def test_explicit_owner_and_multiple_files(tmp_path, package):
     "resource",
     [
         "config/options.toml",
-        "../config.toml",
-        "config.tomls/../a.toml",
-        "config.tomls//a.toml",
-        "config.tomls/a.json",
-        "config.tomls/C:/a.toml",
-        "config.tomls\\a.toml",
+        "../plugin.config.toml",
+        "plugin.config.tomls/../a.toml",
+        "plugin.config.tomls//a.toml",
+        "plugin.config.tomls/a.json",
+        "plugin.config.tomls/C:/a.toml",
+        "plugin.config.tomls\\a.toml",
     ],
 )
 def test_rejects_ambiguous_or_unsafe_resource_paths(resource):
@@ -119,13 +119,13 @@ def test_rejects_ambiguous_or_unsafe_resource_paths(resource):
 
 
 def test_rejects_conflicting_forms_missing_resource_and_destination_collision(tmp_path, package):
-    name = package({"config.toml": "", "config.tomls/other.toml": ""})
+    name = package({"plugin.config.toml": "", "plugin.config.tomls/other.toml": ""})
     with pytest.raises(ValueError, match="同时"):
         load_configuration(definitions(name), tmp_path / "both")
-    name = package({"config.tomls/other.toml": ""})
+    name = package({"plugin.config.tomls/other.toml": ""})
     with pytest.raises(ValueError, match="不存在"):
         load_configuration(definitions(name), tmp_path / "missing")
-    name = package({"config.toml": ""})
+    name = package({"plugin.config.toml": ""})
     registry = definitions(name)
     registry.register_many(
         config_entries(
@@ -140,8 +140,8 @@ def test_rejects_conflicting_forms_missing_resource_and_destination_collision(tm
 
 
 def test_invalid_toml_reports_path_without_configuration_contents(tmp_path, package):
-    name = package({"config.toml": 'secret = "sensitive-value'})
-    with pytest.raises(ValueError, match="config.toml") as caught:
+    name = package({"plugin.config.toml": 'secret = "sensitive-value'})
+    with pytest.raises(ValueError, match="plugin.config.toml") as caught:
         load_configuration(definitions(name), tmp_path / "data")
     assert "sensitive-value" not in str(caught.value)
 
@@ -200,7 +200,7 @@ def test_configure_queues_all_changes_before_reentrant_writes(action):
 
 
 def test_template_states_require_explicit_non_persistence(tmp_path, package):
-    name = package({"config.toml": ""})
+    name = package({"plugin.config.toml": ""})
     registry = definitions(name)
     registry.replace(RegistryEntry(CONFIG, "state_key", StateKey(), "测试插件"))
     with pytest.raises(ValueError, match="非持久"):
@@ -210,8 +210,13 @@ def test_template_states_require_explicit_non_persistence(tmp_path, package):
 def test_cross_file_validation_finishes_before_any_configuration_is_injected(tmp_path, package):
     from aurora_config.service import ConfigurationService
 
-    name = package({"config.tomls/options.toml": 'selected = "missing"', "config.tomls/bindings.toml": "known = true"})
-    registry = definitions(name, "config.tomls/options.toml")
+    name = package(
+        {
+            "plugin.config.tomls/options.toml": 'selected = "missing"',
+            "plugin.config.tomls/bindings.toml": "known = true",
+        }
+    )
+    registry = definitions(name, "plugin.config.tomls/options.toml")
     observations = []
 
     def check(values):
@@ -222,7 +227,9 @@ def test_cross_file_validation_finishes_before_any_configuration_is_injected(tmp
     registry.register_many(
         config_entries(
             Id("dev.configuration:configs/bindings"),
-            ConfigSpec(SECOND, ConfigTemplate(name, "config.tomls/bindings.toml"), ConfigSchema({}), check=check),
+            ConfigSpec(
+                SECOND, ConfigTemplate(name, "plugin.config.tomls/bindings.toml"), ConfigSchema({}), check=check
+            ),
             provider="测试插件",
         )
     )
@@ -239,7 +246,7 @@ def test_cross_file_validation_finishes_before_any_configuration_is_injected(tmp
 
 
 def test_lifecycle_rebuilds_configuration_before_prepare_and_excludes_snapshot(tmp_path, package):
-    name = package({"config.toml": 'selected = "initial"\nobsolete = true\n'})
+    name = package({"plugin.config.toml": 'selected = "initial"\nobsolete = true\n'})
     prepared = []
 
     def environment():
@@ -286,7 +293,7 @@ def test_lifecycle_rebuilds_configuration_before_prepare_and_excludes_snapshot(t
         ctx.set(RUNTIME, 8)
         await lifecycle.stop()
         assert store.load() == (StateRecord(StateAddress(RUNTIME), 8),)
-        path = tmp_path / "data/config/dev.configuration/config.toml"
+        path = tmp_path / "data/config/dev.configuration/plugin.config.toml"
         assert "initial" in path.read_text(encoding="utf-8")
         path.write_text('selected = "edited"\n', encoding="utf-8")
         ctx, _, _, lifecycle = environment()

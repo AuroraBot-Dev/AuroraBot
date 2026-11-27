@@ -216,7 +216,7 @@ def test_tools_are_explicit_and_note_state_survives_disabling(tmp_path):
             stored = ctx.get(NOTES, location={"instance_id": "main"})
         finally:
             await host.stop()
-        path = tmp_path / "config/org.aurora.bot/config.toml"
+        path = tmp_path / "config/org.aurora.bot/plugin.config.toml"
         path.write_text(path.read_text(encoding="utf-8").replace("enabled = true", "enabled = false"), encoding="utf-8")
         host, assembly, ctx, _, clients, _, _, _ = setup(tmp_path)
         await host.start()

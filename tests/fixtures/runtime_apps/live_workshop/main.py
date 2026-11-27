@@ -4,12 +4,15 @@ import argparse
 import asyncio
 import logging
 import sys
+import tomllib
+from importlib.resources import files
 
 from aurora_bot.conversation import CONVERSATION
 from aurora_cli.commander import run_cli
 from aurora_cli.parsing import root_parser
 from aurora_core.json_data import encode_json
-from demo import ASSEMBLY, EXPOSED, WORLD_EXPOSED, WRITABLE, plugins
+from aurora_host import AssemblyPlan, Host
+from demo import EXPOSED, WORLD_EXPOSED, WRITABLE, assemble, plugins
 
 
 async def run(argv=None):
@@ -26,8 +29,6 @@ async def run(argv=None):
         if options.command[:1] == ["serve"]:
             boundary = len(argv) - len(options.command)
             argv = [
-                "--assembly",
-                str(ASSEMBLY),
                 *argv[:boundary],
                 "serve",
                 "--keys",
@@ -39,7 +40,20 @@ async def run(argv=None):
                 *options.command[1:],
             ]
         argv = ["--data-dir", "build/live-workshop", *argv]
-    return await run_cli(argv, plugins=plugins(with_world=not selected.direct_only))
+    selected_plugins = tuple(plugins(with_world=not selected.direct_only))
+    options = root_parser().parse_args(argv)
+    if options.connect is not None or options.show_help or options.version or options.command[:1] != ["serve"]:
+        return await run_cli(argv, plugins=selected_plugins)
+    plan = AssemblyPlan.parse(
+        tomllib.loads(files("aurora_config").joinpath("assembly.toml").read_text(encoding="utf-8"))
+    )
+    plan = AssemblyPlan((*plan.plugins, *(item.name for item in selected_plugins)), plan.instances, plan.connections)
+    runtime = Host.create(plan, selected_plugins, options.data_dir, workspace_root=options.root)
+    try:
+        runtime.mount(assemble(**runtime.services))
+        return await run_cli(argv, runtime=runtime)
+    finally:
+        await runtime.stop()
 
 
 def main():

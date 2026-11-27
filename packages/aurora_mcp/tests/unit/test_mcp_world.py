@@ -7,13 +7,13 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from aurora_config import configuration_component
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
 from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import Lifecycle, LifecycleComponent, install_lifecycle_slots
 from aurora_core.storage import StorageService
+from aurora_host import configuration_component
 from aurora_mcp.clients import MCPClients
 from aurora_mcp.configuration import PROTOCOL_VERSION
 from aurora_mcp.world import (
@@ -192,7 +192,7 @@ def test_world_factory_is_bound_per_host_without_mutating_shared_definition(tmp_
                 storage = StorageService(tmp_path / str(number))
                 world_records = WorldRecords(ctx, storage)
                 record_services.append(world_records)
-                path = storage.configuration_directory() / "org.aurora.world/config.toml"
+                path = storage.configuration_directory() / "org.aurora.world/plugin.config.toml"
                 path.parent.mkdir(parents=True)
                 path.write_text(
                     f'[[sources]]\nsource="{WORLD_SOURCE}"\nsource_id="shared"\n'

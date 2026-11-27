@@ -42,7 +42,7 @@ def configuration_files(registry: DefinitionRegistry, directory: Path) -> tuple[
         template = spec.template
         template.source()
         target = checked_path(
-            root / (template.owner or spec.state.namespace) / template.resource.removeprefix("config.tomls/")
+            root / (template.owner or spec.state.namespace) / template.resource.removeprefix("plugin.config.tomls/")
         )
         identity = str(target).casefold()
         if identity in destinations or spec.state in states:

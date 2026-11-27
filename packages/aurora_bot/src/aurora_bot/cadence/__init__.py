@@ -17,7 +17,9 @@ def plugin() -> Plugin:
             *config_entries(
                 CONFIGURATION,
                 ConfigSpec(
-                    CONFIG_STATE, ConfigTemplate("aurora_bot.cadence", "config.tomls/cadence.toml"), CADENCE_CONFIG
+                    CONFIG_STATE,
+                    ConfigTemplate("aurora_bot.cadence", "plugin.config.tomls/cadence.toml"),
+                    CADENCE_CONFIG,
                 ),
                 provider="aurora_bot.cadence",
             ),

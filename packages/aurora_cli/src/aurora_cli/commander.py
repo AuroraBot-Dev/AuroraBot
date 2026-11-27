@@ -4,20 +4,18 @@ import logging
 import sys
 from collections.abc import Iterable
 from importlib.metadata import version
-from typing import TextIO, cast
+from typing import TextIO
 
-from aurora_config import plugin as configuration_plugin
-from aurora_config.assembly import read_assembly
 from aurora_core.admission import AdmissionStatus, inspect_admissions
 from aurora_core.bootstrap import bootstrap
 from aurora_core.discovery import Plugin, load_plugins, register_plugins
-from aurora_core.ids import Id
 from aurora_core.lifecycle import install_lifecycle_slots
+from aurora_host import AssemblyPlan, Host, read_assembly
+from aurora_host.configuration import select_assembly
 from aurora_logging import configure_logging
 
 from . import host
 from .commands import discover_commands, install_commands
-from .configuration import read_host_config
 from .declarations import COMMANDS, CommandContext, read_command
 from .execution import execute_command
 from .parsing import parse_command, root_parser
@@ -25,14 +23,17 @@ from .presentation import show_commands
 
 
 async def run_cli(
-    argv: list[str] | None = None, *, plugins: Iterable[Plugin] = (), output: TextIO | None = None
+    argv: list[str] | None = None,
+    *,
+    plugins: Iterable[Plugin] = (),
+    output: TextIO | None = None,
+    runtime: Host | None = None,
 ) -> int:
     output = sys.stdout if output is None else output
     if output is None:
         raise RuntimeError("标准输出不可用，请显式提供 output 文本流")
     parser = root_parser()
     options = parser.parse_args(argv)
-    requested_assembly = options.assembly
     if options.command[:1] == ["--"]:
         options.command = options.command[1:]
     if options.version:
@@ -44,35 +45,31 @@ async def run_cli(
     if options.connect_token_env is not None and options.connect is None:
         parser.error("--connect-token-env 必须与 --connect 同时使用")
     if options.connect is not None and (
-        options.data_dir is not None
-        or options.assembly is not None
-        or options.assembly_file is not None
-        or options.config is not None
-        or options.plugin
+        options.data_dir is not None or options.assembly_file is not None or options.config is not None
     ):
-        parser.error("--connect 不能与 --data-dir、--assembly、--assembly-file、--config 或 --plugin 同时使用")
-    registry = bootstrap()
-    if options.connect is None and options.data_dir is not None:
-        configured = read_host_config(options.data_dir)
-        if options.assembly is None and options.assembly_file is None:
-            if "assembly" in configured:
-                options.assembly = Id(cast(str, configured["assembly"]))
-            elif "assembly_file" in configured:
-                options.assembly_file = options.data_dir / "config" / cast(str, configured["assembly_file"])
-        if options.assembly_file is None:
-            options.plugin = options.plugin or cast(list[str], configured.get("plugins", []))
-    plan = None
-    if options.assembly_file is not None:
-        if options.plugin:
-            parser.error("--assembly-file 模式的插件由装配文件统一选择，不能同时使用 --plugin")
-        plan = read_assembly(options.assembly_file)
-        options.plugin = list(plan.plugins)
+        parser.error("--connect 不能与 --data-dir、--assembly-file 或 --config 同时使用")
+    if runtime is not None and (options.assembly_file is not None or options.connect is not None):
+        parser.error("已提供程序化宿主，不能同时选择 --assembly-file 或 --connect")
+    registry = bootstrap() if runtime is None else runtime.registry
+    if (
+        options.connect is None
+        and options.assembly_file is None
+        and options.data_dir is not None
+        and runtime is None
+        and (options.data_dir / "config/host.toml").exists()
+    ):
+        options.assembly_file = select_assembly(options.data_dir)
+    plan = (
+        read_assembly(options.assembly_file)
+        if options.assembly_file is not None
+        else AssemblyPlan.parse({"schema_version": 2, "plugins": [], "instances": {}})
+    )
     install_commands(registry)
-    install_lifecycle_slots(registry)
-    plugins = tuple(item for item in plugins if plan is None or item.name in plan.plugins)
-    if plan is None and not any(item.name == "aurora_config" for item in plugins):
-        plugins = (configuration_plugin(), *plugins)
-    loaded = load_plugins(explicit=(*discover_commands(), *plugins), enabled=options.plugin)
+    if runtime is None:
+        install_lifecycle_slots(registry)
+    if options.assembly_file is not None:
+        plugins = tuple(item for item in plugins if item.name in plan.plugins)
+    loaded = load_plugins(explicit=(*discover_commands(), *plugins), enabled=plan.plugins)
     register_plugins(registry, loaded)
     accepted = {
         admission.source
@@ -112,18 +109,11 @@ async def run_cli(
         return await remote.execute(options.connect, command.id, values, output, token_env=options.connect_token_env)
     context = CommandContext(options.root.resolve(), output, registry, tuple(commands.values()))
     if not command.runtime:
-        if options.config is not None or requested_assembly is not None:
-            parser.error("--config 和 --assembly 仅适用于运行期宿主命令")
+        if options.config is not None:
+            parser.error("--config 仅适用于运行期宿主命令")
         return await execute_command(command, context, values)
     if options.data_dir is None:
         parser.error("执行宿主命令必须指定 --data-dir")
-    assembly = options.assembly
-    if command.assembly_argument is not None:
-        selected = values.pop(command.assembly_argument, None)
-        if selected is not None:
-            if requested_assembly is not None or plan is not None:
-                parser.error("命令的装配参数与 --assembly 或集中装配文件不能同时使用")
-            assembly = selected
     configure_logging(
         log_dir=options.data_dir.resolve() / "logs",
         console_level=console_level,
@@ -134,7 +124,7 @@ async def run_cli(
         command,
         values,
         data_dir=options.data_dir,
-        assembly=assembly,
+        runtime=runtime,
         config=options.config,
         plan=plan,
         plugins=loaded,

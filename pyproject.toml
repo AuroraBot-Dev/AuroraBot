@@ -31,6 +31,7 @@ dev = [
 
 [tool.coverage.run]
 source = [
+    "aurora_host",
     "aurora_model",
     "aurora_mcp",
     "aurora_config",
@@ -68,6 +69,7 @@ include = [
 ]
 exclude = ["**/__pycache__", "**/node_modules", ".venv", "build", "dist"]
 extraPaths = [
+    "packages/aurora_host/src",
     "tooling/aurora_meta_build/src",
     "packages/aurora_model/src",
     "packages/aurora_mcp/src",
@@ -85,6 +87,7 @@ extraPaths = [
 
 [tool.uv.workspace]
 members = [
+    "packages/aurora_host",
     "tooling/aurora_meta_build",
     "packages/aurora_model",
     "packages/aurora_mcp",
@@ -101,6 +104,7 @@ members = [
 ]
 
 [tool.uv.sources]
+aurora-host = { workspace = true }
 aurora-meta-build = { workspace = true }
 aurora-model = { workspace = true }
 aurora-mcp = { workspace = true }

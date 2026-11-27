@@ -4,7 +4,6 @@ import asyncio
 from typing import cast
 
 import pytest
-from aurora_config import configuration_component
 from aurora_core import Id
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
@@ -14,6 +13,7 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_host import configuration_component
 from aurora_world import (
     RECORDS,
     SOURCE_STATUS,
@@ -35,7 +35,7 @@ def environment(root, factory, text=None, *, timeout=1.0):
     registry.register(RegistryEntry(SOURCE, "source", SourceSpec(factory), "test", register_to=SOURCES))
     ctx, hooks, storage = Context(registry), HookConnections(registry), StorageService(root)
     records = WorldRecords(ctx, storage)
-    path = storage.configuration_directory() / "org.aurora.world" / "config.toml"
+    path = storage.configuration_directory() / "org.aurora.world" / "plugin.config.toml"
     if text is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")

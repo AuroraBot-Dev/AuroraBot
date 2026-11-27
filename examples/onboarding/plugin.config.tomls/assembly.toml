@@ -1,0 +1,31 @@
+schema_version = 2
+plugins = [
+    "aurora_config",
+    "aurora_model",
+    "aurora_model.configuration",
+    "aurora_model.litellm",
+    "aurora_agent.model",
+    "aurora_agent.react",
+    "aurora_tools",
+    "aurora_agent.react_defaults",
+    "aurora_bot.assembly",
+    "aurora_mcp",
+    "aurora_mcp.tools",
+    "aurora_api",
+]
+
+[instances.aurora_config]
+plugin = "aurora_config"
+component = "configuration"
+depends_on = []
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "aurora_config"
+id = "org.aurora.config:handlers/load"
+
+[connections.slot]
+instance = "aurora_config"
+id = "org.aurora.core:lifecycle/config"

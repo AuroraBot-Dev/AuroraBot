@@ -10,7 +10,6 @@ from typing import cast
 
 import tomli_w
 import uvicorn
-from aurora_config import configuration_component
 from aurora_control import ExecutionRequest, StateBinding
 from aurora_core import Id
 from aurora_core.bootstrap import bootstrap
@@ -43,6 +42,18 @@ def echo_service(record) -> MCPServer:
         return {"text": text}
 
     return service
+
+
+def configuration_component(registry, ctx, hooks, storage):
+    from aurora_config._meta import LOAD
+    from aurora_config.service import ConfigurationService
+    from aurora_core.lifecycle import CONFIG, LifecycleComponent
+
+    service = ConfigurationService(registry, ctx, storage)
+    hooks.connect(
+        CONFIG, LOAD, slot_instance="aurora_config", handler_instance="aurora_config", target=service.configure
+    )
+    return LifecycleComponent("aurora_config", stop_accepting=service.close)
 
 
 async def run(
@@ -115,7 +126,7 @@ async def run(
             path.write_text(tomli_w.dumps(value), encoding="utf-8")
 
         config_file(
-            "org.aurora.mcp/config.toml",
+            "org.aurora.mcp/plugin.config.toml",
             {
                 "schema_version": 2,
                 "servers": {
@@ -158,7 +169,7 @@ async def run(
             config_file("org.aurora.model/profiles.toml", {"test": {"adapter": str(adapter), "model": "fake"}})
             config_file("org.aurora.model/bindings.toml", {"reasoning": "test"})
             config_file(
-                "org.aurora.bot/config.toml",
+                "org.aurora.bot/plugin.config.toml",
                 {
                     "instance_id": "main",
                     "model_role": "reasoning",

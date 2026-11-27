@@ -41,7 +41,7 @@ def weather_response(request):
 
 def test_default_assembly_exposes_environment_without_activating_model_and_restores(tmp_path):
     async def scenario():
-        path = tmp_path / "config/org.aurora.world/config.toml"
+        path = tmp_path / "config/org.aurora.world/plugin.config.toml"
         path.parent.mkdir(parents=True)
         path.write_text(
             tomli_w.dumps(

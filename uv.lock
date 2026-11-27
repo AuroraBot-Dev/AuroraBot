@@ -15,6 +15,7 @@ members = [
     "aurora-config",
     "aurora-control",
     "aurora-core",
+    "aurora-host",
     "aurora-logging",
     "aurora-mcp",
     "aurora-meta-build",
@@ -262,6 +263,7 @@ dependencies = [
     { name = "aurora-config" },
     { name = "aurora-control" },
     { name = "aurora-core" },
+    { name = "aurora-host" },
     { name = "aurora-model", extra = ["config", "litellm"] },
     { name = "aurora-tools" },
     { name = "aurora-world", extra = ["config"] },
@@ -283,6 +285,7 @@ requires-dist = [
     { name = "aurora-config", editable = "packages/aurora_config" },
     { name = "aurora-control", editable = "packages/aurora_control" },
     { name = "aurora-core", editable = "packages/aurora_core" },
+    { name = "aurora-host", editable = "packages/aurora_host" },
     { name = "aurora-mcp", extras = ["tools"], marker = "extra == 'mcp'", editable = "packages/aurora_mcp" },
     { name = "aurora-mcp", extras = ["tools", "world"], marker = "extra == 'mcp-world'", editable = "packages/aurora_mcp" },
     { name = "aurora-model", extras = ["config", "litellm"], editable = "packages/aurora_model" },
@@ -301,6 +304,7 @@ dependencies = [
     { name = "aurora-api" },
     { name = "aurora-config" },
     { name = "aurora-core" },
+    { name = "aurora-host" },
     { name = "aurora-logging" },
     { name = "rich" },
     { name = "tomlkit" },
@@ -311,6 +315,7 @@ requires-dist = [
     { name = "aurora-api", editable = "packages/aurora_api" },
     { name = "aurora-config", editable = "packages/aurora_config" },
     { name = "aurora-core", editable = "packages/aurora_core" },
+    { name = "aurora-host", editable = "packages/aurora_host" },
     { name = "aurora-logging", editable = "packages/aurora_logging" },
     { name = "rich", specifier = ">=14,<15" },
     { name = "tomlkit", specifier = ">=0.13,<1" },
@@ -348,6 +353,23 @@ requires-dist = [{ name = "aurora-core", editable = "packages/aurora_core" }]
 name = "aurora-core"
 version = "0.1.0"
 source = { editable = "packages/aurora_core" }
+
+[[package]]
+name = "aurora-host"
+version = "0.1.0"
+source = { editable = "packages/aurora_host" }
+dependencies = [
+    { name = "aurora-config" },
+    { name = "aurora-control" },
+    { name = "aurora-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aurora-config", editable = "packages/aurora_config" },
+    { name = "aurora-control", editable = "packages/aurora_control" },
+    { name = "aurora-core", editable = "packages/aurora_core" },
+]
 
 [[package]]
 name = "aurora-logging"

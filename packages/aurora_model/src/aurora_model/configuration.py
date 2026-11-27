@@ -13,14 +13,14 @@ def plugin() -> Plugin:
         (
             *config_entries(
                 Id("org.aurora.model:configs/profiles"),
-                ConfigSpec(CONFIG, ConfigTemplate("aurora_model", "config.tomls/profiles.toml"), PROFILE_SCHEMA),
+                ConfigSpec(CONFIG, ConfigTemplate("aurora_model", "plugin.config.tomls/profiles.toml"), PROFILE_SCHEMA),
                 provider="aurora_model.configuration",
             ),
             *config_entries(
                 Id("org.aurora.model:configs/bindings"),
                 ConfigSpec(
                     BINDINGS,
-                    ConfigTemplate("aurora_model", "config.tomls/bindings.toml"),
+                    ConfigTemplate("aurora_model", "plugin.config.tomls/bindings.toml"),
                     BINDINGS_SCHEMA,
                     check=check_bindings,
                 ),

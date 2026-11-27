@@ -2,6 +2,15 @@
 
 ## 2026-11-27
 
+### 完成 W04 独立宿主与版本 2 装配
+
+- 新增 aurora_host，只依赖 core/config/control；接管装配读取、实例创建/导出/绑定、状态地址、资源引用、方法/执行连接、运行图和生命周期。CLI 只负责命令交互并消费 Host；宿主不认识 CommandContext、命令名或 Bot 装配 ID。程序化入口与文件装配使用相同的生命周期及资源释放路径。
+- 集中配置仅接受 schema_version=2；host.toml 只保留 assembly_file，插件统一由装配清单选择，显式提供的插件实现也须被选中。删除 --assembly、run 的装配 ID 参数、--plugin、旧配置选择及代码工厂分派；不补配置插件、实例或连接。配置最小预设明确列出服务实例和 config 接线；状态支持 instance/run 两种作用域，资源按实例及导出名直接绑定。
+- 包内模板、资源引用、ConfigTemplate 默认路径与 onboarding 全部改为 plugin.config.toml / plugin.config.tomls。单文件用户路径改为 config/<owner>/plugin.config.toml；多文件模板仍按 owner 下的相对文件名落盘。只复制缺失文件，保留已有编辑端点及非持久配置状态；不探测旧名、不改写用户配置和快照。
+- scripts/bot.py 与 onboarding 显式构造产品组件并交给 Host；产品仍使用现有 DefaultAssembly，其拆解及完整文件预设分别按 W07/W08 推进，本轮不增加等价总工厂或旧 ID 分派兼容层。同步 workspace、CLI/Bot 依赖、发布包检查、配置预设与现有消费者；README、AGENTS 和设计文档继续暂缓统一更新。
+- 复用并改写现有装配与 CLI 回归，覆盖移除配置实例/连接、静态发现不启动资源、文件选择、配置恢复和编辑、失败释放、信号收尾及产品往返。原 Serial/ModelCall 手工握手用例改为真实版本 2 文件装配，独有验证前向资源引用、固定输入/按 run 隔离输出、执行接线与资源所有者关闭；独立 MCP/world 夹具显式连接配置服务，不为测试引入 host/control 依赖。旧的两种代码装配覆盖合并为一条文件选择覆盖，测试总数减少 1 项。
+- 验收：日常检查 13.13 秒、完整检查 36.72 秒，1224 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过和 37 条依赖警告。15 个 wheel 构建及干净环境安装通过；host 独立运行配置生命周期，安装 CLI 后加载新模板，均无需 Bot/agent/model/MCP；control/tools/agent 和 MCP 两个桥的独立执行与恢复仍通过。未增加 worker、超时或重试，未调用真实模型供应商。
+
 ### 完成 W03 元信息生成器与真实实例导出
 
 - 提取独立 aurora-meta-build 构建工具，仅依赖标准库；支持多清单、各清单独立符号、版本 2 发行目录、生成与只读核对，以及不加载插件的已安装目录查询。删除 config 包内生成算法，各包构建钩子调用同一实现；CI 先构建工具 wheel，再构建运行包。
