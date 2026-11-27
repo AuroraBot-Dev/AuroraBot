@@ -1,0 +1,48 @@
+{
+  "name": "wake_schedule",
+  "description": "创建或更新一次性唤醒。用 delay_seconds 或带时区的 ISO 时间 at，二选一，最多30天后。late_seconds 为迟到有效期，默认3600秒；过期不补发。创建 expected_revision=0，更新先查询版本。仅提交未来引导，不重试旧工具。工具成功表示已写入 ctx，宿主异步落盘。",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "wake_id": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+        "maxLength": 64
+      },
+      "expected_revision": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000
+      },
+      "delay_seconds": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "maximum": 2592000
+      },
+      "at": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "late_seconds": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "maximum": 86400
+      }
+    },
+    "required": ["wake_id", "expected_revision", "text"],
+    "oneOf": [
+      {
+        "required": ["delay_seconds"]
+      },
+      {
+        "required": ["at"]
+      }
+    ]
+  }
+}

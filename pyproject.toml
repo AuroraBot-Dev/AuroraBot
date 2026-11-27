@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "AuroraBot unified installation package"
 requires-python = ">=3.12"
 dependencies = [
-    "aurora-bot[mcp-world]>=0.1.0",
+    "aurora-bot[mcp-world,litellm,world]>=0.1.0",
     "aurora-cli>=0.1.0",
     "aurora-api>=0.1.0",
     "aurora-world[environment]>=0.1.0",

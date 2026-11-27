@@ -8,7 +8,7 @@ from aurora_bot.cadence.state import CADENCE_CONFIG
 
 
 def rhythm():
-    config = CADENCE_CONFIG.parse({"decision": {"model_role": "test"}})
+    config = CADENCE_CONFIG.parse({"decision": {}})
     return CadenceRhythm(config["decision"], 0, lambda low, high: (low + high) / 2)
 
 
@@ -59,6 +59,6 @@ def test_pending_stimulus_during_decision_survives_completion_and_respects_spaci
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), -1, 10000])
 def test_invalid_random_output_is_rejected(value):
-    config = CADENCE_CONFIG.parse({"decision": {"model_role": "test"}})
+    config = CADENCE_CONFIG.parse({"decision": {}})
     with pytest.raises(ValueError, match="随机间隔"):
         CadenceRhythm(config["decision"], 0, lambda low, high: value)

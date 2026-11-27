@@ -12,17 +12,24 @@
       "aurora-core>=0.1.0",
       "aurora-config>=0.1.0",
       "aurora-control>=0.1.0",
-      "aurora-model[config,litellm]>=0.1.0",
-      "aurora-world[config]>=0.1.0"
+      "aurora-model[config]>=0.1.0"
     ],
     "optional-dependencies": {
+      "world": ["aurora-world[config]>=0.1.0"],
+      "litellm": ["aurora-model[litellm]>=0.1.0"],
+      "memory": ["aurora-memory>=0.1.0"],
       "mcp": ["aurora-mcp[tools]>=0.1.0", "tomli-w>=1.2,<2"],
       "mcp-world": ["aurora-mcp[tools,world]>=0.1.0", "tomli-w>=1.2,<2"]
     },
     "entry-points": {
       "aurora.plugins": {
         "aurora_bot.runtime": "aurora_bot.runtime:plugin",
-        "aurora_bot.assembly": "aurora_bot.assembly:plugin",
+        "aurora_bot.conversation": "aurora_bot.conversation:plugin",
+        "aurora_bot.commands": "aurora_bot.cli:plugin",
+        "aurora_bot.notes": "aurora_bot.work_notes:plugin",
+        "aurora_bot.actions": "aurora_bot.action_evidence:plugin",
+        "aurora_bot.self_control": "aurora_bot.self_control:plugin",
+        "aurora_bot.world_view": "aurora_bot.context_view:plugin",
         "aurora_bot.cadence": "aurora_bot.cadence:plugin"
       }
     }
@@ -186,6 +193,1130 @@
               "owner": {
                 "type": "string",
                 "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_bot/plugins/conversation/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "conversation": {
+          "entry_point": "aurora_bot.conversation",
+          "title": "直接交流",
+          "summary": "导出本能力的定义、端口和资源，由宿主显式装配",
+          "requires": ["aurora_bot.runtime"],
+          "factory": "aurora_bot.conversation:plugin"
+        }
+      },
+      "definitions": {
+        "CONVERSATION": {
+          "plugin": "conversation",
+          "id": "org.aurora.bot:endpoints/conversation",
+          "kind": "endpoint",
+          "summary": "直接交流入口",
+          "register_to": {
+            "id": "org.aurora.api:registries/endpoints"
+          }
+        }
+      },
+      "components": {
+        "endpoint": {
+          "inject": ["registry"],
+          "plugs": [],
+          "slots": [],
+          "states": [],
+          "optional_states": [],
+          "inputs": ["operations"],
+          "optional_inputs": [],
+          "resources": ["endpoint"],
+          "plugin": "conversation"
+        }
+      }
+    },
+    "src/aurora_bot/plugins/commands/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "commands": {
+          "entry_point": "aurora_bot.commands",
+          "title": "运行命令",
+          "summary": "导出本能力的定义、端口和资源，由宿主显式装配",
+          "requires": ["aurora_bot.runtime"],
+          "factory": "aurora_bot.cli:plugin"
+        }
+      },
+      "definitions": {
+        "SUBMIT": {
+          "plugin": "commands",
+          "id": "org.aurora.bot:commands/run/submit",
+          "kind": "command",
+          "summary": "运行命令",
+          "register_to": {
+            "id": "org.aurora.cli:registries/commands"
+          }
+        },
+        "ACTIVATE": {
+          "plugin": "commands",
+          "id": "org.aurora.bot:commands/run/activate",
+          "kind": "command",
+          "summary": "运行命令",
+          "register_to": {
+            "id": "org.aurora.cli:registries/commands"
+          }
+        },
+        "CANCEL": {
+          "plugin": "commands",
+          "id": "org.aurora.bot:commands/run/cancel",
+          "kind": "command",
+          "summary": "运行命令",
+          "register_to": {
+            "id": "org.aurora.cli:registries/commands"
+          }
+        }
+      },
+      "components": {}
+    },
+    "src/aurora_bot/plugins/notes/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "notes": {
+          "entry_point": "aurora_bot.notes",
+          "title": "工作笔记",
+          "summary": "导出本能力的定义、端口和资源，由宿主显式装配",
+          "requires": ["aurora_tools"],
+          "factory": "aurora_bot.work_notes:plugin"
+        }
+      },
+      "definitions": {
+        "NOTES": {
+          "plugin": "notes",
+          "id": "org.aurora.bot:state/notes",
+          "kind": "state_key",
+          "summary": "本能力持有的状态"
+        },
+        "COMPONENT": {
+          "plugin": "notes",
+          "id": "org.aurora.bot:components/notes",
+          "kind": "component",
+          "summary": "工具执行组件"
+        },
+        "EXECUTE": {
+          "plugin": "notes",
+          "id": "org.aurora.bot:components/notes/execute",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.bot:components/notes"
+            }
+          }
+        },
+        "WRITE": {
+          "plugin": "notes",
+          "id": "org.aurora.bot:tools/notes/write",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "write",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "READ": {
+          "plugin": "notes",
+          "id": "org.aurora.bot:tools/notes/read",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "read",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "LIST": {
+          "plugin": "notes",
+          "id": "org.aurora.bot:tools/notes/list",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "list",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        }
+      },
+      "components": {
+        "notes": {
+          "inject": ["ctx", "options"],
+          "plugs": [],
+          "slots": [],
+          "states": [],
+          "optional_states": [],
+          "inputs": [],
+          "optional_inputs": [],
+          "resources": ["notes"],
+          "options": "owner",
+          "plugin": "notes"
+        }
+      },
+      "contracts": {
+        "write": {
+          "format": "json",
+          "file": "write.schema.json",
+          "content": {
+            "name": "notes_write",
+            "description": "创建或更新自己的工作笔记。创建时 expected_revision=0，更新须携带读取到的版本；笔记和引用不证明外部动作成功。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "note_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                  "maxLength": 64
+                },
+                "expected_revision": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16000
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["active", "archived"]
+                },
+                "references": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["kind", "journal_id", "record_id"],
+                        "properties": {
+                          "kind": {
+                            "const": "world_event"
+                          },
+                          "journal_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "record_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["kind", "run_id", "call_id"],
+                        "properties": {
+                          "kind": {
+                            "const": "tool_call"
+                          },
+                          "run_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "call_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": ["note_id", "expected_revision", "text", "status", "references"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "read": {
+          "format": "json",
+          "file": "read.schema.json",
+          "content": {
+            "name": "notes_read",
+            "description": "按 note_id 读取自己的完整笔记，包括已归档笔记。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "note_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                  "maxLength": 64
+                }
+              },
+              "required": ["note_id"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "list": {
+          "format": "json",
+          "file": "list.schema.json",
+          "content": {
+            "name": "notes_list",
+            "description": "分页列出自己的笔记摘要；默认 active，status=all 包含归档。next_after 用于下一页，全文使用 notes_read。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["active", "archived", "all"]
+                },
+                "after": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        "owner": {
+          "format": "json-schema",
+          "file": "owner.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["owner"],
+            "properties": {
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_bot/plugins/actions/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "actions": {
+          "entry_point": "aurora_bot.actions",
+          "title": "行动证据",
+          "summary": "导出本能力的定义、端口和资源，由宿主显式装配",
+          "requires": ["aurora_tools", "aurora_config"],
+          "factory": "aurora_bot.action_evidence:plugin"
+        }
+      },
+      "definitions": {
+        "COMPONENT": {
+          "plugin": "actions",
+          "id": "org.aurora.bot:components/actions/read",
+          "kind": "component",
+          "summary": "工具执行组件"
+        },
+        "EXECUTE": {
+          "plugin": "actions",
+          "id": "org.aurora.bot:components/actions/read/execute",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.bot:components/actions/read"
+            }
+          }
+        },
+        "READ_ACTION": {
+          "plugin": "actions",
+          "id": "org.aurora.bot:tools/actions/read",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "read_action",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "PREPARE": {
+          "plugin": "actions",
+          "id": "org.aurora.bot:handlers/actions/prepare",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CLEAN": {
+          "plugin": "actions",
+          "id": "org.aurora.bot:handlers/actions/clean",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CONFIGURATION": {
+          "plugin": "actions",
+          "id": "org.aurora.bot:configs/actions",
+          "kind": "config",
+          "summary": "业务参数配置",
+          "contract": "config",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "CONFIG_STATE": {
+          "plugin": "actions",
+          "id": "org.aurora.bot:state/actions/config",
+          "kind": "state_key",
+          "summary": "本能力持有的状态",
+          "register_to": {
+            "id": "org.aurora.core:registries/state_keys"
+          }
+        }
+      },
+      "components": {
+        "actions": {
+          "inject": ["ctx", "storage", "states", "options"],
+          "plugs": ["PREPARE", "CLEAN"],
+          "slots": [],
+          "states": [],
+          "optional_states": ["config", "observation_config"],
+          "inputs": [],
+          "optional_inputs": [],
+          "resources": ["evidence", "observation"],
+          "options": "owner",
+          "plugin": "actions"
+        }
+      },
+      "contracts": {
+        "read_action": {
+          "format": "json",
+          "file": "read_action.schema.json",
+          "content": {
+            "name": "actions_read",
+            "description": "按 tool_call 引用的 run_id/call_id 查询本实例执行证据。offset 初始为 0，按 next_offset 分页至 null 后拼接 text 得到 JSON。completed/failed 仅代表工具返回，unknown 须核实；缺失不证明未执行，笔记不覆盖证据，读取不重试动作。",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["run_id", "call_id"],
+              "properties": {
+                "run_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "call_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9223372036854775806
+                }
+              }
+            }
+          }
+        },
+        "owner": {
+          "format": "json-schema",
+          "file": "owner.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["owner"],
+            "properties": {
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "config": {
+          "format": "json-schema",
+          "file": "config.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_chars": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 32000,
+                "default": 8000
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_bot/plugins/self_control/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "self_control": {
+          "entry_point": "aurora_bot.self_control",
+          "title": "自身控制",
+          "summary": "导出本能力的定义、端口和资源，由宿主显式装配",
+          "requires": ["aurora_bot.runtime", "aurora_tools"],
+          "factory": "aurora_bot.self_control:plugin"
+        }
+      },
+      "definitions": {
+        "SELF_CONTROL": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:state/self_control",
+          "kind": "state_key",
+          "summary": "本能力持有的状态"
+        },
+        "COMPONENT": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:components/self_control",
+          "kind": "component",
+          "summary": "工具执行组件"
+        },
+        "EXECUTE": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:components/self_control/execute",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.bot:components/self_control"
+            }
+          }
+        },
+        "STATUS": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:tools/self_control/status",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "status",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "AUTONOMY": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:tools/self_control/autonomy",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "autonomy",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "FINISH": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:tools/self_control/finish",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "finish",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "SCHEDULE": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:tools/self_control/schedule",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "schedule",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "LIST": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:tools/self_control/list",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "list",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "CANCEL": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:tools/self_control/cancel",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "cancel",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "PREPARE": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:handlers/self_control/prepare",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "START": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:handlers/self_control/start",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CLEAN": {
+          "plugin": "self_control",
+          "id": "org.aurora.bot:handlers/self_control/clean",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        }
+      },
+      "components": {
+        "control": {
+          "inject": ["ctx", "options"],
+          "plugs": ["PREPARE", "START", "CLEAN"],
+          "slots": [],
+          "states": [],
+          "optional_states": [],
+          "inputs": ["runtime", "agent"],
+          "optional_inputs": [],
+          "resources": ["control"],
+          "options": "owner",
+          "plugin": "self_control"
+        }
+      },
+      "contracts": {
+        "status": {
+          "format": "json",
+          "file": "status.schema.json",
+          "content": {
+            "name": "bot_status",
+            "description": "读取自己的运行、自动引导开关、计划数量、下次唤醒及当前 UTC 时间。",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {},
+              "required": []
+            }
+          }
+        },
+        "autonomy": {
+          "format": "json",
+          "file": "autonomy.schema.json",
+          "content": {
+            "name": "bot_autonomy",
+            "description": "设置 paused。暂停普通 cadence 和计划唤醒，保留计划且直接交流仍可用；false 恢复。不会结束当前运行或清除故障。",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "paused": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["paused"]
+            }
+          }
+        },
+        "finish": {
+          "format": "json",
+          "file": "finish.schema.json",
+          "content": {
+            "name": "bot_finish",
+            "description": "请求本轮全部工具和结果观察完成后正常结束，不再推理。应放在本批最后；不取消其他工具或新输入，不暂停自动引导。",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {},
+              "required": []
+            }
+          }
+        },
+        "schedule": {
+          "format": "json",
+          "file": "schedule.schema.json",
+          "content": {
+            "name": "wake_schedule",
+            "description": "创建或更新一次性唤醒。用 delay_seconds 或带时区的 ISO 时间 at，二选一，最多30天后。late_seconds 为迟到有效期，默认3600秒；过期不补发。创建 expected_revision=0，更新先查询版本。仅提交未来引导，不重试旧工具。工具成功表示已写入 ctx，宿主异步落盘。",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "wake_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                  "maxLength": 64
+                },
+                "expected_revision": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "delay_seconds": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 2592000
+                },
+                "at": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "late_seconds": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 86400
+                }
+              },
+              "required": ["wake_id", "expected_revision", "text"],
+              "oneOf": [
+                {
+                  "required": ["delay_seconds"]
+                },
+                {
+                  "required": ["at"]
+                }
+              ]
+            }
+          }
+        },
+        "list": {
+          "format": "json",
+          "file": "list.schema.json",
+          "content": {
+            "name": "wake_list",
+            "description": "分页读取自己的完整唤醒计划和投递回执。uncertain 须核对，不能据缺失回执推断未执行或自动重试。",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "after": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20
+                }
+              },
+              "required": []
+            }
+          }
+        },
+        "cancel": {
+          "format": "json",
+          "file": "cancel.schema.json",
+          "content": {
+            "name": "wake_cancel",
+            "description": "按当前 revision 取消未提交计划。uncertain 仅停止后续投递，不撤销可能已接纳的引导；先核对外部结果。",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "wake_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                  "maxLength": 64
+                },
+                "expected_revision": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["wake_id", "expected_revision"]
+            }
+          }
+        },
+        "owner": {
+          "format": "json-schema",
+          "file": "owner.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["owner"],
+            "properties": {
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_bot/plugins/world_view/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "world_view": {
+          "entry_point": "aurora_bot.world_view",
+          "title": "世界视图",
+          "summary": "导出本能力的定义、端口和资源，由宿主显式装配",
+          "requires": ["aurora_world.records", "aurora_tools", "aurora_config"],
+          "factory": "aurora_bot.context_view:plugin"
+        }
+      },
+      "definitions": {
+        "COMPONENT": {
+          "plugin": "world_view",
+          "id": "org.aurora.bot:components/world/read_event",
+          "kind": "component",
+          "summary": "工具执行组件"
+        },
+        "EXECUTE": {
+          "plugin": "world_view",
+          "id": "org.aurora.bot:components/world/read_event/execute",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "id": "org.aurora.bot:components/world/read_event"
+            }
+          }
+        },
+        "READ_EVENT": {
+          "plugin": "world_view",
+          "id": "org.aurora.bot:tools/world/read_event",
+          "kind": "tool",
+          "summary": "显式选择的工具",
+          "contract": "read_event",
+          "register_to": {
+            "id": "org.aurora.tools:registries/tools"
+          }
+        },
+        "PREPARE": {
+          "plugin": "world_view",
+          "id": "org.aurora.bot:handlers/world_view/prepare",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CONFIGURATION": {
+          "plugin": "world_view",
+          "id": "org.aurora.bot:configs/world_view",
+          "kind": "config",
+          "summary": "业务参数配置",
+          "contract": "config",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "CONFIG_STATE": {
+          "plugin": "world_view",
+          "id": "org.aurora.bot:state/world_view/config",
+          "kind": "state_key",
+          "summary": "本能力持有的状态",
+          "register_to": {
+            "id": "org.aurora.core:registries/state_keys"
+          }
+        }
+      },
+      "components": {
+        "view": {
+          "inject": ["ctx", "states", "options"],
+          "plugs": ["PREPARE"],
+          "slots": [],
+          "states": [],
+          "optional_states": ["config"],
+          "inputs": [],
+          "optional_inputs": ["records", "notes", "actions", "archive"],
+          "resources": ["view"],
+          "plugin": "world_view",
+          "options": "options"
+        },
+        "archive": {
+          "inject": ["ctx", "states"],
+          "plugs": [],
+          "slots": [],
+          "states": [],
+          "optional_states": ["config"],
+          "inputs": ["records"],
+          "optional_inputs": [],
+          "resources": ["archive"],
+          "plugin": "world_view"
+        }
+      },
+      "contracts": {
+        "read_event": {
+          "format": "json",
+          "file": "read_event.schema.json",
+          "content": {
+            "name": "world_read_event",
+            "description": "按 world_event 引用的 journal_id/record_id 读取当前 world 的原始事件 JSON。offset 初始为 0，按 next_offset 继续；仅当 next_offset=null 才读至末尾，拼接各页 text 后才是完整 JSON。只读，不重放事件，不代表事项已完成；不支持环境观察或 tool_call 引用。",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["journal_id", "record_id"],
+              "properties": {
+                "journal_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "\\S"
+                },
+                "record_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "\\S"
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9223372036854775806,
+                  "default": 0
+                }
+              }
+            }
+          }
+        },
+        "config": {
+          "format": "json-schema",
+          "export": "aurora_bot.plugins.world_view.parameters:schema",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_chars": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 128000,
+                "default": 12000
+              },
+              "archive_max_chars": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 32000,
+                "default": 8000
+              },
+              "events": {
+                "type": "boolean",
+                "default": true
+              },
+              "environment": {
+                "type": "boolean",
+                "default": true
+              },
+              "notes": {
+                "type": "boolean",
+                "default": true
+              },
+              "actions": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          }
+        },
+        "options": {
+          "format": "json-schema",
+          "export": "aurora_bot.plugins.world_view.parameters:options",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_chars": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 128000
+              },
+              "archive_max_chars": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 32000
+              },
+              "events": {
+                "type": "boolean"
+              },
+              "environment": {
+                "type": "boolean"
+              },
+              "notes": {
+                "type": "boolean"
+              },
+              "actions": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "src/aurora_bot/plugins/cadence/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "cadence": {
+          "entry_point": "aurora_bot.cadence",
+          "title": "主动节律",
+          "summary": "导出本能力的定义、端口和资源，由宿主显式装配",
+          "requires": ["aurora_bot.runtime", "aurora_world.records", "aurora_config"],
+          "factory": "aurora_bot.cadence:plugin"
+        }
+      },
+      "definitions": {
+        "CONFIGURATION": {
+          "plugin": "cadence",
+          "id": "org.aurora.bot:configs/cadence",
+          "kind": "config",
+          "summary": "业务参数配置",
+          "contract": "config",
+          "register_to": {
+            "id": "org.aurora.config:registries/configs"
+          }
+        },
+        "CHECKPOINT": {
+          "plugin": "cadence",
+          "id": "org.aurora.bot:state/cadence",
+          "kind": "state_key",
+          "summary": "本能力持有的状态"
+        },
+        "PREPARE": {
+          "plugin": "cadence",
+          "id": "org.aurora.bot:handlers/cadence/prepare",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "START": {
+          "plugin": "cadence",
+          "id": "org.aurora.bot:handlers/cadence/start",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "STOP": {
+          "plugin": "cadence",
+          "id": "org.aurora.bot:handlers/cadence/stop",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CLEAN": {
+          "plugin": "cadence",
+          "id": "org.aurora.bot:handlers/cadence/clean",
+          "kind": "hook_handler",
+          "summary": "公开方法插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "CONFIG_STATE": {
+          "plugin": "cadence",
+          "id": "org.aurora.bot:state/cadence_config",
+          "kind": "state_key",
+          "summary": "本能力持有的状态",
+          "register_to": {
+            "id": "org.aurora.core:registries/state_keys"
+          }
+        }
+      },
+      "components": {
+        "cadence": {
+          "inject": ["ctx", "instance_id", "options"],
+          "plugs": ["PREPARE", "START", "STOP", "CLEAN"],
+          "slots": [],
+          "states": [],
+          "optional_states": [],
+          "inputs": ["runtime", "records"],
+          "optional_inputs": ["choice", "view", "control"],
+          "resources": ["cadence"],
+          "options": "owner",
+          "plugin": "cadence"
+        }
+      },
+      "contracts": {
+        "owner": {
+          "format": "json-schema",
+          "file": "owner.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["owner"],
+            "properties": {
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "config": {
+          "format": "json-schema",
+          "export": "aurora_bot.cadence.parameters:schema",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "decision": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "active_seconds": {
+                    "type": "number",
+                    "minimum": 1,
+                    "default": 5.0
+                  },
+                  "idle_seconds": {
+                    "type": "number",
+                    "minimum": 1,
+                    "default": 180.0
+                  },
+                  "half_life_seconds": {
+                    "type": "number",
+                    "minimum": 1,
+                    "default": 60.0
+                  },
+                  "jitter_ratio": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 0.5,
+                    "default": 0.2
+                  },
+                  "timeout_seconds": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "default": 15.0
+                  },
+                  "max_chars": {
+                    "type": "integer",
+                    "minimum": 4096,
+                    "maximum": 128000,
+                    "default": 12000
+                  }
+                }
               }
             }
           }

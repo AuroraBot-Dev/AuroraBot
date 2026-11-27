@@ -1,52 +1,33 @@
 """实例隔离的持久工作笔记及显式工具；笔记不代表外部动作的执行证据。"""
 
+import json
 from collections.abc import Callable
 from functools import partial
+from importlib.resources import files
 from re import fullmatch
 from time import time
 from typing import cast
 
 from aurora_config import ConfigSchema
-from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, component_entries
-from aurora_core import Id
+from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding
+from aurora_core import plug
+from aurora_core.components import ComponentFactory, InstanceExport
 from aurora_core.ctx import Context, StateKey
-from aurora_core.registry import RegistryEntry
-from aurora_tools.execution import TOOLS, ToolExecutionError, ToolInstance, ToolSpec
+from aurora_tools.execution import ToolExecutionError, ToolInstance, ToolSpec
 
-from .assembly_config import WORK, ToolSelection
+from .plugins.notes._meta import COMPONENT, EXECUTE, LIST, NOTES, READ, WRITE, notes_plugin
 
-NOTES = Id("org.aurora.bot:state/notes")
-COMPONENT = Id("org.aurora.bot:components/notes")
-NOTE_TOOLS = {action: Id(f"org.aurora.bot:tools/notes/{action}") for action in ("read", "write", "list")}
+CONTRACTS = {
+    name: json.loads(files("aurora_bot").joinpath("plugins/notes/" + name + ".schema.json").read_text(encoding="utf-8"))
+    for name in ["read", "write", "list"]
+}
+
+
+NOTE_TOOLS = {"read": READ, "write": WRITE, "list": LIST}
 MAX_NOTES = 128
-_IDENTITY = {"type": "string", "minLength": 1, "maxLength": 256}
 _NOTE_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,63}"
-_NOTE_ID = {"type": "string", "pattern": f"^{_NOTE_PATTERN}$", "maxLength": 64}
-_REFERENCES = {
-    "type": "array",
-    "maxItems": 16,
-    "items": {
-        "oneOf": [
-            {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["kind", *fields],
-                "properties": {"kind": {"const": kind}, **{name: _IDENTITY for name in fields}},
-            }
-            for kind, fields in (
-                ("world_event", ("journal_id", "record_id")),
-                ("tool_call", ("run_id", "call_id")),
-            )
-        ]
-    },
-}
-_WRITE_FIELDS = {
-    "note_id": _NOTE_ID,
-    "expected_revision": {"type": "integer", "minimum": 0},
-    "text": {"type": "string", "minLength": 1, "maxLength": 16000},
-    "status": {"type": "string", "enum": ["active", "archived"]},
-    "references": _REFERENCES,
-}
+_IDENTITY = {"type": "string", "minLength": 1, "maxLength": 256}
+_WRITE_FIELDS = CONTRACTS["write"]["parameters"]["properties"]
 _WRITE_SCHEMA = ConfigSchema(
     {"type": "object", "additionalProperties": False, "required": list(_WRITE_FIELDS), "properties": _WRITE_FIELDS}
 )
@@ -182,92 +163,53 @@ class WorkNotes:
         }
 
 
-async def _declared(request: ExecutionRequest) -> None:
-    raise RuntimeError("笔记工具需要由默认装配创建实例")
+class BoundTool:
+    """执行已选择的产品工具，借用装配显式提供的服务。"""
 
+    def __init__(self, ctx, input_state, output_state, service, action=None):
+        self.ctx, self.input_state, self.output_state = ctx, input_state, output_state
+        self.service, self.action = service, action
 
-async def _factory(action, *, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
-    owner = dict(input_state.location).get("instance_id")
-    if (
-        config
-        or not owner
-        or input_state.key != WORK
-        or output_state.key != WORK
-        or dict(output_state.location).get("instance_id") != owner
-    ):
-        raise ValueError("笔记工具需要同一 bot 的工作状态绑定，不接受所有者覆盖")
-    notes = WorkNotes(ctx, owner)
-
-    async def execute(request):
-        call = input_state.get(ctx, request)
+    @plug(EXECUTE)
+    async def execute(self, request: ExecutionRequest) -> None:
+        call = cast(dict, self.input_state.get(self.ctx, request))
         arguments = {
             name: int(value)
             if name in ("expected_revision", "limit") and type(value) is float and value.is_integer()
             else value
             for name, value in call["arguments"].items()
         }
-        if action == "write":
-            result = notes.write(arguments, request, call["id"])
-        elif action == "read":
-            result = notes.read(arguments["note_id"])
+        if self.action == "write":
+            result = self.service.write(arguments, request, call["id"])
+        elif self.action == "read":
+            result = self.service.read(arguments["note_id"])
         else:
-            result = notes.list(**arguments)
-        output_state.set(ctx, request, result)
+            result = self.service.list(**arguments)
+        self.output_state.set(self.ctx, request, result)
 
+
+async def _factory(action, *, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
+    tool = BoundTool(ctx, input_state, output_state, resources["notes"], action)
     return ToolInstance(
-        ExecutionPlug(COMPONENT, execute, {"input": input_state, "output": output_state}, instance_id=instance_id)
+        ExecutionPlug(COMPONENT, tool.execute, {"input": input_state, "output": output_state}, instance_id=instance_id)
     )
 
 
-def tool_selections() -> list[ToolSelection]:
-    return [
-        {"tool": str(identity), "instance_id": f"notes/{action}", "config": {}}
-        for action, identity in NOTE_TOOLS.items()
-    ]
-
-
-def entries() -> tuple[RegistryEntry, ...]:
-    schemas = {
-        "write": (
-            "创建或更新自己的工作笔记。创建时 expected_revision=0，更新须携带读取到的版本；笔记和引用不证明外部动作成功。",
-            _WRITE_FIELDS,
-            list(_WRITE_FIELDS),
-        ),
-        "read": ("按 note_id 读取自己的完整笔记，包括已归档笔记。", {"note_id": _NOTE_ID}, ["note_id"]),
-        "list": (
-            "分页列出自己的笔记摘要；默认 active，status=all 包含归档。next_after 用于下一页，全文使用 notes_read。",
-            {
-                "status": {"type": "string", "enum": ["active", "archived", "all"]},
-                "after": {"type": "string", "maxLength": 64},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+def plugin():
+    return notes_plugin(
+        targets={
+            NOTES: StateKey(validate_notes),
+            COMPONENT: BoundTool,
+            EXECUTE: BoundTool.execute,
+            **{
+                identity: ToolSpec(COMPONENT, CONTRACTS[action], factory=partial(_factory, action))
+                for action, identity in NOTE_TOOLS.items()
             },
-            [],
-        ),
-    }
-    return (
-        RegistryEntry(NOTES, "state_key", StateKey(validate_notes), "aurora_bot"),
-        *component_entries(COMPONENT, WorkNotes, _declared, provider="aurora_bot"),
-        *(
-            RegistryEntry(
-                NOTE_TOOLS[action],
-                "tool",
-                ToolSpec(
-                    COMPONENT,
-                    {
-                        "name": f"notes_{action}",
-                        "description": description,
-                        "parameters": {
-                            "type": "object",
-                            "properties": fields,
-                            "required": required,
-                            "additionalProperties": False,
-                        },
-                    },
-                    factory=partial(_factory, action),
-                ),
-                "aurora_bot",
-                register_to=TOOLS,
+        },
+        components={
+            "notes": ComponentFactory(
+                lambda ctx, options: WorkNotes(ctx, options["owner"]),
+                lambda instance: InstanceExport(resources={"notes": instance}),
             )
-            for action, (description, fields, required) in schemas.items()
-        ),
+        },
     )

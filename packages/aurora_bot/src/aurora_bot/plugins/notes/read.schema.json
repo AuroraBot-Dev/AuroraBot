@@ -1,0 +1,16 @@
+{
+  "name": "notes_read",
+  "description": "按 note_id 读取自己的完整笔记，包括已归档笔记。",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "note_id": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+        "maxLength": 64
+      }
+    },
+    "required": ["note_id"],
+    "additionalProperties": false
+  }
+}

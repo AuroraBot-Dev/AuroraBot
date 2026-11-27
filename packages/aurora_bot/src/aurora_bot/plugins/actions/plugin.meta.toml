@@ -1,0 +1,113 @@
+schema_version = 2
+
+[plugins.actions]
+entry_point = "aurora_bot.actions"
+title = "行动证据"
+summary = "导出本能力的定义、端口和资源，由宿主显式装配"
+requires = [
+    "aurora_tools",
+    "aurora_config",
+]
+
+[definitions.COMPONENT]
+plugin = "actions"
+id = "org.aurora.bot:components/actions/read"
+kind = "component"
+summary = "工具执行组件"
+
+[definitions.EXECUTE]
+plugin = "actions"
+id = "org.aurora.bot:components/actions/read/execute"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EXECUTE.interface.definition]
+id = "org.aurora.bot:components/actions/read"
+
+[definitions.READ_ACTION]
+plugin = "actions"
+id = "org.aurora.bot:tools/actions/read"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "read_action"
+
+[definitions.READ_ACTION.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.PREPARE]
+plugin = "actions"
+id = "org.aurora.bot:handlers/actions/prepare"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CLEAN]
+plugin = "actions"
+id = "org.aurora.bot:handlers/actions/clean"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CONFIGURATION]
+plugin = "actions"
+id = "org.aurora.bot:configs/actions"
+kind = "config"
+summary = "业务参数配置"
+contract = "config"
+
+[definitions.CONFIGURATION.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.CONFIG_STATE]
+plugin = "actions"
+id = "org.aurora.bot:state/actions/config"
+kind = "state_key"
+summary = "本能力持有的状态"
+
+[definitions.CONFIG_STATE.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[components.actions]
+inject = [
+    "ctx",
+    "storage",
+    "states",
+    "options",
+]
+plugs = [
+    "PREPARE",
+    "CLEAN",
+]
+slots = []
+states = []
+optional_states = [
+    "config",
+    "observation_config",
+]
+inputs = []
+optional_inputs = []
+resources = [
+    "evidence",
+    "observation",
+]
+options = "owner"
+plugin = "actions"
+
+[contracts.read_action]
+format = "json"
+file = "read_action.schema.json"
+
+[contracts.owner]
+format = "json-schema"
+file = "owner.schema.json"
+
+[contracts.config]
+format = "json-schema"
+file = "config.schema.json"

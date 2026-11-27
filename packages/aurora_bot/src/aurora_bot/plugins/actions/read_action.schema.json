@@ -1,0 +1,24 @@
+{
+  "name": "actions_read",
+  "description": "按 tool_call 引用的 run_id/call_id 查询本实例执行证据。offset 初始为 0，按 next_offset 分页至 null 后拼接 text 得到 JSON。completed/failed 仅代表工具返回，unknown 须核实；缺失不证明未执行，笔记不覆盖证据，读取不重试动作。",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["run_id", "call_id"],
+    "properties": {
+      "run_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "call_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9223372036854775806
+      }
+    }
+  }
+}

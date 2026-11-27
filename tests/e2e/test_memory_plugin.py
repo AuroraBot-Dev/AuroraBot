@@ -7,7 +7,7 @@ from typing import cast
 
 import httpx
 import tomli_w
-from aurora_bot.assembly_config import MESSAGES
+from aurora_bot.runtime import MESSAGES
 from aurora_control import InstanceStateBinding
 from aurora_core import Id
 from aurora_core.json_data import JsonValue
@@ -25,6 +25,7 @@ from aurora_model.litellm import LiteLLMClient
 from aurora_model.testing import FakeReply
 
 from tests.e2e.test_default_assembly import ADAPTER, settings, setup
+from tests.fixtures.bot_graph import configure_bot
 
 
 def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkeypatch):
@@ -49,7 +50,7 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
                 transport=httpx.MockTransport(handle),
             )
             embeddings.append(embedding)
-            host, assembly, _, _, models, _, _, _ = setup(
+            host, assembly, ctx, _, models, _, _, _ = setup(
                 tmp_path,
                 extra_plugins=(memory_plugin(),),
                 assembly_options={
@@ -70,6 +71,7 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
                     },
                     "org.aurora.model/bindings.toml": {"reasoning": "primary"},
                 }
+                configure_bot(ctx, files.pop("org.aurora.bot/plugin.config.toml"))
                 for relative, value in files.items():
                     path = tmp_path / "config" / relative
                     path.parent.mkdir(parents=True, exist_ok=True)
@@ -208,8 +210,8 @@ def test_unbounded_task_archives_during_index_outage_and_recovers_queue_on_resta
             path = tmp_path / "config/org.aurora.memory/plugin.config.toml"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('embedding_id = "fake-vector"\n', encoding="utf-8")
+            configure_bot(ctx, config)
             for value, relative in (
-                (config, "org.aurora.bot/plugin.config.toml"),
                 (profiles, "org.aurora.model/profiles.toml"),
                 (bindings, "org.aurora.model/bindings.toml"),
             ):

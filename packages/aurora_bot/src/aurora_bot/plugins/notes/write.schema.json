@@ -1,0 +1,77 @@
+{
+  "name": "notes_write",
+  "description": "创建或更新自己的工作笔记。创建时 expected_revision=0，更新须携带读取到的版本；笔记和引用不证明外部动作成功。",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "note_id": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+        "maxLength": 64
+      },
+      "expected_revision": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 16000
+      },
+      "status": {
+        "type": "string",
+        "enum": ["active", "archived"]
+      },
+      "references": {
+        "type": "array",
+        "maxItems": 16,
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "journal_id", "record_id"],
+              "properties": {
+                "kind": {
+                  "const": "world_event"
+                },
+                "journal_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "record_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "run_id", "call_id"],
+              "properties": {
+                "kind": {
+                  "const": "tool_call"
+                },
+                "run_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "call_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "required": ["note_id", "expected_revision", "text", "status", "references"],
+    "additionalProperties": false
+  }
+}

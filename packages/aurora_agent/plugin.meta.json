@@ -296,6 +296,24 @@
           "register_to": {
             "id": "org.aurora.core:registries/hook_handlers"
           }
+        },
+        "BUDGET_CONFIGURE": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/input_budget/configure",
+          "kind": "hook_handler",
+          "summary": "读取显式绑定的参数",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
+        },
+        "COMPACTION_CONFIGURE": {
+          "plugin": "defaults",
+          "id": "org.aurora.agent:handlers/compaction/configure",
+          "kind": "hook_handler",
+          "summary": "读取显式绑定的参数",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          }
         }
       },
       "components": {
@@ -310,6 +328,28 @@
           "resources": ["defaults"],
           "options": "options",
           "optional_states": ["config"]
+        },
+        "input_budget": {
+          "plugin": "defaults",
+          "inject": ["ctx", "states", "options"],
+          "plugs": ["BUDGET_CONFIGURE"],
+          "slots": [],
+          "optional_states": ["config"],
+          "inputs": [],
+          "optional_inputs": [],
+          "resources": ["input_budget"],
+          "options": "input_budget"
+        },
+        "compaction": {
+          "plugin": "defaults",
+          "inject": ["ctx", "states", "options"],
+          "plugs": ["COMPACTION_CONFIGURE"],
+          "slots": [],
+          "optional_states": ["config"],
+          "inputs": ["chat", "budget"],
+          "optional_inputs": ["recorder"],
+          "resources": ["compaction"],
+          "options": "compaction"
         }
       },
       "contracts": {
@@ -322,6 +362,44 @@
             "properties": {
               "system_prompt": {
                 "type": "string"
+              }
+            }
+          }
+        },
+        "input_budget": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:input_budget_options",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_chars": {
+                "type": "integer",
+                "minimum": 1024
+              }
+            }
+          }
+        },
+        "compaction": {
+          "format": "json-schema",
+          "export": "aurora_agent.parameters:compaction_options",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tool_result_chars": {
+                "type": "integer",
+                "minimum": 2048,
+                "maximum": 32000
+              },
+              "summary_chars": {
+                "type": "integer",
+                "minimum": 256,
+                "maximum": 16000
+              },
+              "timeout_seconds": {
+                "type": "number",
+                "exclusiveMinimum": 0
               }
             }
           }

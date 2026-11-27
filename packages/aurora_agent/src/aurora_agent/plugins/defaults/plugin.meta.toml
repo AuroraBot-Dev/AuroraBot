@@ -73,6 +73,24 @@ summary = "读取显式绑定的提示词参数"
 [definitions.CONFIGURE.register_to]
 id = "org.aurora.core:registries/hook_handlers"
 
+[definitions.BUDGET_CONFIGURE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/input_budget/configure"
+kind = "hook_handler"
+summary = "读取显式绑定的参数"
+
+[definitions.BUDGET_CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.COMPACTION_CONFIGURE]
+plugin = "defaults"
+id = "org.aurora.agent:handlers/compaction/configure"
+kind = "hook_handler"
+summary = "读取显式绑定的参数"
+
+[definitions.COMPACTION_CONFIGURE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
 [components.defaults]
 plugin = "defaults"
 inject = [
@@ -115,6 +133,61 @@ optional_states = [
     "config",
 ]
 
+[components.input_budget]
+plugin = "defaults"
+inject = [
+    "ctx",
+    "states",
+    "options",
+]
+plugs = [
+    "BUDGET_CONFIGURE",
+]
+slots = []
+optional_states = [
+    "config",
+]
+inputs = []
+optional_inputs = []
+resources = [
+    "input_budget",
+]
+options = "input_budget"
+
+[components.compaction]
+plugin = "defaults"
+inject = [
+    "ctx",
+    "states",
+    "options",
+]
+plugs = [
+    "COMPACTION_CONFIGURE",
+]
+slots = []
+optional_states = [
+    "config",
+]
+inputs = [
+    "chat",
+    "budget",
+]
+optional_inputs = [
+    "recorder",
+]
+resources = [
+    "compaction",
+]
+options = "compaction"
+
 [contracts.options]
 format = "json-schema"
 export = "aurora_agent.parameters:react_defaults_options"
+
+[contracts.input_budget]
+format = "json-schema"
+export = "aurora_agent.parameters:input_budget_options"
+
+[contracts.compaction]
+format = "json-schema"
+export = "aurora_agent.parameters:compaction_options"

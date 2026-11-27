@@ -1,0 +1,24 @@
+{
+  "name": "notes_list",
+  "description": "分页列出自己的笔记摘要；默认 active，status=all 包含归档。next_after 用于下一页，全文使用 notes_read。",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["active", "archived", "all"]
+      },
+      "after": {
+        "type": "string",
+        "maxLength": 64
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}

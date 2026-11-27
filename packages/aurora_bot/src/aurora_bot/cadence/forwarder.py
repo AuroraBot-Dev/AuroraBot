@@ -3,7 +3,7 @@
 import asyncio
 import hashlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import asdict
 from typing import cast
 from uuid import uuid4
@@ -11,18 +11,16 @@ from uuid import uuid4
 from aurora_agent.react import AgentBusyError
 from aurora_agent.runtime import AgentRuntime
 from aurora_control import ExecutionRequest
-from aurora_core import entry_from, hook_handler
+from aurora_core import plug
 from aurora_core.ctx import Context, StateChange
-from aurora_core.hooks import HookConnections
 from aurora_core.json_data import JsonValue, decode_json, encode_json
-from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_model.contract import ChoiceClient, ChoiceRequest
 from aurora_model.usage import usage_scope
 from aurora_world import ENVIRONMENT, RECORDS, CursorError, WorldRecords
 
-from ..assembly_config import AGENTS, MESSAGES, RUN, WORK
-from ..assembly_config import CONFIG as BOT_CONFIG
 from ..context_view import BusinessContextView
+from ..plugins.cadence._meta import CLEAN, PREPARE, START, STOP
+from ..plugins.runtime._meta import AGENTS, MESSAGES, RUN, WORK
 from ..self_control_state import SELF_CONTROL
 from .decision_state import CHOICES, initial_state
 from .inputs import model_guidance
@@ -44,18 +42,16 @@ class Cadence:
     def __init__(
         self,
         ctx: Context,
-        hooks: HookConnections,
-        runtime: AgentRuntime,
-        records: WorldRecords,
         *,
         instance_id: str,
-        decision_factory: Callable[[str], Awaitable[ChoiceClient]] | None = None,
-        view_factory: Callable[[dict], BusinessContextView] | None = None,
+        owner: str,
         timing: CadenceTiming | None = None,
         paused: Callable[[], bool] = lambda: False,
     ) -> None:
-        self.ctx, self.hooks, self.runtime = ctx, hooks, runtime
-        self.records = records
+        self.ctx = ctx
+        self.runtime: AgentRuntime
+        self.records: WorldRecords
+        self.owner = owner
         self.instance_id = instance_id
         self._location: dict[str, str] = {}
         self._state: dict = {}
@@ -64,9 +60,9 @@ class Cadence:
         self._environment_subscription: str | None = None
         self._worker: asyncio.Task[None] | None = None
         self._changed = asyncio.Event()
-        self._decision_factory, self._view_factory = decision_factory, view_factory
         self._timing = timing or CadenceTiming()
         self._paused = paused
+        self._control = None
         self._control_subscription: str | None = None
         self._decision_config: dict | None = None
         self._decision_client: ChoiceClient | None = None
@@ -75,25 +71,12 @@ class Cadence:
         self._last_material: str | None = None
         self._last_evaluated_at = 0.0
 
-    def component(self, *, depends_on: tuple[str, ...]) -> LifecycleComponent:
-        links = []
-        try:
-            for phase, method in ((PREPARE, self.prepare), (START, self.start), (STOP, self.stop), (CLEAN, self.clean)):
-                definition = entry_from(method, provider="aurora_bot.cadence")
-                links.append(
-                    self.hooks.connect(
-                        phase,
-                        definition.id,
-                        slot_instance=self.instance_id,
-                        handler_instance=self.instance_id,
-                        target=method,
-                    )
-                )
-        except Exception:
-            for link in links:
-                self.hooks.disconnect(link)
-            raise
-        return LifecycleComponent(self.instance_id, depends_on=depends_on, stop_accepting=self.stop_accepting)
+    def bind(self, *, runtime, records, choice=None, view=None, control=None):
+        self.runtime, self.records = runtime, records
+        self._decision_client, self._decision_view = choice, view
+        self._control = control
+        if control is not None:
+            self._paused = control.paused
 
     def _save(self, **changes: object) -> None:
         state = {**self._state, **changes}
@@ -105,11 +88,11 @@ class Cadence:
         self._save(error=error)
         logger.error("cadence 已暂停：%s", error)
 
-    @hook_handler("org.aurora.bot:handlers/cadence/prepare", slot=PREPARE)
+    @plug(PREPARE)
     async def prepare(self) -> None:
         config = cast(dict, CADENCE_CONFIG.parse(self.ctx.get(CONFIG_STATE)))
         self._decision_config = config.get("decision")
-        self._location = {"instance_id": cast(dict, self.ctx.get(BOT_CONFIG))["instance_id"]}
+        self._location = {"instance_id": self.owner}
         try:
             stored = self.ctx.get(CHECKPOINT, location=self._location)
         except KeyError:
@@ -137,13 +120,8 @@ class Cadence:
                 logger.info("cadence 消费状态已升级至版本 %s，保留历史游标和回执", self._state["version"])
         if self._state["pending"] is not None:
             self._pause("TransferUncertain")
-        if self._decision_config is not None and self._state["error"] is None:
-            if self._decision_factory is None or self._view_factory is None:
-                raise ValueError("决策 cadence 需要显式注入 choice 工厂和业务视图")
-            self._decision_view = self._view_factory(self._decision_config)
-            self._decision_client = await self._decision_factory(self._decision_config["model_role"])
 
-    @hook_handler("org.aurora.bot:handlers/cadence/start", slot=START)
+    @plug(START)
     def start(self) -> None:
         if self._state["error"] is not None:
             return
@@ -155,7 +133,8 @@ class Cadence:
             return
         self._subscription = self.ctx.subscribe(self._notify, key=RECORDS, location={})
         self._environment_subscription = self.ctx.subscribe(self._notify, key=ENVIRONMENT)
-        self._control_subscription = self.ctx.subscribe(self._notify, key=SELF_CONTROL, location=self._location)
+        if self._control is not None:
+            self._control_subscription = self.ctx.subscribe(self._notify, key=SELF_CONTROL, location=self._location)
         self._changed.set()
         self._worker = asyncio.create_task(self._forward(), name=f"cadence-{self.instance_id}")
 
@@ -294,7 +273,7 @@ class Cadence:
         ):
             self._worker.cancel()
 
-    @hook_handler("org.aurora.bot:handlers/cadence/stop", slot=STOP)
+    @plug(STOP)
     async def stop(self) -> None:
         self.stop_accepting()
         if self._worker is not None:
@@ -304,12 +283,9 @@ class Cadence:
                 if not self._worker.cancelled():
                     raise
 
-    @hook_handler("org.aurora.bot:handlers/cadence/clean", slot=CLEAN)
+    @plug(CLEAN)
     async def clean(self) -> None:
         await self.stop()
-        if self._decision_client is not None:
-            await self._decision_client.aclose()
-            self._decision_client = None
 
     async def _decide(self) -> None:
         assert self._rhythm is not None

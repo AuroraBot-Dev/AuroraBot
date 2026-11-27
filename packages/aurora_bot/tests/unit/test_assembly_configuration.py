@@ -3,8 +3,6 @@
 import asyncio
 
 import pytest
-from aurora_bot.assembly import environment_credential
-from aurora_bot.assembly_config import parse_config
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import register_plugins
@@ -18,30 +16,6 @@ from aurora_model.supplier import plugin as litellm_plugin
 from aurora_model.testing import FakeModel, FakeReply
 
 ADAPTER = Id("dev.configuration:adapters/fake")
-
-
-@pytest.mark.parametrize(
-    "change",
-    [
-        {"instance_id": ""},
-        {"max_iterations": True},
-        {"tool_timeout": float("inf")},
-        {"context_view": {"max_chars": 1023}},
-        {"notes": {"owner": "other"}},
-        {"archive": {"max_chars": 32001}},
-        {"archive": {"database": "foreign"}},
-        {"context_view": {"states": ["org.aurora.bot:state/config"]}},
-        {
-            "tools": [
-                {"tool": "dev.test:tools/a", "instance_id": "same"},
-                {"tool": "dev.test:tools/b", "instance_id": "same"},
-            ]
-        },
-    ],
-)
-def test_invalid_bot_configuration_is_rejected(change):
-    with pytest.raises((ValueError, TypeError)):
-        parse_config({"instance_id": "main", "model_role": "reasoning", **change})
 
 
 @pytest.mark.parametrize(
@@ -121,14 +95,6 @@ def test_model_binding_resolves_selected_profile_without_caching_clients():
     registry.replace(RegistryEntry(ADAPTER, "resource", factory, "test"))
     with pytest.raises(TypeError, match="工厂"):
         resolve_model(registry, profiles, {"reasoning": "first"}, "reasoning")
-
-
-def test_empty_or_missing_runtime_credentials_fail_explicitly(monkeypatch):
-    monkeypatch.delenv("AURORA_TEST_CREDENTIAL", raising=False)
-    with pytest.raises(ValueError, match="未提供"):
-        environment_credential("AURORA_TEST_CREDENTIAL")
-    monkeypatch.setenv("AURORA_TEST_CREDENTIAL", "value")
-    assert environment_credential("AURORA_TEST_CREDENTIAL") == "value"
 
 
 def test_bindings_reject_non_string_targets():

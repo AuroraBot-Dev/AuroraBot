@@ -5,8 +5,7 @@ import json
 from typing import cast
 
 import pytest
-from aurora_bot.assembly_config import CONFIG, MESSAGES
-from aurora_bot.event_archive import READ_EVENT
+from aurora_bot.runtime import MESSAGES
 from aurora_bot.work_notes import NOTES
 from aurora_core.json_data import JsonValue, encode_json
 from aurora_model.testing import FakeReply
@@ -15,6 +14,8 @@ from aurora_world.configuration import plugin as configuration_plugin
 from aurora_world.records import plugin as records_plugin
 from aurora_world.sources import plugin as world_plugin
 from test_default_assembly import seed, setup
+
+from tests.fixtures.bot_graph import bot_options, configure_bot
 
 
 def observation(request):
@@ -41,10 +42,10 @@ def test_note_reference_reads_expired_event_in_pages_and_survives_restart(tmp_pa
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(
-                CONFIG,
+            configure_bot(
+                ctx,
                 {
-                    **cast(dict, ctx.get(CONFIG)),
+                    **cast(dict, bot_options(ctx)),
                     "notes": {"enabled": True},
                     "archive": {"enabled": True, "max_chars": 1600},
                     "max_iterations": 32,
@@ -157,7 +158,7 @@ def test_wrong_references_return_tool_errors_without_fallback(tmp_path):
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "archive": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "archive": {"enabled": True}})
 
         await host.start(configure=configure)
         assert assembly.world_records is not None
@@ -197,19 +198,16 @@ def test_wrong_references_return_tool_errors_without_fallback(tmp_path):
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("manual", [False, True])
-def test_archive_requires_owned_world_and_rejects_manual_database_override(tmp_path, manual):
+def test_archive_requires_explicit_world_resource(tmp_path):
     async def scenario():
         host, assembly, ctx, _, clients, _, _, _ = setup(tmp_path)
 
         def configure():
             seed(ctx, tools=False)
-            config = {**cast(dict, ctx.get(CONFIG)), "archive": {"enabled": True}}
-            if manual:
-                config["tools"] = [{"tool": str(READ_EVENT), "instance_id": "foreign", "config": {"database": "other"}}]
-            ctx.set(CONFIG, config)
+            config = {**cast(dict, bot_options(ctx)), "archive": {"enabled": True}}
+            configure_bot(ctx, config)
 
-        with pytest.raises(ValueError, match="archive.enabled"):
+        with pytest.raises(KeyError, match="records"):
             await host.start(configure=configure)
         assert clients == [] and assembly.world_records is None
         assert not (tmp_path / "namespaces/ns-org.aurora.world/events.sqlite3").exists()

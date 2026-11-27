@@ -151,11 +151,21 @@ describe('运行期认证', () => {
 });
 
 describe('声明 TOML 编辑', () => {
-  const document = { id: 'org.aurora.bot:configs/default', content: '# 注释\nvalue = 1', revision: 'a'.repeat(64) };
+  const document = {
+    id: 'org.aurora.agent:configs/react_defaults',
+    content: '# 注释\nvalue = 1',
+    revision: 'a'.repeat(64),
+  };
 
   it('列表、读取、保存复用传输，冲突与未知结果均不重试', async () => {
     const instance = client();
-    const files = [{ id: document.id, state: 'org.aurora.bot:state/config', path: 'org.aurora.bot/config.toml' }];
+    const files = [
+      {
+        id: document.id,
+        state: 'org.aurora.agent:state/react_defaults/config',
+        path: 'org.aurora.agent/react_defaults.toml',
+      },
+    ];
     request.mockResolvedValueOnce(response(files));
     expect(await instance.configuration.list()).toEqual(files);
     request.mockResolvedValueOnce(response(document));

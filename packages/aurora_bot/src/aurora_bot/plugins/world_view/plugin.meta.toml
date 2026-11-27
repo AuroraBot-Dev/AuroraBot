@@ -1,0 +1,126 @@
+schema_version = 2
+
+[plugins.world_view]
+entry_point = "aurora_bot.world_view"
+title = "世界视图"
+summary = "导出本能力的定义、端口和资源，由宿主显式装配"
+requires = [
+    "aurora_world.records",
+    "aurora_tools",
+    "aurora_config",
+]
+
+[definitions.COMPONENT]
+plugin = "world_view"
+id = "org.aurora.bot:components/world/read_event"
+kind = "component"
+summary = "工具执行组件"
+
+[definitions.EXECUTE]
+plugin = "world_view"
+id = "org.aurora.bot:components/world/read_event/execute"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EXECUTE.interface.definition]
+id = "org.aurora.bot:components/world/read_event"
+
+[definitions.READ_EVENT]
+plugin = "world_view"
+id = "org.aurora.bot:tools/world/read_event"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "read_event"
+
+[definitions.READ_EVENT.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.PREPARE]
+plugin = "world_view"
+id = "org.aurora.bot:handlers/world_view/prepare"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CONFIGURATION]
+plugin = "world_view"
+id = "org.aurora.bot:configs/world_view"
+kind = "config"
+summary = "业务参数配置"
+contract = "config"
+
+[definitions.CONFIGURATION.register_to]
+id = "org.aurora.config:registries/configs"
+
+[definitions.CONFIG_STATE]
+plugin = "world_view"
+id = "org.aurora.bot:state/world_view/config"
+kind = "state_key"
+summary = "本能力持有的状态"
+
+[definitions.CONFIG_STATE.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[components.view]
+inject = [
+    "ctx",
+    "states",
+    "options",
+]
+plugs = [
+    "PREPARE",
+]
+slots = []
+states = []
+optional_states = [
+    "config",
+]
+inputs = []
+optional_inputs = [
+    "records",
+    "notes",
+    "actions",
+    "archive",
+]
+resources = [
+    "view",
+]
+plugin = "world_view"
+options = "options"
+
+[components.archive]
+inject = [
+    "ctx",
+    "states",
+]
+plugs = []
+slots = []
+states = []
+optional_states = [
+    "config",
+]
+inputs = [
+    "records",
+]
+optional_inputs = []
+resources = [
+    "archive",
+]
+plugin = "world_view"
+
+[contracts.read_event]
+format = "json"
+file = "read_event.schema.json"
+
+[contracts.config]
+format = "json-schema"
+export = "aurora_bot.plugins.world_view.parameters:schema"
+
+[contracts.options]
+format = "json-schema"
+export = "aurora_bot.plugins.world_view.parameters:options"

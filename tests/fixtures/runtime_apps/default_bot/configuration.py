@@ -5,7 +5,6 @@ from dataclasses import replace
 from aurora_config import ConfigSpec, ConfigTemplate
 
 _RESOURCES = {
-    "org.aurora.bot:state/config": "bot.toml",
     "org.aurora.model:state/config": "model/profiles.toml",
     "org.aurora.model:state/bindings": "model/bindings.toml",
 }

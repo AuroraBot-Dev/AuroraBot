@@ -10,7 +10,6 @@ from typing import cast
 import pytest
 import tomli_w
 from aurora_agent.react import AgentBusyError
-from aurora_bot.assembly_config import CONFIG
 from aurora_bot.cadence import plugin as cadence_plugin
 from aurora_bot.cadence.state import CHECKPOINT, CONFIG_STATE
 from aurora_bot.cadence.timing import CadenceTiming
@@ -27,6 +26,8 @@ from aurora_world.records import plugin as records_plugin
 from aurora_world.sources import plugin as world_plugin
 from test_cadence import append, state, until
 from test_default_assembly import seed, setup
+
+from tests.fixtures.bot_graph import bot_options, configure_bot
 
 
 class Clock:
@@ -87,7 +88,6 @@ def configured(root, *, decision_config=None):
             tomli_w.dumps(
                 {
                     "decision": {
-                        "model_role": "cadence",
                         "active_seconds": 5,
                         "idle_seconds": 60,
                         **(decision_config or {}),
@@ -99,7 +99,7 @@ def configured(root, *, decision_config=None):
     host, assembly, ctx, registry, clients, _, events, _ = setup(
         root,
         extra_plugins=(records_plugin(), world_plugin(), cadence_plugin()),
-        assembly_options={"cadence_timing": clock.timing},
+        assembly_options={"cadence_timing": clock.timing, "decision_profile": "decision"},
     )
 
     async def factory(config, *, api_key=None):
@@ -111,7 +111,7 @@ def configured(root, *, decision_config=None):
 
     def configure():
         seed(ctx, tools=False)
-        ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "notes": {"enabled": True}})
+        configure_bot(ctx, {**cast(dict, bot_options(ctx)), "notes": {"enabled": True}})
         ctx.set(
             MODEL_CONFIG, {**cast(dict, ctx.get(MODEL_CONFIG)), "decision": {"adapter": str(adapter), "model": "fake"}}
         )
@@ -355,7 +355,7 @@ def test_uncertain_decision_delivery_pauses_across_restart(tmp_path, monkeypatch
         try:
             assert state(other_ctx) == saved
             assert other_decisions.requests == [] and clients[0].requests == []
-            assert "decision.created" not in events
+            assert "decision.created" in events
         finally:
             await restarted.stop()
 
@@ -467,12 +467,12 @@ def test_mode_change_requires_explicit_handling_of_existing_snapshot(tmp_path):
         await until(lambda: bool(state(ctx)["receipts"]))
         await host.stop()
         path = tmp_path / "config/org.aurora.bot/cadence.toml"
-        path.write_text('[decision]\nmodel_role = "cadence"\n', encoding="utf-8")
+        path.write_text("[decision]\n", encoding="utf-8")
         snapshot = (tmp_path / "framework/ctx.json").read_bytes()
         restarted, _, _, _, _, _, configure, events = configured(tmp_path)
         with pytest.raises(ValueError, match="模式与已有快照不一致"):
             await restarted.start(configure=configure)
-        assert "decision.created" not in events
+        assert "decision.created" in events
         assert (tmp_path / "framework/ctx.json").read_bytes() == snapshot
 
     asyncio.run(scenario())

@@ -272,12 +272,14 @@ dependencies = [
     { name = "aurora-control" },
     { name = "aurora-core" },
     { name = "aurora-host" },
-    { name = "aurora-model", extra = ["config", "litellm"] },
+    { name = "aurora-model", extra = ["config"] },
     { name = "aurora-tools" },
-    { name = "aurora-world", extra = ["config"] },
 ]
 
 [package.optional-dependencies]
+litellm = [
+    { name = "aurora-model", extra = ["litellm"] },
+]
 mcp = [
     { name = "aurora-mcp", extra = ["tools"] },
     { name = "tomli-w" },
@@ -285,6 +287,12 @@ mcp = [
 mcp-world = [
     { name = "aurora-mcp", extra = ["tools", "world"] },
     { name = "tomli-w" },
+]
+memory = [
+    { name = "aurora-memory" },
+]
+world = [
+    { name = "aurora-world", extra = ["config"] },
 ]
 
 [package.metadata]
@@ -296,13 +304,15 @@ requires-dist = [
     { name = "aurora-host", editable = "packages/aurora_host" },
     { name = "aurora-mcp", extras = ["tools"], marker = "extra == 'mcp'", editable = "packages/aurora_mcp" },
     { name = "aurora-mcp", extras = ["tools", "world"], marker = "extra == 'mcp-world'", editable = "packages/aurora_mcp" },
-    { name = "aurora-model", extras = ["config", "litellm"], editable = "packages/aurora_model" },
+    { name = "aurora-memory", marker = "extra == 'memory'", editable = "packages/aurora_memory" },
+    { name = "aurora-model", extras = ["config"], editable = "packages/aurora_model" },
+    { name = "aurora-model", extras = ["litellm"], marker = "extra == 'litellm'", editable = "packages/aurora_model" },
     { name = "aurora-tools", editable = "packages/aurora_tools" },
-    { name = "aurora-world", extras = ["config"], editable = "packages/aurora_world" },
+    { name = "aurora-world", extras = ["config"], marker = "extra == 'world'", editable = "packages/aurora_world" },
     { name = "tomli-w", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
     { name = "tomli-w", marker = "extra == 'mcp-world'", specifier = ">=1.2,<2" },
 ]
-provides-extras = ["mcp", "mcp-world"]
+provides-extras = ["world", "litellm", "memory", "mcp", "mcp-world"]
 
 [[package]]
 name = "aurora-cli"
@@ -539,7 +549,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aurora-api" },
-    { name = "aurora-bot", extra = ["mcp-world"] },
+    { name = "aurora-bot", extra = ["litellm", "mcp-world", "world"] },
     { name = "aurora-cli" },
     { name = "aurora-world", extra = ["environment"] },
     { name = "python-dotenv" },
@@ -564,7 +574,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aurora-api", editable = "packages/aurora_api" },
-    { name = "aurora-bot", extras = ["mcp-world"], editable = "packages/aurora_bot" },
+    { name = "aurora-bot", extras = ["mcp-world", "litellm", "world"], editable = "packages/aurora_bot" },
     { name = "aurora-cli", editable = "packages/aurora_cli" },
     { name = "aurora-memory", extras = ["compaction"], marker = "extra == 'memory'", editable = "packages/aurora_memory" },
     { name = "aurora-world", extras = ["environment"], editable = "packages/aurora_world" },

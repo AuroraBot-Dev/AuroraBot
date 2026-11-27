@@ -1,0 +1,10 @@
+{
+  "name": "bot_status",
+  "description": "读取自己的运行、自动引导开关、计划数量、下次唤醒及当前 UTC 时间。",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  }
+}

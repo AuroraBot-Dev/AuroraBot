@@ -1,0 +1,35 @@
+schema_version = 2
+
+[plugins.conversation]
+entry_point = "aurora_bot.conversation"
+title = "直接交流"
+summary = "导出本能力的定义、端口和资源，由宿主显式装配"
+requires = [
+    "aurora_bot.runtime",
+]
+
+[definitions.CONVERSATION]
+plugin = "conversation"
+id = "org.aurora.bot:endpoints/conversation"
+kind = "endpoint"
+summary = "直接交流入口"
+
+[definitions.CONVERSATION.register_to]
+id = "org.aurora.api:registries/endpoints"
+
+[components.endpoint]
+inject = [
+    "registry",
+]
+plugs = []
+slots = []
+states = []
+optional_states = []
+inputs = [
+    "operations",
+]
+optional_inputs = []
+resources = [
+    "endpoint",
+]
+plugin = "conversation"

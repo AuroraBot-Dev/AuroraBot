@@ -1,31 +1,40 @@
 """实例隔离的工具执行证据；事务记录执行边界，按原调用引用只读查询。"""
 
+import json
 import sqlite3
 import time
 from copy import deepcopy
+from importlib.resources import files
 from typing import cast
 
-from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding, component_entries
-from aurora_core import Id
-from aurora_core.ctx import Context
-from aurora_core.json_data import JsonValue, decode_json, encode_json
-from aurora_core.registry import RegistryEntry
+from aurora_config import ConfigSchema, ConfigSpec, ConfigTemplate
+from aurora_control import ExecutionPlug, ExecutionRequest
+from aurora_core import plug
+from aurora_core.components import ComponentFactory, InstanceExport
+from aurora_core.ctx import StateKey
+from aurora_core.json_data import decode_json, encode_json
 from aurora_core.storage import StorageService
 from aurora_tools.contract import ToolBatchRequest, ToolCall, ToolResult
-from aurora_tools.execution import TOOLS, ToolExecutionError, ToolInstance, ToolSpec
+from aurora_tools.execution import ToolExecutionError, ToolInstance, ToolSpec
 
-READ_ACTION = Id("org.aurora.bot:tools/actions/read")
-COMPONENT = Id("org.aurora.bot:components/actions/read")
-_PARAMETERS = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["run_id", "call_id"],
-    "properties": {
-        "run_id": {"type": "string", "minLength": 1},
-        "call_id": {"type": "string", "minLength": 1},
-        "offset": {"type": "integer", "minimum": 0, "maximum": 2**63 - 2},
-    },
+from .plugins.actions._meta import (
+    CLEAN,
+    COMPONENT,
+    CONFIG_STATE,
+    CONFIGURATION,
+    EXECUTE,
+    PREPARE,
+    READ_ACTION,
+    actions_plugin,
+)
+
+CONTRACTS = {
+    name: json.loads(
+        files("aurora_bot").joinpath("plugins/actions/" + name + ".schema.json").read_text(encoding="utf-8")
+    )
+    for name in ["read_action", "config"]
 }
+
 _UNKNOWN = {
     "cancelled",
     "timeout",
@@ -47,11 +56,31 @@ class ActionEvidence:
     记录永久保留，不自动裁剪或重放；同实例的 run_id/call_id 不允许复用。
     """
 
-    def __init__(self, storage: StorageService, instance_id: str, *, max_chars: int = 8000) -> None:
+    def __init__(
+        self, storage: StorageService, instance_id: str, *, max_chars: int = 8000, ctx=None, states=None
+    ) -> None:
         if not instance_id or type(max_chars) is not int or not 1024 <= max_chars <= 32000:
             raise ValueError("行动证据需要实例身份和 1024–32000 字符预算")
         self.storage, self.instance_id, self.max_chars = storage, instance_id, max_chars
         self._connection: sqlite3.Connection | None = None
+        self.ctx, self.states = ctx, {} if states is None else states
+        self.observation_chars = 6000
+
+    @plug(PREPARE)
+    def prepare(self):
+        if "config" in self.states:
+            self.max_chars = self.ctx.get(self.states["config"].key, location=dict(self.states["config"].location))[
+                "max_chars"
+            ]
+        if "observation_config" in self.states:
+            self.observation_chars = self.ctx.get(
+                self.states["observation_config"].key, location=dict(self.states["observation_config"].location)
+            )["tool_result_chars"]
+            self.max_chars = min(self.max_chars, self.observation_chars - 512)
+        self.open()
+
+    def observe(self, run_id, result):
+        return self.observation(run_id, result, max_chars=self.observation_chars)
 
     def open(self) -> None:
         if self._connection is not None:
@@ -73,6 +102,7 @@ class ActionEvidence:
             raise
         self._connection = connection
 
+    @plug(CLEAN)
     def close(self) -> None:
         if self._connection is not None:
             self._connection.close()
@@ -260,53 +290,51 @@ class ActionEvidence:
         return page(low)
 
 
-async def _declared(request: ExecutionRequest) -> None:
-    raise RuntimeError("行动证据工具需要装配注入记录服务")
+class BoundTool:
+    """执行已选择的产品工具，借用装配显式提供的服务。"""
 
+    def __init__(self, ctx, input_state, output_state, service, action=None):
+        self.ctx, self.input_state, self.output_state = ctx, input_state, output_state
+        self.service, self.action = service, action
 
-async def create_reader(
-    *,
-    evidence: ActionEvidence,
-    ctx: Context,
-    storage: StorageService,
-    instance_id: str,
-    input_state: StateBinding,
-    output_state: StateBinding,
-    owner,
-    resources,
-    config: dict[str, JsonValue],
-) -> ToolInstance:
-    if config:
-        raise ValueError("行动证据不接受实例或数据库覆盖")
-
-    async def execute(request: ExecutionRequest) -> None:
-        call = cast(dict, input_state.get(ctx, request))
+    @plug(EXECUTE)
+    async def execute(self, request: ExecutionRequest) -> None:
+        call = cast(dict, self.input_state.get(self.ctx, request))
         arguments = dict(call["arguments"])
         offset = arguments.get("offset")
         if type(offset) is float and offset.is_integer():
             arguments["offset"] = int(offset)
-        output_state.set(ctx, request, evidence.read(**arguments))
+        result = self.service.read(**arguments)
+        self.output_state.set(self.ctx, request, result)
 
+
+async def create_reader(*, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
+    tool = BoundTool(ctx, input_state, output_state, resources["evidence"], None)
     return ToolInstance(
-        ExecutionPlug(COMPONENT, execute, {"input": input_state, "output": output_state}, instance_id=instance_id)
+        ExecutionPlug(COMPONENT, tool.execute, {"input": input_state, "output": output_state}, instance_id=instance_id)
     )
 
 
-def entries() -> tuple[RegistryEntry, ...]:
-    return (
-        *component_entries(COMPONENT, ActionEvidence, _declared, provider="aurora_bot"),
-        RegistryEntry(
-            READ_ACTION,
-            "tool",
-            ToolSpec(
-                COMPONENT,
-                {
-                    "name": "actions_read",
-                    "description": "按 tool_call 引用的 run_id/call_id 查询本实例执行证据。offset 初始为 0，按 next_offset 分页至 null 后拼接 text 得到 JSON。completed/failed 仅代表工具返回，unknown 须核实；缺失不证明未执行，笔记不覆盖证据，读取不重试动作。",
-                    "parameters": _PARAMETERS,
-                },
+def plugin():
+    schema = ConfigSchema(CONTRACTS["config"])
+    return actions_plugin(
+        targets={
+            COMPONENT: BoundTool,
+            EXECUTE: BoundTool.execute,
+            READ_ACTION: ToolSpec(COMPONENT, CONTRACTS["read_action"], factory=create_reader),
+            CONFIGURATION: ConfigSpec(
+                CONFIG_STATE, ConfigTemplate("aurora_bot.plugins.actions", "plugin.config.tomls/actions.toml"), schema
             ),
-            "aurora_bot",
-            register_to=TOOLS,
-        ),
+            CONFIG_STATE: StateKey(schema.validate, persistent=False),
+        },
+        components={
+            "actions": ComponentFactory(
+                lambda ctx, storage, states, options: ActionEvidence(storage, options["owner"], ctx=ctx, states=states),
+                lambda instance: InstanceExport(
+                    plugs={PREPARE: instance.prepare, CLEAN: instance.close},
+                    resources={"evidence": instance, "observation": instance.observe},
+                ),
+                plugs=(ActionEvidence.prepare, ActionEvidence.close),
+            )
+        },
     )

@@ -6,19 +6,23 @@ from typing import cast
 
 import pytest
 from aurora_agent.input_budget import ModelInputBudget
-from aurora_bot.assembly_config import CONFIG, MESSAGES, parse_config
+from aurora_agent.parameters import input_budget
+from aurora_bot.runtime import MESSAGES
+from aurora_config import ConfigSchema
 from aurora_core.json_data import encode_json
 from aurora_model import ModelError
 from aurora_model.testing import FakeReply
 from test_default_assembly import seed, setup
 
+from tests.fixtures.bot_graph import bot_options, configure_bot
+
 
 def configure(ctx, *, streaming=True, enabled=True, budget=2000):
     seed(ctx)
-    ctx.set(
-        CONFIG,
+    configure_bot(
+        ctx,
         {
-            **cast(dict, ctx.get(CONFIG)),
+            **cast(dict, bot_options(ctx)),
             "streaming": streaming,
             "input_budget": {"enabled": enabled, "max_chars": budget},
         },
@@ -83,9 +87,9 @@ def test_oversized_tool_result_blocks_next_model_call_and_retry_does_not_repeat_
 
         def options():
             configure(ctx)
-            config = cast(dict, ctx.get(CONFIG))
+            config = cast(dict, bot_options(ctx))
             config["tools"][0]["config"]["prefix"] = "完整回执" * 1000
-            ctx.set(CONFIG, config)
+            configure_bot(ctx, config)
 
         await host.start(configure=options)
         clients[0].respond = lambda request: (
@@ -135,14 +139,15 @@ def test_disabled_preserves_request_and_oversized_guidance_retry_is_not_duplicat
 @pytest.mark.parametrize("value", [True, 1024.0, 1023, -1, "128000"])
 def test_configuration_rejects_invalid_full_budget(value):
     with pytest.raises(ValueError):
-        parse_config({"instance_id": "main", "model_role": "reasoning", "input_budget": {"max_chars": value}})
+        ConfigSchema(input_budget()).parse({"max_chars": value})
 
 
 def test_default_configuration_keeps_budget_opt_in():
-    assert parse_config({"instance_id": "main", "model_role": "reasoning"})["input_budget"] == {
-        "enabled": False,
-        "max_chars": 128000,
-    }
+    import tomllib
+    from importlib.resources import files
+
+    plan = tomllib.loads(files("aurora_bot").joinpath("presets/default.toml").read_text())
+    assert all(item["component"] != "input_budget" for item in plan["instances"].values())
 
 
 def test_long_tool_task_compacts_and_restores_with_full_action_evidence(tmp_path):
@@ -151,14 +156,14 @@ def test_long_tool_task_compacts_and_restores_with_full_action_evidence(tmp_path
 
         def options():
             configure(ctx, budget=8000)
-            config = cast(dict, ctx.get(CONFIG))
+            config = cast(dict, bot_options(ctx))
             config.update(
                 context_management={"enabled": True, "tool_result_chars": 2048, "summary_chars": 500},
                 actions={"enabled": True, "max_chars": 2048},
                 context_view={"enabled": False},
             )
             config["tools"][0]["config"]["prefix"] = "完整原始结果" * 700
-            ctx.set(CONFIG, config)
+            configure_bot(ctx, config)
 
         await host.start(configure=options)
         count = 0
@@ -227,7 +232,7 @@ def test_silent_completed_exchanges_remain_prunable(tmp_path, streaming, restart
 
         def options():
             configure(ctx, streaming=streaming, budget=1024, enabled=initially_enabled)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "tools": []})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "tools": []})
 
         await host.start(configure=options)
         clients[0].respond = lambda request: FakeReply()

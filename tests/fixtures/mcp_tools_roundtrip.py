@@ -114,7 +114,11 @@ async def run(
                 "aurora_agent.model",
                 "aurora_agent.react",
                 "aurora_agent.react_defaults",
-                "aurora_bot.assembly",
+                "aurora_bot.runtime",
+                "aurora_bot.conversation",
+                "aurora_bot.commands",
+                "aurora_agent.configuration",
+                "aurora_tools.configuration",
             ]
         register_plugins(registry, load_plugins(enabled=enabled))
         registry.register(RegistryEntry(STATE, "state_key", StateKey(persistent=False), "test"))
@@ -145,7 +149,11 @@ async def run(
         components = [bridge.component(), clients.component(), configuration_component(registry, ctx, hooks, storage)]
         assembly = None
         if with_bot:
-            from aurora_bot.assembly import DefaultAssembly
+            import tomllib
+            from importlib.resources import files
+            from types import SimpleNamespace
+
+            from aurora_host import AssemblyPlan
             from aurora_model.registry import ADAPTERS, ModelAdapter
             from aurora_model.testing import FakeModel, FakeReply
 
@@ -168,19 +176,30 @@ async def run(
             )
             config_file("org.aurora.model/profiles.toml", {"test": {"adapter": str(adapter), "model": "fake"}})
             config_file("org.aurora.model/bindings.toml", {"reasoning": "test"})
-            config_file(
-                "org.aurora.bot/plugin.config.toml",
+            config_file("org.aurora.agent/model_call.toml", {"streaming": False})
+            declaration = tomllib.loads(files("aurora_bot").joinpath("presets/mcp.toml").read_text())
+            declaration["instances"]["chat"]["options"]["profile"] = "test"
+            plan = AssemblyPlan.parse(declaration)
+            graph = plan.assemble(
+                load_plugins(enabled=declaration["plugins"]),
                 {
-                    "instance_id": "main",
-                    "model_role": "reasoning",
-                    "streaming": False,
-                    "tools": [{"tool": str(tool_id), "instance_id": "echo"}],
+                    "registry": registry,
+                    "ctx": ctx,
+                    "hooks": hooks,
+                    "storage": storage,
+                    "workspace_root": root,
+                    "resolve_credential": lambda _: None,
                 },
             )
-            assembly = DefaultAssembly(
-                registry=registry, ctx=ctx, hooks=hooks, storage=storage, tool_resources={"echo": {"clients": clients}}
+            clients = graph.instances["mcp_clients"].instance
+            bridge = graph.instances["mcp_catalog"].instance
+            owner = graph.instances["runtime"].instance
+            assembly = SimpleNamespace(
+                agent=graph.instances["main"].instance,
+                defaults=graph.instances["defaults"].instance,
+                activate=owner.activate,
             )
-            components[0:0] = assembly.components(depends_on=(bridge.instance_id,))
+            components = graph.components
         host = Lifecycle(
             ctx, hooks, components, persistence=ContextPersistence(ctx, storage.snapshot_store()), storage=storage
         )

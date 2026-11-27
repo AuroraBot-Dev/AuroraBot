@@ -1,0 +1,14 @@
+{
+  "name": "bot_autonomy",
+  "description": "设置 paused。暂停普通 cadence 和计划唤醒，保留计划且直接交流仍可用；false 恢复。不会结束当前运行或清除故障。",
+  "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "paused": {
+        "type": "boolean"
+      }
+    },
+    "required": ["paused"]
+  }
+}

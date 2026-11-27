@@ -2,6 +2,16 @@
 
 ## 2026-11-27
 
+### 完成 W07 Bot 能力与配置拆分
+
+- Bot 独立提供 runtime、conversation、commands、notes、actions、self_control、world_view、cadence 八个插件及其清单、生成声明和静态目录。删除 DefaultAssembly、assembly_config、旧代码装配入口及聚合生命周期；模型、工具、世界服务和后台任务均由显式实例及资源引用装配，不保留等价总工厂。
+- conversation、commands、自身控制和 cadence 使用同一运行入口；notes、actions、自身控制、世界视图及归档读取导出各自服务，工具工厂借用明确资源和状态绑定，不反查 Bot WORK 或产品配置，不替换 ToolSpec.factory。cadence 只借用明确提供的模型、世界记录和自身控制服务，不负责创建、关闭模型。
+- agent 默认阶段增加预算与压缩资源组件，输入预算、压缩模型、归档记录器和动作观察均显式绑定。业务参数归所属配置桥；actions/world_view 分别使用 config/org.aurora.bot/actions.toml、world_view.toml，cadence 保留原路径并删除模型角色选择。清单和配置校验共用纯契约来源。
+- 删除 org.aurora.bot:configs/default、org.aurora.bot:state/config 及旧聚合模板；保留运行、消息、工作和各业务状态 ID。新配置和装配文件须按新基线建立，不转换、覆盖或删除用户已有配置、数据库或快照。
+- Bot 基础安装不携带 world、MCP 或模型供应商 SDK，相关依赖改为显式 extra。为删除旧入口，同步提供 default/MCP/MCP-world/bot 文件预设，并让启动脚本、onboarding 与真实进程夹具使用 Host 读取文件；工具集合、五条执行连接、资源和生命周期顺序均在文件中声明。W08 的完整可选组合与剩余公开元信息收口仍待实施。
+- 现有业务回归改用文件装配夹具，保留工具往返、取消、故障、持久化及恢复断言。删除已不存在的聚合配置和旧连接工厂专属测试；将笔记工具的旧 owner 限制测试替换为显式借用服务、使用任意状态地址的验收。独立 runtime 验收扩展到 conversation 共用运行入口；Bot 八个清单纳入元信息对账和 sdist 离线重建。
+- 验收：日常检查 8.28 秒、完整检查 31.57 秒；1217 项 Python 测试通过，保留 1 项平台跳过和 39 条依赖警告，前端与原生终端检查通过。16 个 wheel 构建通过；Python 3.12 干净安装验证 Bot 基础运行及六个基础插件发现无需 world/MCP/SDK/CLI/API，world extra 可独立发现视图与 cadence；control/tools/model/agent 的独立安装、工具往返和恢复通过。未增加 worker、超时或重试，未调用真实供应商。README、AGENTS 和其他手写文档继续暂缓统一更新。
+
 ### 推进 W07：独立运行所有者
 
 - 新增 `aurora_bot.runtime` 清单、生成声明及静态目录；运行状态、消息、工作状态与三项运行操作使用清单生成的公共 ID。导出 operations 与 runtime 两个组件，通过显式资源引用绑定 ReAct 和运行分发表，四个生命周期插头不声明目标插槽。

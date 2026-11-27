@@ -4,9 +4,9 @@ import json
 from copy import deepcopy
 
 import pytest
-from aurora_bot.assembly_config import parse_config
-from aurora_bot.context_view import BusinessContextView
+from aurora_bot.context_view import CONTRACTS, BusinessContextView
 from aurora_bot.work_notes import MAX_NOTES, NOTES, WorkNotes, validate_notes
+from aurora_config import ConfigSchema
 from aurora_control import ExecutionRequest
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
@@ -129,9 +129,7 @@ def test_corrupt_snapshot_is_rejected_atomically(notes):
 def test_notes_view_without_world_is_bounded_and_does_not_trim_store(notes):
     store, _ = notes
     original = write(store, text='记录"\\\n' * 2500)
-    config = parse_config({"instance_id": "main", "model_role": "reasoning", "context_view": {"max_chars": 1200}})[
-        "context_view"
-    ]
+    config = ConfigSchema(CONTRACTS["config"]).parse({"max_chars": 1200})
     text = BusinessContextView(None, config, notes=store)(ExecutionRequest("view"))
     view = json.loads(text)
     assert len(text) <= 1200 and view["notes"]["records"][0]["abridged"]

@@ -13,13 +13,14 @@ import httpx
 import pytest
 import tomli_w
 import uvicorn
-from aurora_bot.mcp import create_host
 from aurora_bot.mcp_preset import initialize
 from aurora_cli.commander import run_cli as execute_cli
 from aurora_cli.parsing import root_parser
 from aurora_core import Id
 from aurora_core.discovery import Plugin
 from aurora_core.registry import RegistryEntry
+from aurora_host import Host, read_assembly
+from aurora_host.configuration import select_assembly
 from aurora_mcp.catalog import automatic_name
 from aurora_model.registry import ADAPTERS, ModelAdapter
 from aurora_model.testing import FakeModel, FakeReply
@@ -30,7 +31,9 @@ ADAPTER = Id("dev.product:adapters/fake")
 
 async def run_cli(argv, *, plugins=(), output=None):
     options = root_parser().parse_args(argv)
-    runtime = create_host(options.data_dir, workspace_root=options.root, plugins=plugins)
+    runtime = Host.create(
+        read_assembly(select_assembly(options.data_dir)), plugins, options.data_dir, workspace_root=options.root
+    )
     try:
         return await execute_cli(argv, runtime=runtime, output=output)
     finally:
@@ -70,10 +73,17 @@ async def service(root, transport):
 def seed(root, server, *, explicit=False):
     assert initialize(root, api=True, output=StringIO()) == 0
     assembly = root / "config/assembly.toml"
-    assembly.write_text(
-        assembly.read_text(encoding="utf-8").replace("plugins = [", 'plugins = ["test.product", '), encoding="utf-8"
-    )
+    import tomllib
+
+    declaration = tomllib.loads(assembly.read_text())
+    declaration["plugins"].append("test.product")
+    declaration["instances"]["chat"]["options"]["profile"] = "test"
     name = automatic_name("sample", "echo")
+    if explicit:
+        declaration["instances"]["collection"]["options"].update(
+            tools=[{"id": f"org.aurora.mcp:tools/{name}"}], include=[], instance_pattern="preserved"
+        )
+    assembly.write_text(tomli_w.dumps(declaration))
     values = {
         "org.aurora.mcp/plugin.config.toml": {
             "schema_version": 2,
@@ -81,12 +91,7 @@ def seed(root, server, *, explicit=False):
         },
         "org.aurora.model/profiles.toml": {"test": {"adapter": str(ADAPTER), "model": "fake"}},
         "org.aurora.model/bindings.toml": {"reasoning": "test"},
-        "org.aurora.bot/plugin.config.toml": {
-            "instance_id": "main",
-            "model_role": "reasoning",
-            "streaming": False,
-            "tools": [{"tool": f"org.aurora.mcp:tools/{name}", "instance_id": "preserved"}] if explicit else [],
-        },
+        "org.aurora.agent/model_call.toml": {"streaming": False},
     }
     for relative, value in values.items():
         (root / "config" / relative).write_text(tomli_w.dumps(value), encoding="utf-8")

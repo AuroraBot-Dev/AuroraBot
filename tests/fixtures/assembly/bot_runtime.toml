@@ -11,6 +11,7 @@ plugins = [
     "aurora_tools.configuration",
     "aurora_bot.runtime",
     "runtime_fixture",
+    "aurora_bot.conversation",
 ]
 
 [instances.configuration]
@@ -306,6 +307,14 @@ instance = "main"
 export = "agent"
 
 [instances.runtime.resources.operations]
+instance = "operations"
+export = "operations"
+
+[instances.conversation]
+plugin = "aurora_bot.conversation"
+component = "endpoint"
+
+[instances.conversation.resources.operations]
 instance = "operations"
 export = "operations"
 

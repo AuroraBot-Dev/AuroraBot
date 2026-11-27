@@ -4,13 +4,22 @@ from copy import deepcopy
 from typing import cast
 
 from aurora_config import ConfigSchema
-from aurora_core import Id
+
+from ..plugins.cadence._meta import CHECKPOINT, CONFIG_STATE, CONFIGURATION
+
+__all__ = [
+    "CADENCE_CONFIG",
+    "CHECKPOINT",
+    "CONFIGURATION",
+    "CONFIG_STATE",
+    "position",
+    "upgrade_checkpoint",
+    "validate_checkpoint",
+]
 from aurora_core.json_data import encode_json
 from aurora_world import WorldPosition
 
-CONFIGURATION = Id("org.aurora.bot:configs/cadence")
-CONFIG_STATE = Id("org.aurora.bot:state/cadence_config")
-CHECKPOINT = Id("org.aurora.bot:state/cadence")
+from .parameters import schema
 
 
 def _identity(value: object) -> None:
@@ -25,26 +34,7 @@ def _configuration(value: object) -> None:
 
 
 CADENCE_CONFIG = ConfigSchema(
-    {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "decision": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["model_role"],
-                "properties": {
-                    "model_role": {"type": "string", "pattern": r"\S"},
-                    "active_seconds": {"type": "number", "minimum": 1, "default": 5.0},
-                    "idle_seconds": {"type": "number", "minimum": 1, "default": 180.0},
-                    "half_life_seconds": {"type": "number", "minimum": 1, "default": 60.0},
-                    "jitter_ratio": {"type": "number", "minimum": 0, "maximum": 0.5, "default": 0.2},
-                    "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "default": 15.0},
-                    "max_chars": {"type": "integer", "minimum": 4096, "maximum": 128000, "default": 12000},
-                },
-            },
-        },
-    },
+    schema(),
     check=_configuration,
 )
 

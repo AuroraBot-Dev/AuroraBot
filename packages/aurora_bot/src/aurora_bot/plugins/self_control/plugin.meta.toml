@@ -1,0 +1,173 @@
+schema_version = 2
+
+[plugins.self_control]
+entry_point = "aurora_bot.self_control"
+title = "自身控制"
+summary = "导出本能力的定义、端口和资源，由宿主显式装配"
+requires = [
+    "aurora_bot.runtime",
+    "aurora_tools",
+]
+
+[definitions.SELF_CONTROL]
+plugin = "self_control"
+id = "org.aurora.bot:state/self_control"
+kind = "state_key"
+summary = "本能力持有的状态"
+
+[definitions.COMPONENT]
+plugin = "self_control"
+id = "org.aurora.bot:components/self_control"
+kind = "component"
+summary = "工具执行组件"
+
+[definitions.EXECUTE]
+plugin = "self_control"
+id = "org.aurora.bot:components/self_control/execute"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.EXECUTE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.EXECUTE.interface.definition]
+id = "org.aurora.bot:components/self_control"
+
+[definitions.STATUS]
+plugin = "self_control"
+id = "org.aurora.bot:tools/self_control/status"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "status"
+
+[definitions.STATUS.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.AUTONOMY]
+plugin = "self_control"
+id = "org.aurora.bot:tools/self_control/autonomy"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "autonomy"
+
+[definitions.AUTONOMY.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.FINISH]
+plugin = "self_control"
+id = "org.aurora.bot:tools/self_control/finish"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "finish"
+
+[definitions.FINISH.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.SCHEDULE]
+plugin = "self_control"
+id = "org.aurora.bot:tools/self_control/schedule"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "schedule"
+
+[definitions.SCHEDULE.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.LIST]
+plugin = "self_control"
+id = "org.aurora.bot:tools/self_control/list"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "list"
+
+[definitions.LIST.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.CANCEL]
+plugin = "self_control"
+id = "org.aurora.bot:tools/self_control/cancel"
+kind = "tool"
+summary = "显式选择的工具"
+contract = "cancel"
+
+[definitions.CANCEL.register_to]
+id = "org.aurora.tools:registries/tools"
+
+[definitions.PREPARE]
+plugin = "self_control"
+id = "org.aurora.bot:handlers/self_control/prepare"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.START]
+plugin = "self_control"
+id = "org.aurora.bot:handlers/self_control/start"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.START.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CLEAN]
+plugin = "self_control"
+id = "org.aurora.bot:handlers/self_control/clean"
+kind = "hook_handler"
+summary = "公开方法插头"
+
+[definitions.CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.control]
+inject = [
+    "ctx",
+    "options",
+]
+plugs = [
+    "PREPARE",
+    "START",
+    "CLEAN",
+]
+slots = []
+states = []
+optional_states = []
+inputs = [
+    "runtime",
+    "agent",
+]
+optional_inputs = []
+resources = [
+    "control",
+]
+options = "owner"
+plugin = "self_control"
+
+[contracts.status]
+format = "json"
+file = "status.schema.json"
+
+[contracts.autonomy]
+format = "json"
+file = "autonomy.schema.json"
+
+[contracts.finish]
+format = "json"
+file = "finish.schema.json"
+
+[contracts.schedule]
+format = "json"
+file = "schedule.schema.json"
+
+[contracts.list]
+format = "json"
+file = "list.schema.json"
+
+[contracts.cancel]
+format = "json"
+file = "cancel.schema.json"
+
+[contracts.owner]
+format = "json-schema"
+file = "owner.schema.json"

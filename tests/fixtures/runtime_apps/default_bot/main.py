@@ -6,34 +6,17 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-import tomli_w
-from aurora_agent.plugins.model import plugin as model_plugin
-from aurora_agent.react import plugin as react_plugin
-from aurora_agent.react_defaults import plugin as defaults_plugin
-from aurora_bot.assembly import DefaultAssembly
-from aurora_bot.assembly import plugin as assembly_plugin
 from aurora_config import CONFIGURATION
-from aurora_config import plugin as configuration_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, component_entries
 from aurora_core.bootstrap import bootstrap
-from aurora_core.ctx import install_context
 from aurora_core.discovery import register_plugins
-from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
-from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
-from aurora_core.persistence import ContextPersistence
+from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_core.registry import RegistryEntry
-from aurora_core.storage import StorageService
-from aurora_host import configuration_component
 from aurora_model import ChatRequest, ModelConfig
-from aurora_model.config import BINDINGS
-from aurora_model.configuration import plugin as model_configuration_plugin
-from aurora_model.plugin import plugin as adapter_plugin
 from aurora_model.registry import ADAPTERS, ModelAdapter
-from aurora_model.supplier import plugin as litellm_plugin
 from aurora_model.testing import FakeModel, FakeReply
 from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
-from aurora_tools.execution import plugin as tools_plugin
 from configuration import configured_plugins
 
 ADAPTER = Id("dev.example.default:adapters/fake")
@@ -80,22 +63,16 @@ async def create_tool(
 
 async def run(args: argparse.Namespace) -> None:
     registry = bootstrap()
-    register_plugins(
-        registry,
-        configured_plugins(
-            (
-                configuration_plugin(),
-                adapter_plugin(),
-                model_configuration_plugin(),
-                litellm_plugin(),
-                model_plugin(),
-                react_plugin(),
-                tools_plugin(),
-                defaults_plugin(),
-                assembly_plugin(),
-            )
-        ),
-    )
+    from types import SimpleNamespace
+
+    from aurora_core.discovery import load_plugins
+    from aurora_host import Host, read_assembly
+
+    plan = read_assembly(Path(__file__).with_name("assembly.toml"))
+    if args.profile is not None:
+        plan.instances["chat"]["options"]["profile"] = args.profile
+    selected = tuple(configured_plugins(load_plugins(enabled=plan.plugins)))
+    register_plugins(registry, selected)
     install_lifecycle_slots(registry)
     registry.register(
         RegistryEntry(ADAPTER, "adapter", ModelAdapter("chat", create_model), "default_example", register_to=ADAPTERS)
@@ -127,35 +104,23 @@ async def run(args: argparse.Namespace) -> None:
             register_to=TOOLS,
         )
     )
-    ctx, hooks = install_context(registry), HookConnections(registry)
-    storage = StorageService(args.data_dir)
-    assembly = DefaultAssembly(registry=registry, ctx=ctx, hooks=hooks, storage=storage)
-    host = Lifecycle(
-        ctx,
-        hooks,
-        (configuration_component(registry, ctx, hooks, storage), *assembly.components()),
-        persistence=ContextPersistence(ctx, storage.snapshot_store()),
-        storage=storage,
+    host = Host(registry, args.data_dir, workspace_root=Path(__file__).parent)
+    host.assemble(plan, selected)
+    ctx = host.ctx
+    assembly = SimpleNamespace(
+        agent=host.graph.instances["main"].instance,
+        defaults=host.graph.instances["defaults"].instance,
+        runtime=host.graph.instances["runtime"].instance.runtime,
     )
-
-    def select_profile() -> None:
-        if args.profile is not None:
-            value = ctx.get(BINDINGS)
-            assert isinstance(value, dict)
-            value["reasoning"] = args.profile
-            path = args.data_dir / "config/org.aurora.model/bindings.toml"
-            path.write_text(tomli_w.dumps(value), encoding="utf-8")
-            ctx.set(BINDINGS, value)
-
-    await host.start(configure=select_profile)
+    await host.start()
     try:
         assert assembly.agent is not None and assembly.defaults is not None
         print("装配已启动；尚未激活。", flush=True)
         if args.serve:
             from aurora_api.access import AccessPolicy, token_from_env
             from aurora_api.server import serve
-            from aurora_bot.assembly_config import AGENTS, MESSAGES, RUN, WORK
             from aurora_bot.conversation import CONVERSATION
+            from aurora_bot.runtime import AGENTS, MESSAGES, RUN, WORK
 
             async with serve(
                 registry,

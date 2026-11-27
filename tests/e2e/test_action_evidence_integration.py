@@ -6,19 +6,21 @@ import sqlite3
 from typing import cast
 
 import pytest
-from aurora_bot.assembly_config import CONFIG, WORK
+from aurora_bot.runtime import WORK
 from aurora_bot.work_notes import WorkNotes
 from aurora_control import ExecutionRequest
 from aurora_model.testing import FakeReply
 from test_default_assembly import seed, setup
 
+from tests.fixtures.bot_graph import bot_options, configure_bot
+
 
 def configure(ctx, **options):
     seed(ctx)
-    ctx.set(
-        CONFIG,
+    configure_bot(
+        ctx,
         {
-            **cast(dict, ctx.get(CONFIG)),
+            **cast(dict, bot_options(ctx)),
             "actions": {"enabled": True, "max_chars": 1024},
             "notes": {"enabled": True},
             "max_iterations": 32,

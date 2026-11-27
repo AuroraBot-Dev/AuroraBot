@@ -48,9 +48,9 @@ def test_initialization_preserves_files_and_validates_minimal_configuration(tmp_
     for item in configuration_files(registry, directory):
         if item.path.exists():
             item.spec.schema.parse(read_toml(item.path))
-    bot = read_toml(directory / "org.aurora.bot/plugin.config.toml")
-    assert bot["input_budget"]["enabled"] and bot["input_budget"]["max_chars"] == 48000
-    assert all(not bot[name]["enabled"] for name in ("context_view", "notes", "self_control", "archive", "actions"))
+    assert host["instances"]["budget"]["component"] == "input_budget"
+    assert read_toml(directory / "org.aurora.agent/input_budget.toml")["max_chars"] == 48000
+    assert not {"view", "notes", "control", "archive", "actions"} & host["instances"].keys()
     servers = read_toml(directory / "org.aurora.mcp/plugin.config.toml")["servers"]
     assert set(servers) == {"terminal"}
     terminal = servers["terminal"]
@@ -124,11 +124,15 @@ def test_onboarding_roundtrip_restores_history_without_automatic_activation(tmp_
     plan = read_toml(assembly)
     plan["plugins"].append(plugin.name)
     assembly.write_text(tomli_w.dumps(plan), encoding="utf-8")
-    create_host = source["create_host"]
-    monkeypatch.setitem(
-        source["run"].__globals__,
-        "create_host",
-        lambda root, *, workspace_root: create_host(root, workspace_root=workspace_root, plugins=(plugin,)),
+    create_host = source["Host"].create
+    monkeypatch.setattr(
+        source["Host"],
+        "create",
+        classmethod(
+            lambda cls, plan, plugins, root, *, workspace_root: create_host(
+                plan, (plugin,), root, workspace_root=workspace_root
+            )
+        ),
     )
 
     async def offline_cli(arguments, *, runtime):

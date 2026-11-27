@@ -73,6 +73,7 @@ def test_runtime_graph_owns_only_scheduling_and_preserves_bound_state(tmp_path):
         owner = host.graph.instances["runtime"].instance
         operations = cast(RunOperations, host.registry.get(RUN_CONTROL).target)
         assert owner.operations is operations
+        assert host.graph.instances["conversation"].instance.operations is operations
         assert owner.agent is host.graph.instances["main"].instance
         assert clients == [] and operations.instances == ()
         assert not any(entry.id.domain == "tools" for entry in host.registry.entries())

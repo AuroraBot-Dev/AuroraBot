@@ -70,16 +70,14 @@ def test_workspace_plugins_use_the_aurora_discovery_group():
 
 
 def test_self_control_definitions_are_bot_owned_and_configuration_is_opt_in():
-    from aurora_bot.assembly import plugin
-    from aurora_bot.assembly_config import parse_config
-    from aurora_bot.self_control import COMPONENT, SELF_TOOLS
+    from aurora_bot.self_control import COMPONENT, SELF_TOOLS, plugin
     from aurora_bot.self_control_state import SELF_CONTROL
     from aurora_tools.execution import ToolSpec
 
     entries = {entry.id: entry for entry in plugin().entries}
     expected = {SELF_CONTROL, COMPONENT, *SELF_TOOLS.values()}
     assert expected <= entries.keys()
-    assert all(entries[identity].provider == "aurora_bot" for identity in expected)
+    assert all(entries[identity].provider == "aurora_bot.self_control" for identity in expected)
     names = set()
     for identity in SELF_TOOLS.values():
         spec = entries[identity].target
@@ -93,7 +91,9 @@ def test_self_control_definitions_are_bot_owned_and_configuration_is_opt_in():
         "wake_list",
         "wake_cancel",
     }
-    assert parse_config({"instance_id": "main", "model_role": "reasoning"})["self_control"] == {"enabled": False}
+    from aurora_bot.runtime import plugin as runtime_plugin
+
+    assert not expected.intersection(entry.id for entry in runtime_plugin().entries)
 
 
 def test_model_and_mcp_templates_belong_to_independent_distributions(tmp_path):

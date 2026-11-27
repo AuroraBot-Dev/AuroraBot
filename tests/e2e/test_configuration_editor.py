@@ -5,9 +5,9 @@ import tomllib
 
 import tomli_w
 from aiohttp import ClientSession
+from aurora_agent.plugins.configuration._meta import REACT_DEFAULTS_STATE as CONFIG
 from aurora_api.contract import describe_contract
 from aurora_api.server import serve
-from aurora_bot.assembly_config import CONFIG
 from aurora_config import CONFIGURATION
 from aurora_config.editor import ConfigurationEndpoint
 from aurora_config.editor_contract import describe_configuration
@@ -51,14 +51,14 @@ def test_configuration_http_save_conflict_and_restart(tmp_path):
                 document = await request("Get", {"id": selected["id"]})
                 second = await request("Get", {"id": next(item["id"] for item in files if item != selected)})
                 before = ctx.get(CONFIG)
-                assert assembly.config is not None
-                assembled = dict(assembly.config)
+                assert assembly.defaults is not None
+                assembled = assembly.defaults.system_prompt
                 config = tomllib.loads(document["content"])
                 config["system_prompt"] = "保存后重启生效"
                 content = "# 用户注释保留\n" + tomli_w.dumps(config)
                 result = await request("Save", {**document, "content": content})
                 assert result == {"id": selected["id"], "restart_required": True}
-                assert ctx.get(CONFIG) == before and assembly.config == assembled
+                assert ctx.get(CONFIG) == before and assembly.defaults.system_prompt == assembled
                 assert events == ["model.created", "tool.created"]
                 assert (tmp_path / "config" / selected["path"]).read_text(encoding="utf-8") == content
                 assert (await request("Save", document, 409))["code"] == "configuration_conflict"
@@ -81,8 +81,8 @@ def test_configuration_http_save_conflict_and_restart(tmp_path):
         restored, assembly, ctx, *_ = setup(tmp_path)
         await restored.start()
         try:
-            assert assembly.config is not None
-            assert assembly.config["system_prompt"] == "保存后重启生效"
+            assert assembly.defaults is not None
+            assert assembly.defaults.system_prompt == "保存后重启生效"
             restored_config = ctx.get(CONFIG)
             assert isinstance(restored_config, dict) and restored_config["system_prompt"] == "保存后重启生效"
         finally:

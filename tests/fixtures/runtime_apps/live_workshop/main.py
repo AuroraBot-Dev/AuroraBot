@@ -5,7 +5,7 @@ import asyncio
 import logging
 import sys
 import tomllib
-from importlib.resources import files
+from pathlib import Path
 
 from aurora_bot.conversation import CONVERSATION
 from aurora_cli.commander import run_cli
@@ -44,13 +44,14 @@ async def run(argv=None):
     options = root_parser().parse_args(argv)
     if options.connect is not None or options.show_help or options.version or options.command[:1] != ["serve"]:
         return await run_cli(argv, plugins=selected_plugins)
-    plan = AssemblyPlan.parse(
-        tomllib.loads(files("aurora_config").joinpath("assembly.toml").read_text(encoding="utf-8"))
+    declaration = tomllib.loads(
+        Path(__file__).with_name("assembly-direct.toml" if selected.direct_only else "assembly.toml").read_text()
     )
-    plan = AssemblyPlan((*plan.plugins, *(item.name for item in selected_plugins)), plan.instances, plan.connections)
+    declaration["plugins"] = list(dict.fromkeys([*declaration["plugins"], *(item.name for item in selected_plugins)]))
+    plan = AssemblyPlan.parse(declaration)
     runtime = Host.create(plan, selected_plugins, options.data_dir, workspace_root=options.root)
     try:
-        runtime.mount(assemble(**runtime.services))
+        runtime.mount(assemble(runtime))
         return await run_cli(argv, runtime=runtime)
     finally:
         await runtime.stop()

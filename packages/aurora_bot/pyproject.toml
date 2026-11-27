@@ -9,17 +9,24 @@ dependencies = [
     "aurora-host>=0.1.0",
     "aurora-core>=0.1.0", "aurora-config>=0.1.0",
     "aurora-control>=0.1.0",
-    "aurora-model[config,litellm]>=0.1.0",
-    "aurora-world[config]>=0.1.0",
+    "aurora-model[config]>=0.1.0",
 ]
 
 [project.optional-dependencies]
+world = ["aurora-world[config]>=0.1.0"]
+litellm = ["aurora-model[litellm]>=0.1.0"]
+memory = ["aurora-memory>=0.1.0"]
 mcp = ["aurora-mcp[tools]>=0.1.0", "tomli-w>=1.2,<2"]
 mcp-world = ["aurora-mcp[tools,world]>=0.1.0", "tomli-w>=1.2,<2"]
 
 [project.entry-points."aurora.plugins"]
 "aurora_bot.runtime" = "aurora_bot.runtime:plugin"
-"aurora_bot.assembly" = "aurora_bot.assembly:plugin"
+"aurora_bot.conversation" = "aurora_bot.conversation:plugin"
+"aurora_bot.commands" = "aurora_bot.cli:plugin"
+"aurora_bot.notes" = "aurora_bot.work_notes:plugin"
+"aurora_bot.actions" = "aurora_bot.action_evidence:plugin"
+"aurora_bot.self_control" = "aurora_bot.self_control:plugin"
+"aurora_bot.world_view" = "aurora_bot.context_view:plugin"
 "aurora_bot.cadence" = "aurora_bot.cadence:plugin"
 
 [build-system]
@@ -38,3 +45,31 @@ include = ["src", "pyproject.toml", "plugin.meta.json", "hatch_build.py"]
 [[tool.aurora-meta-build.plugins]]
 manifest = "src/aurora_bot/plugins/runtime/plugin.meta.toml"
 module = "src/aurora_bot/plugins/runtime/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_bot/plugins/conversation/plugin.meta.toml"
+module = "src/aurora_bot/plugins/conversation/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_bot/plugins/commands/plugin.meta.toml"
+module = "src/aurora_bot/plugins/commands/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_bot/plugins/notes/plugin.meta.toml"
+module = "src/aurora_bot/plugins/notes/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_bot/plugins/actions/plugin.meta.toml"
+module = "src/aurora_bot/plugins/actions/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_bot/plugins/self_control/plugin.meta.toml"
+module = "src/aurora_bot/plugins/self_control/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_bot/plugins/world_view/plugin.meta.toml"
+module = "src/aurora_bot/plugins/world_view/_meta.py"
+
+[[tool.aurora-meta-build.plugins]]
+manifest = "src/aurora_bot/plugins/cadence/plugin.meta.toml"
+module = "src/aurora_bot/plugins/cadence/_meta.py"

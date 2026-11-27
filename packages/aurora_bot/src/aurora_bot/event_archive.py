@@ -1,31 +1,27 @@
 """将宿主持有的 world 事件归档接入只读模型工具，不创建数据库或后台任务。"""
 
+import json
 import sqlite3
+from importlib.resources import files
 from typing import cast
 
 from aurora_config import ConfigSchema
-from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding, component_entries
-from aurora_core import Id
-from aurora_core.ctx import Context
-from aurora_core.json_data import JsonValue, encode_json
-from aurora_core.registry import RegistryEntry
-from aurora_core.storage import StorageService
-from aurora_tools.execution import TOOLS, ToolExecutionError, ToolInstance, ToolSpec
+from aurora_control import ExecutionPlug, ExecutionRequest
+from aurora_core import plug
+from aurora_core.json_data import encode_json
+from aurora_tools.execution import ToolExecutionError, ToolInstance
 from aurora_world import CursorError, WorldContentPage, WorldRecords
 
-READ_EVENT = Id("org.aurora.bot:tools/world/read_event")
-COMPONENT = Id("org.aurora.bot:components/world/read_event")
-_IDENTITY = {"type": "string", "minLength": 1, "maxLength": 256, "pattern": r"\S"}
-_PARAMETERS = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["journal_id", "record_id"],
-    "properties": {
-        "journal_id": _IDENTITY,
-        "record_id": _IDENTITY,
-        "offset": {"type": "integer", "minimum": 0, "maximum": 2**63 - 2, "default": 0},
-    },
+from .plugins.world_view._meta import COMPONENT, EXECUTE, READ_EVENT
+
+CONTRACTS = {
+    name: json.loads(
+        files("aurora_bot").joinpath("plugins/world_view/" + name + ".schema.json").read_text(encoding="utf-8")
+    )
+    for name in ["read_event"]
 }
+
+_PARAMETERS = CONTRACTS["read_event"]["parameters"]
 _ARGUMENTS = ConfigSchema(_PARAMETERS)
 
 
@@ -50,12 +46,18 @@ def _value(page: WorldContentPage, text: str) -> dict:
 class EventArchive:
     """固定到装配所持 world，预算覆盖返回 value 的 JSON，不包含工具结果外层信封。"""
 
-    def __init__(self, records: WorldRecords, *, max_chars: int = 8000) -> None:
+    def __init__(self, records: WorldRecords | None, *, max_chars: int = 8000, ctx=None, states=None) -> None:
         if type(max_chars) is not int or not 1024 <= max_chars <= 32000:
             raise ValueError("归档工具预算须在 1024 到 32000 字符之间")
         self.records, self.max_chars = records, max_chars
+        self.ctx, self.states = ctx, {} if states is None else states
 
     def read(self, arguments: dict) -> dict:
+        if "config" in self.states:
+            self.max_chars = self.ctx.get(self.states["config"].key, location=dict(self.states["config"].location))[
+                "archive_max_chars"
+            ]
+        assert self.records is not None
         values = cast(dict, _ARGUMENTS.parse(arguments))
         try:
             page = self.records.read_content(**values, limit=self.max_chars)
@@ -86,59 +88,29 @@ class EventArchive:
         return _value(page, page.text[:low])
 
 
-async def _declared(request: ExecutionRequest) -> None:
-    raise RuntimeError("归档读取工具需要装配注入 WorldRecords")
+class BoundTool:
+    """执行已选择的产品工具，借用装配显式提供的服务。"""
 
+    def __init__(self, ctx, input_state, output_state, service, action=None):
+        self.ctx, self.input_state, self.output_state = ctx, input_state, output_state
+        self.service, self.action = service, action
 
-async def create_reader(
-    *,
-    records: WorldRecords,
-    max_chars: int,
-    ctx: Context,
-    storage: StorageService,
-    instance_id: str,
-    input_state: StateBinding,
-    output_state: StateBinding,
-    owner,
-    resources,
-    config: dict[str, JsonValue],
-) -> ToolInstance:
-    if config or records.ctx is not ctx:
-        raise ValueError("归档工具须使用同一宿主的 WorldRecords，不接受数据库配置覆盖")
-    archive = EventArchive(records, max_chars=max_chars)
-
-    async def execute(request: ExecutionRequest) -> None:
-        call = cast(dict, input_state.get(ctx, request))
+    @plug(EXECUTE)
+    async def execute(self, request: ExecutionRequest) -> None:
+        call = cast(dict, self.input_state.get(self.ctx, request))
         arguments = dict(call["arguments"])
         offset = arguments.get("offset")
         if type(offset) is float and offset.is_integer():
             arguments["offset"] = int(offset)
-        output_state.set(ctx, request, archive.read(arguments))
+        result = self.service.read(arguments)
+        self.output_state.set(self.ctx, request, result)
 
+
+async def create_reader(*, ctx, storage, instance_id, input_state, output_state, owner, resources, config):
+    tool = BoundTool(ctx, input_state, output_state, resources["archive"], None)
     return ToolInstance(
-        ExecutionPlug(COMPONENT, execute, {"input": input_state, "output": output_state}, instance_id=instance_id)
+        ExecutionPlug(COMPONENT, tool.execute, {"input": input_state, "output": output_state}, instance_id=instance_id)
     )
 
 
-def entries() -> tuple[RegistryEntry, ...]:
-    return (
-        *component_entries(COMPONENT, EventArchive, _declared, provider="aurora_bot"),
-        RegistryEntry(
-            READ_EVENT,
-            "tool",
-            ToolSpec(
-                COMPONENT,
-                {
-                    "name": "world_read_event",
-                    "description": (
-                        "按 world_event 引用的 journal_id/record_id 读取当前 world 的原始事件 JSON。"
-                        "offset 初始为 0，按 next_offset 继续；仅当 next_offset=null 才读至末尾，拼接各页 text 后才是完整 JSON。"
-                        "只读，不重放事件，不代表事项已完成；不支持环境观察或 tool_call 引用。"
-                    ),
-                    "parameters": _PARAMETERS,
-                },
-            ),
-            "aurora_bot",
-            register_to=TOOLS,
-        ),
-    )
+__all__ = ["READ_EVENT", "BoundTool", "EventArchive", "create_reader"]

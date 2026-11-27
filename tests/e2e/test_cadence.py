@@ -6,13 +6,11 @@ from typing import cast
 
 import pytest
 import tomli_w
-from aurora_bot.assembly import DefaultAssembly
 from aurora_bot.cadence import plugin as cadence_plugin
 from aurora_bot.cadence.state import CHECKPOINT, CONFIG_STATE
 from aurora_control import ExecutionRequest
 from aurora_core import Id
 from aurora_core.discovery import Plugin
-from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP
 from aurora_core.registry import RegistryEntry
 from aurora_core.snapshots import JsonSnapshotStore
 from aurora_world import (
@@ -390,33 +388,6 @@ def test_source_lifecycle_and_partial_start_cleanup(tmp_path, fail_start):
         assert [item["message_id"] for item in world["records"]] == ["one"]
 
     asyncio.run(scenario())
-
-
-def test_component_connection_failure_releases_cadence_links(tmp_path):
-    _, assembly, ctx, registry, _, _, _, _ = configured(tmp_path)
-
-    def fail(*args, **kwargs):
-        raise RuntimeError("世界组件连接失败")
-
-    registry.register_many(world_configuration_plugin().entries)
-    other = DefaultAssembly(
-        registry=registry,
-        ctx=ctx,
-        hooks=assembly.hooks,
-        storage=assembly.storage,
-        instance_id="failed",
-        world_component_factory=fail,
-    )
-    try:
-        with pytest.raises(RuntimeError, match="世界组件连接失败"):
-            other.components()
-        for owner in ("failed/model", "failed/bot", "failed/cadence", "failed/records"):
-            for phase in (PREPARE, START, STOP, CLEAN):
-                assert assembly.hooks.for_slot(phase, owner) == ()
-    finally:
-        assembly.hooks.close()
-        assembly.storage.close()
-        ctx.close()
 
 
 def test_forwarding_reads_durable_backlog_outside_recent_view(tmp_path):

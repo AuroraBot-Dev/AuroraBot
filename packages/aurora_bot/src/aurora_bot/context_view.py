@@ -1,13 +1,50 @@
 """将世界记录、本实例笔记和执行证据呈现为有界观察，不读取配置或执行工作区。"""
 
-from typing import cast
+import json
+from importlib.resources import files
+from typing import TypedDict, cast
 
+from aurora_config import ConfigSchema, ConfigSpec, ConfigTemplate
 from aurora_control import ExecutionRequest
+from aurora_core import plug
+from aurora_core.components import ComponentFactory, InstanceExport
+from aurora_core.ctx import StateKey
 from aurora_core.json_data import encode_json
+from aurora_tools.execution import ToolSpec
 from aurora_world import ENVIRONMENT, RECORDS, WorldRecords
 
 from .action_evidence import ActionEvidence
-from .assembly_config import ContextViewConfig
+from .event_archive import BoundTool, EventArchive, create_reader
+from .plugins.world_view._meta import (
+    COMPONENT,
+    CONFIG_STATE,
+    CONFIGURATION,
+    EXECUTE,
+    PREPARE,
+    READ_EVENT,
+    world_view_plugin,
+)
+
+CONTRACTS = {
+    name: json.loads(
+        files("aurora_bot").joinpath("plugins/world_view/" + name + ".schema.json").read_text(encoding="utf-8")
+    )
+    for name in ["read_event"]
+}
+
+from .plugins.world_view.parameters import schema
+
+CONTRACTS["config"] = schema()
+
+
+class ContextViewConfig(TypedDict):
+    events: bool
+    environment: bool
+    notes: bool
+    actions: bool
+    max_chars: int
+
+
 from .work_notes import WorkNotes
 
 
@@ -57,7 +94,7 @@ class BusinessContextView:
             "notes": self.notes is not None and self.config["notes"],
             "actions": self.actions is not None and self.config["actions"],
         }
-        if not self.config["enabled"] or not any(enabled.values()):
+        if not any(enabled.values()):
             return ""
         events: list[dict] = []
         environment: list[dict] = []
@@ -138,3 +175,52 @@ class BusinessContextView:
             section["records"] = list(reversed(selected))
             section["omitted"] = len(items) - len(selected)
         return encode_json(view)
+
+
+class ContextViewResource(BusinessContextView):
+    """借用显式输入的业务材料，并在 prepare 读取本能力参数。"""
+
+    def __init__(self, *, ctx, states, options):
+        if "config" in states and options:
+            raise ValueError("视图参数须选择配置状态或显式 options")
+        super().__init__(None, cast(ContextViewConfig, ConfigSchema(CONTRACTS["config"]).parse(options)))
+        self.ctx, self.states = ctx, states
+
+    def bind(self, *, records=None, notes=None, actions=None, archive=None):
+        self.records, self.notes, self.actions = records, notes, actions
+        self.archive_enabled = archive is not None
+
+    @plug(PREPARE)
+    def prepare(self):
+        if "config" in self.states:
+            self.config = self.ctx.get(self.states["config"].key, location=dict(self.states["config"].location))
+
+
+def plugin():
+    schema = ConfigSchema(CONTRACTS["config"])
+    return world_view_plugin(
+        targets={
+            COMPONENT: BoundTool,
+            EXECUTE: BoundTool.execute,
+            READ_EVENT: ToolSpec(COMPONENT, CONTRACTS["read_event"], factory=create_reader),
+            CONFIGURATION: ConfigSpec(
+                CONFIG_STATE,
+                ConfigTemplate("aurora_bot.plugins.world_view", "plugin.config.tomls/world_view.toml"),
+                schema,
+            ),
+            CONFIG_STATE: StateKey(schema.validate, persistent=False),
+        },
+        components={
+            "view": ComponentFactory(
+                ContextViewResource,
+                lambda instance: InstanceExport(plugs={PREPARE: instance.prepare}, resources={"view": instance}),
+                plugs=(ContextViewResource.prepare,),
+                bind=lambda instance, resources: instance.bind(**resources),
+            ),
+            "archive": ComponentFactory(
+                lambda ctx, states: EventArchive(None, ctx=ctx, states=states),
+                lambda instance: InstanceExport(resources={"archive": instance}),
+                bind=lambda instance, resources: setattr(instance, "records", resources["records"]),
+            ),
+        },
+    )

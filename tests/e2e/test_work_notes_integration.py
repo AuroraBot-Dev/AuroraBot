@@ -5,8 +5,8 @@ import json
 from typing import cast
 
 import pytest
-from aurora_bot.assembly_config import CONFIG, MESSAGES
-from aurora_bot.work_notes import NOTE_TOOLS, NOTES
+from aurora_bot.runtime import MESSAGES
+from aurora_bot.work_notes import NOTES
 from aurora_control import ExecutionPlug, ExecutionRequest, component_entries
 from aurora_core import Id
 from aurora_model.testing import FakeReply
@@ -15,6 +15,8 @@ from aurora_world.configuration import plugin as configuration_plugin
 from aurora_world.records import plugin as records_plugin
 from aurora_world.sources import plugin as world_plugin
 from test_default_assembly import seed, setup
+
+from tests.fixtures.bot_graph import bot_options, configure_bot
 
 
 def observation(request):
@@ -50,7 +52,7 @@ def test_integer_valued_float_arguments_work_through_tool_executor(tmp_path):
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "notes": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "notes": {"enabled": True}})
 
         await host.start(configure=configure)
         other = write_call("other", 0.0, "另一条笔记", [])
@@ -95,7 +97,7 @@ def test_invalid_integer_arguments_are_rejected_without_changing_notes(tmp_path)
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "notes": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "notes": {"enabled": True}})
 
         await host.start(configure=configure)
         try:
@@ -130,7 +132,7 @@ def test_notes_refresh_conflict_and_restore_without_automatic_work(tmp_path, wit
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "notes": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "notes": {"enabled": True}})
 
         await host.start(configure=configure)
         references = []
@@ -204,7 +206,7 @@ def test_tools_are_explicit_and_note_state_survives_disabling(tmp_path):
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "notes": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "notes": {"enabled": True}})
 
         await host.start(configure=configure)
         clients[0].respond = lambda request: (
@@ -217,10 +219,8 @@ def test_tools_are_explicit_and_note_state_survives_disabling(tmp_path):
             stored = ctx.get(NOTES, location={"instance_id": "main"})
         finally:
             await host.stop()
-        path = tmp_path / "config/org.aurora.bot/plugin.config.toml"
-        path.write_text(path.read_text(encoding="utf-8").replace("enabled = true", "enabled = false"), encoding="utf-8")
         host, assembly, ctx, _, clients, _, _, _ = setup(tmp_path)
-        await host.start()
+        await host.start(configure=lambda: seed(ctx, tools=False))
         try:
             assert (await assembly.runtime.submit("直接交流").run.wait()).status == "completed"
             assert "tools" not in clients[0].requests[0]
@@ -231,25 +231,33 @@ def test_tools_are_explicit_and_note_state_survives_disabling(tmp_path):
     asyncio.run(scenario())
 
 
-def test_manual_tool_selection_cannot_override_note_owner(tmp_path):
+def test_manual_tool_uses_explicit_service_and_arbitrary_state_bindings(tmp_path):
+    from aurora_bot.runtime import MESSAGES
+    from aurora_bot.work_notes import WorkNotes, _factory
+    from aurora_control import StateBinding
+
     async def scenario():
-        host, _, ctx, _, clients, _, _, _ = setup(tmp_path)
-
-        def configure():
-            seed(ctx, tools=False)
-            ctx.set(
-                CONFIG,
-                {
-                    **cast(dict, ctx.get(CONFIG)),
-                    "tools": [
-                        {"tool": str(NOTE_TOOLS["write"]), "instance_id": "foreign", "config": {"owner": "other"}}
-                    ],
-                },
-            )
-
-        with pytest.raises(ValueError, match="notes.enabled"):
-            await host.start(configure=configure)
-        assert clients == []
+        host, _, ctx, _, _, _, _, _ = setup(tmp_path)
+        notes = WorkNotes(ctx, "selected-owner")
+        source = StateBinding(MESSAGES, (("part", "input"),))
+        target = StateBinding(MESSAGES, (("part", "output"),))
+        request = ExecutionRequest("explicit")
+        source.set(ctx, request, write_call("manual", 0, "显式服务", []))
+        tool = await _factory(
+            "write",
+            ctx=ctx,
+            storage=host.storage,
+            instance_id="writer",
+            input_state=source,
+            output_state=target,
+            owner="collection",
+            resources={"notes": notes},
+            config={},
+        )
+        await tool.plug(request)
+        assert notes.read("inspection")["text"] == "显式服务"
+        assert ctx.list(key=NOTES, location={"instance_id": "collection"}) == ()
+        host.close()
 
     asyncio.run(scenario())
 
@@ -260,7 +268,7 @@ def test_cancel_after_note_write_restores_result_without_repeating_write(tmp_pat
 
         def configure():
             seed(ctx, tools=False)
-            ctx.set(CONFIG, {**cast(dict, ctx.get(CONFIG)), "notes": {"enabled": True}})
+            configure_bot(ctx, {**cast(dict, bot_options(ctx)), "notes": {"enabled": True}})
 
         await host.start(configure=configure)
         entered = asyncio.Event()

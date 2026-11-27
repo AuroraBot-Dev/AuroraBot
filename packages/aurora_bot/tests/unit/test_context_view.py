@@ -3,8 +3,8 @@
 import json
 
 import pytest
-from aurora_bot.assembly_config import parse_config
-from aurora_bot.context_view import BusinessContextView
+from aurora_bot.context_view import CONTRACTS, BusinessContextView
+from aurora_config import ConfigSchema
 from aurora_control import ExecutionRequest
 from aurora_core import Id
 from aurora_core.bootstrap import bootstrap
@@ -37,7 +37,7 @@ def world():
 
 
 def render(records, **options):
-    config = parse_config({"instance_id": "main", "model_role": "reasoning", "context_view": options})
+    config = {"context_view": ConfigSchema(CONTRACTS["config"]).parse(options)}
     return BusinessContextView(records, config["context_view"])(ExecutionRequest("view"))
 
 
@@ -106,4 +106,4 @@ def test_disabled_sections_and_oversized_identity_are_explicit(world):
     view = json.loads(render(records, events=False))
     assert view["events"] == {"enabled": False, "records": [], "omitted": 0}
     assert view["environment"]["records"]
-    assert render(records, enabled=False) == render(records, events=False, environment=False) == ""
+    assert render(records, events=False, environment=False) == ""

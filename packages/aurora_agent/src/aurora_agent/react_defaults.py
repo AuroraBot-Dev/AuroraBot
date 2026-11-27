@@ -265,9 +265,12 @@ def _create(*, ctx, instance_id, states, options):
 
 
 def plugin() -> Plugin:
+    from .context_resources import factories
+
     return defaults_plugin(
         targets={BUILD_PROMPT: ReActDefaults, INTERPRET_RESPONSE: ReActDefaults, RECORD_OBSERVATION: ReActDefaults},
         components={
+            **factories(),
             "defaults": ComponentFactory(
                 _create,
                 lambda instance: InstanceExport(
@@ -281,6 +284,6 @@ def plugin() -> Plugin:
                     ReActDefaults.configure,
                 ),
                 bind=lambda instance, resources: instance.bind(**resources),
-            )
+            ),
         },
     )

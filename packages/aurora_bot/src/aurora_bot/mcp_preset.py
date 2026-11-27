@@ -18,25 +18,14 @@ from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_host import AssemblyPlan
 from aurora_host.configuration import HOST_SCHEMA
 
-PLUGINS = (
-    "aurora_config",
-    "aurora_model",
-    "aurora_model.configuration",
-    "aurora_model.litellm",
-    "aurora_agent.model",
-    "aurora_agent.react",
-    "aurora_tools",
-    "aurora_agent.react_defaults",
-    "aurora_bot.assembly",
-    "aurora_mcp",
-    "aurora_mcp.tools",
-)
+PLUGINS = tuple(tomllib.loads(files("aurora_bot").joinpath("presets/mcp.toml").read_text(encoding="utf-8"))["plugins"])
 
 
 def initialize(
     root: Path,
     *,
     world: bool = False,
+    preset: str | None = None,
     api: bool = False,
     plugins: tuple[str, ...] = PLUGINS,
     output: TextIO = sys.stdout,
@@ -54,8 +43,12 @@ def initialize(
         selected += ["aurora_world.records", "aurora_world.sources", "aurora_world.configuration", "aurora_mcp.world"]
     if api:
         selected += ["aurora_api"]
-    candidate = tomllib.loads(files("aurora_config").joinpath("assembly.toml").read_text(encoding="utf-8"))
-    candidate["plugins"] = list(dict.fromkeys(selected))
+    candidate = tomllib.loads(
+        files("aurora_bot")
+        .joinpath("presets/" + (preset or ("mcp-world" if world else "mcp")) + ".toml")
+        .read_text(encoding="utf-8")
+    )
+    candidate["plugins"] = list(dict.fromkeys([*candidate["plugins"], *selected]))
     AssemblyPlan.parse(candidate)
     registry = bootstrap()
     install_lifecycle_slots(registry)

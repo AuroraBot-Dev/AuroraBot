@@ -10,6 +10,8 @@ INTERPRET_RESPONSE_EXECUTE = Id("org.aurora.agent:handlers/react/interpret_respo
 RECORD_OBSERVATION = Id("org.aurora.agent:handlers/react/record_observation")
 RECORD_OBSERVATION_EXECUTE = Id("org.aurora.agent:handlers/react/record_observation/execute")
 CONFIGURE = Id("org.aurora.agent:handlers/react_defaults/configure")
+BUDGET_CONFIGURE = Id("org.aurora.agent:handlers/input_budget/configure")
+COMPACTION_CONFIGURE = Id("org.aurora.agent:handlers/compaction/configure")
 
 defaults_plugin = PluginDeclaration(
     name="aurora_agent.react_defaults",
@@ -45,6 +47,20 @@ defaults_plugin = PluginDeclaration(
             register_to=Id("org.aurora.core:registries/hook_handlers"),
             interface=None,
         ),
+        Definition(
+            BUDGET_CONFIGURE,
+            "hook_handler",
+            "aurora_agent.react_defaults",
+            register_to=Id("org.aurora.core:registries/hook_handlers"),
+            interface=None,
+        ),
+        Definition(
+            COMPACTION_CONFIGURE,
+            "hook_handler",
+            "aurora_agent.react_defaults",
+            register_to=Id("org.aurora.core:registries/hook_handlers"),
+            interface=None,
+        ),
     ),
     requires=("aurora_agent.react", "aurora_agent.model", "aurora_tools"),
     components={
@@ -66,6 +82,39 @@ defaults_plugin = PluginDeclaration(
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {"system_prompt": {"type": "string"}},
+            },
+        ),
+        "input_budget": ComponentDeclaration(
+            plugs=(BUDGET_CONFIGURE,),
+            slots=(),
+            inject=("ctx", "states", "options"),
+            states=(),
+            resources=("input_budget",),
+            inputs=(),
+            optional_states=("config",),
+            options={
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"max_chars": {"type": "integer", "minimum": 1024}},
+            },
+        ),
+        "compaction": ComponentDeclaration(
+            plugs=(COMPACTION_CONFIGURE,),
+            slots=(),
+            inject=("ctx", "states", "options"),
+            states=(),
+            resources=("compaction",),
+            inputs=("chat", "budget"),
+            optional_inputs=("recorder",),
+            optional_states=("config",),
+            options={
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "tool_result_chars": {"type": "integer", "minimum": 2048, "maximum": 32000},
+                    "summary_chars": {"type": "integer", "minimum": 256, "maximum": 16000},
+                    "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+                },
             },
         ),
     },

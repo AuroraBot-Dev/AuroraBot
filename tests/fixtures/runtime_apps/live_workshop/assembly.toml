@@ -1,0 +1,741 @@
+schema_version = 2
+plugins = [
+    "aurora_config",
+    "aurora_model",
+    "aurora_model.configuration",
+    "aurora_model.litellm",
+    "aurora_agent.react",
+    "aurora_agent.model",
+    "aurora_agent.react_defaults",
+    "aurora_agent.configuration",
+    "aurora_tools",
+    "aurora_tools.configuration",
+    "aurora_bot.runtime",
+    "aurora_bot.conversation",
+    "aurora_bot.commands",
+    "aurora_world.records",
+    "aurora_world.sources",
+    "aurora_world.configuration",
+    "aurora_bot.world_view",
+    "aurora_bot.cadence",
+    "aurora_api",
+]
+
+[instances.configuration]
+plugin = "aurora_config"
+component = "configuration"
+
+[instances.operations]
+plugin = "aurora_bot.runtime"
+component = "operations"
+
+[instances.conversation]
+plugin = "aurora_bot.conversation"
+component = "endpoint"
+
+[instances.conversation.resources.operations]
+instance = "operations"
+export = "operations"
+
+[instances.main]
+plugin = "aurora_agent.react"
+component = "react"
+depends_on = [
+    "configuration",
+]
+
+[instances.main.states.inbox]
+key = "org.aurora.bot:state/agents"
+scope = "instance"
+
+[instances.main.states.inbox.location]
+instance_id = "workshop"
+part = "inbox"
+
+[instances.main.states.progress]
+key = "org.aurora.bot:state/agents"
+scope = "instance"
+
+[instances.main.states.progress.location]
+instance_id = "workshop"
+part = "progress"
+
+[instances.main.states.runtime]
+key = "org.aurora.bot:state/run"
+scope = "instance"
+
+[instances.main.states.runtime.location]
+instance_id = "workshop"
+
+[instances.main.states.batch]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.main.states.batch.location]
+instance_id = "workshop"
+part = "batch"
+
+[instances.main.states.decision]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.main.states.decision.location]
+instance_id = "workshop"
+part = "decision"
+
+[instances.main.options]
+max_iterations = 20
+
+[instances.tools]
+plugin = "aurora_tools"
+component = "executor"
+depends_on = [
+    "configuration",
+]
+
+[instances.tools.states.input]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.tools.states.input.location]
+instance_id = "workshop"
+part = "tool_calls"
+
+[instances.tools.states.output]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.tools.states.output.location]
+instance_id = "workshop"
+part = "tool_results"
+
+[instances.tools.states.current]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.tools.states.current.location]
+instance_id = "workshop"
+part = "tool_current"
+
+[instances.tools.options]
+timeout = 60
+
+[instances.collection]
+plugin = "aurora_tools"
+component = "collection"
+depends_on = [
+    "tools",
+    "chat",
+]
+
+[instances.collection.options]
+owner = "workshop"
+instance_pattern = "{collection}/{name}"
+location_field = "member"
+tools = [
+    { id = "dev.example.workshop:tools/inspect", config = {} },
+    { id = "dev.example.workshop:tools/report", config = {} },
+]
+
+[instances.collection.states.input]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.collection.states.input.location]
+instance_id = "workshop"
+part = "tool_input"
+
+[instances.collection.states.output]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.collection.states.output.location]
+instance_id = "workshop"
+part = "tool_output"
+
+[instances.collection.resources]
+
+[instances.chat]
+plugin = "aurora_model"
+component = "chat"
+depends_on = [
+    "configuration",
+]
+
+[instances.chat.options]
+profile = "fast"
+
+[instances.chat.states.profiles]
+key = "org.aurora.model:state/config"
+scope = "instance"
+
+[instances.chat.resources.catalog]
+instance = "collection"
+export = "catalog"
+
+[instances.model_call]
+plugin = "aurora_agent.model"
+component = "model_call"
+depends_on = [
+    "chat",
+]
+
+[instances.model_call.states.input]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.model_call.states.input.location]
+instance_id = "workshop"
+part = "model_input"
+
+[instances.model_call.states.output]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.model_call.states.output.location]
+instance_id = "workshop"
+part = "model_output"
+
+[instances.model_call.states.config]
+key = "org.aurora.agent:state/model_call/config"
+scope = "instance"
+
+[instances.model_call.resources.chat]
+instance = "chat"
+export = "model"
+
+[instances.defaults]
+plugin = "aurora_agent.react_defaults"
+component = "defaults"
+depends_on = [
+    "main",
+    "tools",
+]
+
+[instances.defaults.states.context]
+key = "org.aurora.bot:state/messages"
+scope = "instance"
+
+[instances.defaults.states.context.location]
+instance_id = "workshop"
+
+[instances.defaults.states.batch]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.defaults.states.batch.location]
+instance_id = "workshop"
+part = "batch"
+
+[instances.defaults.states.decision]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.defaults.states.decision.location]
+instance_id = "workshop"
+part = "decision"
+
+[instances.defaults.states.model_input]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.defaults.states.model_input.location]
+instance_id = "workshop"
+part = "model_input"
+
+[instances.defaults.states.model_output]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.defaults.states.model_output.location]
+instance_id = "workshop"
+part = "model_output"
+
+[instances.defaults.states.tool_input]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.defaults.states.tool_input.location]
+instance_id = "workshop"
+part = "tool_calls"
+
+[instances.defaults.states.tool_output]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.defaults.states.tool_output.location]
+instance_id = "workshop"
+part = "tool_results"
+
+[instances.defaults.states.config]
+key = "org.aurora.agent:state/react_defaults/config"
+scope = "instance"
+
+[instances.defaults.resources.agent]
+instance = "main"
+export = "agent"
+
+[instances.defaults.resources.tools]
+instance = "tools"
+export = "executor"
+
+[instances.defaults.resources.context_view]
+instance = "view"
+export = "view"
+
+[instances.runtime]
+plugin = "aurora_bot.runtime"
+component = "runtime"
+depends_on = [
+    "defaults",
+    "model_call",
+    "collection",
+]
+
+[instances.runtime.options]
+owner = "workshop"
+
+[instances.runtime.states.context]
+key = "org.aurora.bot:state/messages"
+scope = "instance"
+
+[instances.runtime.states.context.location]
+instance_id = "workshop"
+
+[instances.runtime.states.model_output]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.runtime.states.model_output.location]
+instance_id = "workshop"
+part = "model_output"
+
+[instances.runtime.states.tool_output]
+key = "org.aurora.bot:state/react_work"
+scope = "run"
+
+[instances.runtime.states.tool_output.location]
+instance_id = "workshop"
+part = "tool_results"
+
+[instances.runtime.states.work]
+key = "org.aurora.bot:state/react_work"
+scope = "instance"
+
+[instances.runtime.states.work.location]
+instance_id = "workshop"
+
+[instances.runtime.resources.agent]
+instance = "main"
+export = "agent"
+
+[instances.runtime.resources.operations]
+instance = "operations"
+export = "operations"
+
+[instances.records]
+plugin = "aurora_world.records"
+component = "records"
+depends_on = [
+    "configuration",
+]
+
+[instances.records.resources]
+
+[instances.sources]
+plugin = "aurora_world.sources"
+component = "sources"
+depends_on = [
+    "records",
+    "cadence",
+]
+
+[instances.sources.resources.records]
+instance = "records"
+export = "records"
+
+[instances.world_configuration]
+plugin = "aurora_world.configuration"
+component = "configuration"
+depends_on = [
+    "configuration",
+]
+
+[instances.world_configuration.resources.sources]
+instance = "sources"
+export = "sources"
+
+[instances.view]
+plugin = "aurora_bot.world_view"
+component = "view"
+depends_on = [
+    "records",
+]
+
+[instances.view.resources.records]
+instance = "records"
+export = "records"
+
+[instances.cadence]
+plugin = "aurora_bot.cadence"
+component = "cadence"
+depends_on = [
+    "runtime",
+    "records",
+]
+
+[instances.cadence.resources.records]
+instance = "records"
+export = "records"
+
+[instances.cadence.resources.runtime]
+instance = "runtime"
+export = "runtime"
+
+[instances.cadence.options]
+owner = "workshop"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "configuration"
+id = "org.aurora.config:handlers/load"
+
+[connections.slot]
+instance = "configuration"
+id = "org.aurora.core:lifecycle/config"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "main"
+id = "org.aurora.agent:handlers/react/configure"
+
+[connections.slot]
+instance = "main"
+id = "org.aurora.core:lifecycle/config"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "tools"
+id = "org.aurora.tools:handlers/executor/configure"
+
+[connections.slot]
+instance = "tools"
+id = "org.aurora.core:lifecycle/config"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "collection"
+id = "org.aurora.tools:handlers/collection/prepare"
+
+[connections.slot]
+instance = "collection"
+id = "org.aurora.core:lifecycle/prepare"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "collection"
+id = "org.aurora.tools:handlers/collection/clean"
+
+[connections.slot]
+instance = "collection"
+id = "org.aurora.core:lifecycle/clean"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "chat"
+id = "org.aurora.model:handlers/chat/prepare"
+
+[connections.slot]
+instance = "chat"
+id = "org.aurora.core:lifecycle/prepare"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "chat"
+id = "org.aurora.model:handlers/chat/clean"
+
+[connections.slot]
+instance = "chat"
+id = "org.aurora.core:lifecycle/clean"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "model_call"
+id = "org.aurora.agent:handlers/model_call/configure"
+
+[connections.slot]
+instance = "model_call"
+id = "org.aurora.core:lifecycle/config"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "defaults"
+id = "org.aurora.agent:handlers/react_defaults/configure"
+
+[connections.slot]
+instance = "defaults"
+id = "org.aurora.core:lifecycle/config"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "runtime"
+id = "org.aurora.bot:handlers/runtime/prepare"
+
+[connections.slot]
+instance = "runtime"
+id = "org.aurora.core:lifecycle/prepare"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "runtime"
+id = "org.aurora.bot:handlers/runtime/start"
+
+[connections.slot]
+instance = "runtime"
+id = "org.aurora.core:lifecycle/start"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "runtime"
+id = "org.aurora.bot:handlers/runtime/stop"
+
+[connections.slot]
+instance = "runtime"
+id = "org.aurora.core:lifecycle/stop"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "runtime"
+id = "org.aurora.bot:handlers/runtime/clean"
+
+[connections.slot]
+instance = "runtime"
+id = "org.aurora.core:lifecycle/clean"
+
+[[connections]]
+priority = 10
+
+[connections.plug]
+instance = "defaults"
+id = "org.aurora.agent:handlers/react/build_prompt/execute"
+
+[connections.slot]
+instance = "main"
+id = "org.aurora.agent:react/prepare"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "model_call"
+id = "org.aurora.agent:handlers/model_call/execute"
+
+[connections.slot]
+instance = "main"
+id = "org.aurora.agent:react/infer"
+
+[[connections]]
+priority = 10
+
+[connections.plug]
+instance = "defaults"
+id = "org.aurora.agent:handlers/react/interpret_response/execute"
+
+[connections.slot]
+instance = "main"
+id = "org.aurora.agent:react/infer"
+
+[[connections]]
+priority = 0
+
+[connections.plug]
+instance = "tools"
+id = "org.aurora.tools:components/executor/execute"
+
+[connections.slot]
+instance = "main"
+id = "org.aurora.agent:react/act"
+
+[[connections]]
+priority = 10
+
+[connections.plug]
+instance = "defaults"
+id = "org.aurora.agent:handlers/react/record_observation/execute"
+
+[connections.slot]
+instance = "main"
+id = "org.aurora.agent:react/observe"
+
+[[connections]]
+
+[connections.plug]
+instance = "records"
+id = "org.aurora.world:handlers/records/prepare"
+
+[connections.slot]
+instance = "records"
+id = "org.aurora.core:lifecycle/prepare"
+
+[[connections]]
+
+[connections.plug]
+instance = "records"
+id = "org.aurora.world:handlers/records/start"
+
+[connections.slot]
+instance = "records"
+id = "org.aurora.core:lifecycle/start"
+
+[[connections]]
+
+[connections.plug]
+instance = "records"
+id = "org.aurora.world:handlers/records/stop"
+
+[connections.slot]
+instance = "records"
+id = "org.aurora.core:lifecycle/stop"
+
+[[connections]]
+
+[connections.plug]
+instance = "records"
+id = "org.aurora.world:handlers/records/clean"
+
+[connections.slot]
+instance = "records"
+id = "org.aurora.core:lifecycle/clean"
+
+[[connections]]
+
+[connections.plug]
+instance = "sources"
+id = "org.aurora.world:handlers/sources/prepare"
+
+[connections.slot]
+instance = "sources"
+id = "org.aurora.core:lifecycle/prepare"
+
+[[connections]]
+
+[connections.plug]
+instance = "sources"
+id = "org.aurora.world:handlers/sources/start"
+
+[connections.slot]
+instance = "sources"
+id = "org.aurora.core:lifecycle/start"
+
+[[connections]]
+
+[connections.plug]
+instance = "sources"
+id = "org.aurora.world:handlers/sources/stop"
+
+[connections.slot]
+instance = "sources"
+id = "org.aurora.core:lifecycle/stop"
+
+[[connections]]
+
+[connections.plug]
+instance = "sources"
+id = "org.aurora.world:handlers/sources/clean"
+
+[connections.slot]
+instance = "sources"
+id = "org.aurora.core:lifecycle/clean"
+
+[[connections]]
+
+[connections.plug]
+instance = "view"
+id = "org.aurora.bot:handlers/world_view/prepare"
+
+[connections.slot]
+instance = "view"
+id = "org.aurora.core:lifecycle/prepare"
+
+[[connections]]
+
+[connections.plug]
+instance = "cadence"
+id = "org.aurora.bot:handlers/cadence/prepare"
+
+[connections.slot]
+instance = "cadence"
+id = "org.aurora.core:lifecycle/prepare"
+
+[[connections]]
+
+[connections.plug]
+instance = "cadence"
+id = "org.aurora.bot:handlers/cadence/start"
+
+[connections.slot]
+instance = "cadence"
+id = "org.aurora.core:lifecycle/start"
+
+[[connections]]
+
+[connections.plug]
+instance = "cadence"
+id = "org.aurora.bot:handlers/cadence/stop"
+
+[connections.slot]
+instance = "cadence"
+id = "org.aurora.core:lifecycle/stop"
+
+[[connections]]
+
+[connections.plug]
+instance = "cadence"
+id = "org.aurora.bot:handlers/cadence/clean"
+
+[connections.slot]
+instance = "cadence"
+id = "org.aurora.core:lifecycle/clean"
+
+[[connections]]
+
+[connections.plug]
+instance = "world_configuration"
+id = "org.aurora.world:handlers/sources/configure"
+
+[connections.slot]
+instance = "world_configuration"
+id = "org.aurora.core:lifecycle/config"
+
+[[collection_connections]]
+collection = "collection"
+
+[collection_connections.slot]
+instance = "tools"
+id = "org.aurora.tools:components/executor/children"

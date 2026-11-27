@@ -7,16 +7,15 @@ import logging
 from pathlib import Path
 
 from aurora_api.access import AccessPolicy, token_from_env
-from aurora_bot.assembly_config import AGENTS, MESSAGES, RUN, WORK
 from aurora_bot.cadence.state import CHECKPOINT
 from aurora_bot.conversation import CONVERSATION
-from aurora_bot.mcp import create_host
 from aurora_bot.mcp_preset import PLUGINS as MCP_PLUGINS
 from aurora_bot.mcp_preset import initialize
-from aurora_bot.self_control_state import SELF_CONTROL
-from aurora_bot.work_notes import NOTES
+from aurora_bot.runtime import AGENTS, MESSAGES, RUN, WORK
 from aurora_cli.commander import run_cli
 from aurora_config import CONFIGURATION
+from aurora_host import Host, read_assembly
+from aurora_host.configuration import select_assembly
 from aurora_logging import configure_logging
 from aurora_mcp import CLIENT_STATUS
 from aurora_mcp.world import WORLD_STATUS
@@ -40,12 +39,10 @@ READ_ONLY_KEYS = (
     MESSAGES,
     RUN,
     WORK,
-    NOTES,
     RECORDS,
     ENVIRONMENT,
     SOURCE_STATUS,
     CHECKPOINT,
-    SELF_CONTROL,
     CLIENT_STATUS,
     WORLD_STATUS,
 )
@@ -77,7 +74,7 @@ async def run(argv: list[str] | None = None) -> int:
         allowed_hosts=tuple(args.allowed_host or ("127.0.0.1", "localhost")),
     )
     if not (args.data_dir / "config/host.toml").exists():
-        initialize(args.data_dir, plugins=PLUGINS)
+        initialize(args.data_dir, plugins=PLUGINS, preset="bot")
     arguments = ["--root", str(ROOT), "--data-dir", str(args.data_dir)]
     arguments.extend(
         [
@@ -98,7 +95,7 @@ async def run(argv: list[str] | None = None) -> int:
             json.dumps(access.allowed_hosts),
         ]
     )
-    runtime = create_host(args.data_dir, workspace_root=ROOT)
+    runtime = Host.create(read_assembly(select_assembly(args.data_dir)), (), args.data_dir, workspace_root=ROOT)
     try:
         return await run_cli(arguments, runtime=runtime)
     finally:
