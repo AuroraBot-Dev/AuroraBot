@@ -4,7 +4,6 @@ import json
 from copy import deepcopy
 
 import pytest
-from aurora_agent.tools import ToolExecutionError
 from aurora_bot.assembly_config import parse_config
 from aurora_bot.context_view import BusinessContextView
 from aurora_bot.work_notes import MAX_NOTES, NOTES, WorkNotes, validate_notes
@@ -12,6 +11,7 @@ from aurora_control import ExecutionRequest
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
 from aurora_core.registry import RegistryEntry
+from aurora_tools.execution import ToolExecutionError
 
 
 @pytest.fixture

@@ -14,7 +14,6 @@ from aurora_adapter.mcp import transports as client_module
 from aurora_adapter.mcp.catalog import automatic_name
 from aurora_adapter.mcp.configuration import MCP_CONFIG
 from aurora_adapter.mcp.tools import MCPTools
-from aurora_agent.tools import TOOLS, ToolExecutor, ToolRejected, ToolSpec
 from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding, component_entries
 from aurora_core import Id
 from aurora_core.bootstrap import bootstrap
@@ -24,6 +23,7 @@ from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_tools.execution import TOOLS, ToolExecutor, ToolRejected, ToolSpec
 from mcp.shared.exceptions import MCPError
 from mcp.types import (
     CONNECTION_CLOSED,
@@ -100,7 +100,7 @@ def environment(tmp_path, monkeypatch):
             enabled=[
                 "aurora_config",
                 "aurora_adapter.mcp",
-                "aurora_agent.tools",
+                "aurora_tools",
                 "aurora_adapter.mcp.tools",
             ]
         ),

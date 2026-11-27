@@ -4,7 +4,9 @@ import math
 from collections.abc import AsyncIterator
 from copy import deepcopy
 
-from .contract import ChatChunk, ChatResponse, FinishReason, ModelProtocolError, ReasoningBlock, ToolCall
+from aurora_tools.contract import ToolCall
+
+from .contract import ChatChunk, ChatResponse, FinishReason, ModelProtocolError, ReasoningBlock
 
 
 class ResponseBuffer:

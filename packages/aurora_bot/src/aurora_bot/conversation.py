@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from typing import cast
 from uuid import uuid4
 
-from aurora_adapter.model import JsonValue
 from aurora_agent.react import AgentBusyError
 from aurora_agent.runtime import Submission
 from aurora_core import Id
+from aurora_core.json_data import JsonValue
 
 from .attachments import message_content
 from .conversation_contract import describe_conversation

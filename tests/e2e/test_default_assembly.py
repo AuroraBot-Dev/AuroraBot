@@ -10,7 +10,7 @@ import httpx
 import pytest
 import tomli_w
 from aiohttp import ClientSession
-from aurora_adapter.model import ChatCapabilities, JsonValue, ToolDefinition, UnsupportedCapability
+from aurora_adapter.model import ChatCapabilities, UnsupportedCapability
 from aurora_adapter.model.config import ADAPTERS, BINDINGS, ModelAdapter
 from aurora_adapter.model.config import CONFIG as MODEL_CONFIG
 from aurora_adapter.model.plugin import plugin as adapter_plugin
@@ -20,8 +20,6 @@ from aurora_agent.react import AgentBusyError
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_agent.runtime import RunHandle, Submission
-from aurora_agent.tools import TOOLS, ToolInstance, ToolSpec
-from aurora_agent.tools import plugin as tools_plugin
 from aurora_api.contract import describe_contract
 from aurora_api.server import serve
 from aurora_bot.assembly import ASSEMBLY, DefaultAssembly
@@ -40,10 +38,14 @@ from aurora_core.discovery import Plugin, register_plugins
 from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
 from aurora_core.invocation import invoke_operation
+from aurora_core.json_data import JsonValue
 from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_tools.contract import ToolDefinition
+from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
+from aurora_tools.execution import plugin as tools_plugin
 from jsonschema import Draft202012Validator
 
 ADAPTER = Id("dev.assembly:adapters/fake")

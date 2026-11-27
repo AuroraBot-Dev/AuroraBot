@@ -5,24 +5,10 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Literal, NotRequired, Protocol, TypedDict
 
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+from aurora_core.json_data import JsonValue
+from aurora_tools.contract import ToolCall, ToolDefinition
+
 type FinishReason = Literal["stop", "tool_calls", "length", "content_filter"]
-
-
-class ToolDefinition(TypedDict):
-    """供模型选择的工具描述；parameters 使用 JSON Schema 对象。"""
-
-    name: str
-    description: str
-    parameters: dict[str, JsonValue]
-
-
-class ToolCall(TypedDict):
-    """完整工具请求；id 用于关联后续工具消息，arguments 不含 JSON 碎片。"""
-
-    id: str
-    name: str
-    arguments: dict[str, JsonValue]
 
 
 class TextPart(TypedDict):

@@ -3,13 +3,13 @@
 from copy import deepcopy
 
 import pytest
-from aurora_agent.tools import ToolExecutionError
 from aurora_bot.self_control import SelfControl
 from aurora_bot.self_control_state import MAX_WAKES, SELF_CONTROL, validate_state
 from aurora_control import ExecutionRequest
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
 from aurora_core.registry import RegistryEntry
+from aurora_tools.execution import ToolExecutionError
 
 
 @pytest.fixture

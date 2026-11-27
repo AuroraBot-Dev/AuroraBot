@@ -17,6 +17,7 @@ members = [
     "aurora-control",
     "aurora-core",
     "aurora-logging",
+    "aurora-tools",
     "aurora-world",
     "aurorabot-ai",
 ]
@@ -222,6 +223,7 @@ version = "0.1.0"
 source = { editable = "packages/aurora_adapter" }
 dependencies = [
     { name = "aurora-core" },
+    { name = "aurora-tools" },
 ]
 
 [package.optional-dependencies]
@@ -238,7 +240,6 @@ mcp = [
 ]
 mcp-bot = [
     { name = "anyio" },
-    { name = "aurora-agent" },
     { name = "aurora-bot" },
     { name = "aurora-config" },
     { name = "aurora-world", extra = ["config"] },
@@ -248,7 +249,6 @@ mcp-bot = [
 ]
 mcp-tools = [
     { name = "anyio" },
-    { name = "aurora-agent" },
     { name = "aurora-config" },
     { name = "httpx2" },
     { name = "mcp" },
@@ -273,11 +273,11 @@ requires-dist = [
     { name = "aurora-adapter", extras = ["mcp"], marker = "extra == 'mcp-world'", editable = "packages/aurora_adapter" },
     { name = "aurora-adapter", extras = ["mcp-tools", "mcp-world"], marker = "extra == 'mcp-bot'", editable = "packages/aurora_adapter" },
     { name = "aurora-adapter", extras = ["model"], marker = "extra == 'litellm'", editable = "packages/aurora_adapter" },
-    { name = "aurora-agent", marker = "extra == 'mcp-tools'", editable = "packages/aurora_agent" },
     { name = "aurora-bot", marker = "extra == 'mcp-bot'", editable = "packages/aurora_bot" },
     { name = "aurora-config", marker = "extra == 'mcp'", editable = "packages/aurora_config" },
     { name = "aurora-config", marker = "extra == 'model'", editable = "packages/aurora_config" },
     { name = "aurora-core", editable = "packages/aurora_core" },
+    { name = "aurora-tools", editable = "packages/aurora_tools" },
     { name = "aurora-world", extras = ["config"], marker = "extra == 'mcp-world'", editable = "packages/aurora_world" },
     { name = "httpx2", marker = "extra == 'mcp'", specifier = ">=2.16,<3" },
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.106.6,<1.107" },
@@ -294,8 +294,7 @@ dependencies = [
     { name = "aurora-adapter" },
     { name = "aurora-control" },
     { name = "aurora-core" },
-    { name = "jsonschema" },
-    { name = "referencing" },
+    { name = "aurora-tools" },
 ]
 
 [package.metadata]
@@ -303,8 +302,7 @@ requires-dist = [
     { name = "aurora-adapter", editable = "packages/aurora_adapter" },
     { name = "aurora-control", editable = "packages/aurora_control" },
     { name = "aurora-core", editable = "packages/aurora_core" },
-    { name = "jsonschema", specifier = ">=4.26.0" },
-    { name = "referencing", specifier = ">=0.37.0" },
+    { name = "aurora-tools", editable = "packages/aurora_tools" },
 ]
 
 [[package]]
@@ -332,6 +330,7 @@ dependencies = [
     { name = "aurora-config" },
     { name = "aurora-control" },
     { name = "aurora-core" },
+    { name = "aurora-tools" },
     { name = "aurora-world", extra = ["config"] },
 ]
 
@@ -342,6 +341,7 @@ requires-dist = [
     { name = "aurora-config", editable = "packages/aurora_config" },
     { name = "aurora-control", editable = "packages/aurora_control" },
     { name = "aurora-core", editable = "packages/aurora_core" },
+    { name = "aurora-tools", editable = "packages/aurora_tools" },
     { name = "aurora-world", extras = ["config"], editable = "packages/aurora_world" },
 ]
 
@@ -411,6 +411,25 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "rich", specifier = ">=14,<15" }]
+
+[[package]]
+name = "aurora-tools"
+version = "0.1.0"
+source = { editable = "packages/aurora_tools" }
+dependencies = [
+    { name = "aurora-control" },
+    { name = "aurora-core" },
+    { name = "jsonschema" },
+    { name = "referencing" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aurora-control", editable = "packages/aurora_control" },
+    { name = "aurora-core", editable = "packages/aurora_core" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
+    { name = "referencing", specifier = ">=0.37.0" },
+]
 
 [[package]]
 name = "aurora-world"

@@ -817,7 +817,7 @@ flowchart LR
 
 ### A.9 aurora_agent.tools
 
-入口：`aurora_agent.tools:plugin`；[定义来源](../packages/aurora_agent/src/aurora_agent/tools.py)。requires：无。
+入口：`aurora_agent.tools:plugin`；[定义来源](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_agent/src/aurora_agent/tools.py)。requires：无。
 
 执行实例 `B/tools` 接 ReAct.act，children 接所选工具；before_call/after_call 默认均为空，见第 5.1—5.2 节。
 

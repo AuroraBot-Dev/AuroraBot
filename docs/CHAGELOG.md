@@ -2,6 +2,17 @@
 
 ## 2026-11-27
 
+### 完成 W01 通用工具契约与执行器拆分
+
+- 新增 aurora_tools 发行包。contract 提供 ToolDefinition、ToolCall、批次请求/状态及 ToolResult，只依赖 core 的 JsonValue；execution 提供工具定义、工厂、实例、执行器与前后插槽，依赖 core/control 和原有 schema 库。JsonValue 移到 aurora_core.json_data，模型协议直接引用中立契约，不加载工具执行器。
+- 删除 aurora_agent.tools 模块、旧插件入口和模型包对 JsonValue/ToolCall/ToolDefinition 的公共导出；所有 agent、模型、MCP、Bot、测试、夹具和 onboarding 消费者切换到新位置，不保留兼容别名或转发层。工具登记入口改为 aurora_tools，公共目录和端口改到 org.aurora.tools，执行器为 components/executor，前后槽为 executor/before_call、executor/after_call。
+- agent 的 schema 依赖移到 tools；adapter 基础包声明中立工具契约依赖，MCP tools extra 不再依赖 agent；Bot 显式声明 tools 依赖。同步 workspace、类型检查、覆盖率目录、锁文件、默认插件清单和当前架构/公共 ID 文档。W02 的 model/MCP 分包及后续元信息、宿主装配工作尚未实施。
+- 原工具单测搬至新包，不复制用例。新增一条独立 tools 进程验收，验证禁止导入 agent/模型/Bot/SDK 时，before → 工具 → after 调用、结果和临时状态清理仍正常；同一夹具用于 wheel 安装验收。扩展现有包契约和 MCP 桥隔离断言，核对新入口、命名空间、实际依赖及中立契约不导入执行器；不增加运行时防御逻辑。
+- Python 3.12 已安装开发环境验收：32 项工具与包边界针对性测试通过；日常 `uv run --locked aurora check` 13.11 秒，完整 `uv run --locked aurora check --full` 37.01 秒。完整回归含 1229 项 Python、131 项前端、5 项原生终端测试，1 项既有 Windows 专属测试在 Linux 跳过，38 条既有依赖警告保留。未增加 worker、放宽断言或跳过检查。
+- 首轮完整检查的既有 MCP stdio incomplete 故障用例收到 connect_failed 而非 stdout_incomplete；该组 5 项单独复跑和随后完整复跑均通过。相关 stdio 实现与断言未修改，保留这一间歇失败记录。
+- 12 个 wheel 构建通过。工作区外的干净环境分别验证 control 独立执行、tools 无 agent/adapter/Bot/SDK 的工具往返、agent 无 Bot/CLI/API/SDK 的 ReAct 工具往返与恢复，以及 MCP tools extra 无 agent/Bot/world 的本机工具桥调用。agent wheel 不再包含旧 tools.py；测试未调用真实供应商，未读取或改写用户数据目录。
+- 用户配置需要将 aurora_agent.tools 改为 aurora_tools；自定义接线改用新的 org.aurora.tools ID。直接按新基线建立环境和数据目录，不提供旧配置/ID/快照转换。历史设计文档保留原基线名称，已迁走源码的链接改为基线提交位置；README.md、AGENTS.md 未改动。
+
 ### 修复 CI 中 ESLint 配置测试的冷启动超时
 
 - Python 3.12 CI 作业的 1228 项 Python 测试均通过；失败发生在 ESLint 声明文件测试，第一次加载完整配置和插件被计入单条测试，耗时 5.6 秒超过默认 5 秒限制。

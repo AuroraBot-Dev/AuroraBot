@@ -7,12 +7,12 @@ from typing import cast
 
 from aurora_adapter.model.config import BINDINGS, resolve_model
 from aurora_adapter.model.config import CONFIG as MODEL_CONFIG
-from aurora_agent.tools import TOOLS, ToolInstance, ToolSpec
 from aurora_config import ConfigSchema, ConfigSpec, ConfigTemplate, config_entries
 from aurora_control import ExecutionPlug, ExecutionRequest, component_entries
 from aurora_core import Id
 from aurora_core.discovery import Plugin
 from aurora_core.registry import RegistryEntry
+from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
 
 from ..assembly_config import CONFIG as BOT_CONFIG
 from ..assembly_config import WORK
@@ -227,5 +227,5 @@ def plugin() -> Plugin:
                 for action, (description, fields, required) in _OPERATIONS.items()
             ),
         ),
-        requires=("aurora_bot.assembly", "aurora_adapter.model", "aurora_config", "aurora_agent.tools"),
+        requires=("aurora_bot.assembly", "aurora_adapter.model", "aurora_config", "aurora_tools"),
     )

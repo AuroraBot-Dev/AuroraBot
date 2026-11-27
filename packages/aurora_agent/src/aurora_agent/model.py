@@ -10,7 +10,6 @@ from aurora_adapter.model import (
     FinishReason,
     ReasoningBlock,
     ResponseBuffer,
-    ToolCall,
     require_capabilities,
 )
 from aurora_adapter.model.usage import usage_scope
@@ -18,6 +17,7 @@ from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding, compon
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.ids import Id
+from aurora_tools.contract import ToolCall
 
 
 class ModelCallState(TypedDict):

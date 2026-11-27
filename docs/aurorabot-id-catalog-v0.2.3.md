@@ -1,6 +1,6 @@
 # AuroraBot 公共 ID 目录
 
-核对日期：2026-11-10。文件名沿用现有引用；本页由当前工作区的 bootstrap、ctx 操作、生命周期、CLI 命令和全部已安装 aurora.plugins 定义实际登记后枚举。未启动装配、模型、MCP 或世界来源。旧设计中的规划 ID 见[归档](archive/2026-11-09/aurorabot-id-catalog-v0.2.3.md)。
+核对日期：2026-11-27。文件名沿用现有引用；本页由当前工作区的 bootstrap、ctx 操作、生命周期、CLI 命令和全部已安装 aurora.plugins 定义实际登记后枚举。未启动装配、模型、MCP 或世界来源。旧设计中的规划 ID 见[归档](archive/2026-11-09/aurorabot-id-catalog-v0.2.3.md)。
 
 ## 身份与使用
 
@@ -18,19 +18,19 @@ MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接�
 | --- | --- |
 | `aurora_adapter.mcp` | `aurora_config` |
 | `aurora_adapter.mcp.bot` | `aurora_adapter.mcp.tools`, `aurora_bot.assembly` |
-| `aurora_adapter.mcp.tools` | `aurora_adapter.mcp`, `aurora_agent.tools` |
+| `aurora_adapter.mcp.tools` | `aurora_adapter.mcp`, `aurora_tools` |
 | `aurora_adapter.mcp.world` | `aurora_adapter.mcp`, `aurora_world.configuration` |
 | `aurora_adapter.model` | `aurora_config` |
 | `aurora_agent.model` | 无 |
 | `aurora_agent.react` | 无 |
-| `aurora_agent.react_defaults` | `aurora_agent.react`, `aurora_agent.model`, `aurora_agent.tools` |
-| `aurora_agent.tools` | 无 |
+| `aurora_agent.react_defaults` | `aurora_agent.react`, `aurora_agent.model`, `aurora_tools` |
 | `aurora_api` | 无 |
-| `aurora_bot.assembly` | `aurora_config`, `aurora_adapter.model`, `aurora_agent.model`, `aurora_agent.react`, `aurora_agent.tools`, `aurora_agent.react_defaults` |
+| `aurora_bot.assembly` | `aurora_config`, `aurora_adapter.model`, `aurora_agent.model`, `aurora_agent.react`, `aurora_tools`, `aurora_agent.react_defaults` |
 | `aurora_bot.cadence` | `aurora_bot.assembly`, `aurora_world`, `aurora_config` |
-| `aurora_bot.memory` | `aurora_bot.assembly`, `aurora_adapter.model`, `aurora_config`, `aurora_agent.tools` |
+| `aurora_bot.memory` | `aurora_bot.assembly`, `aurora_adapter.model`, `aurora_config`, `aurora_tools` |
 | `aurora_config` | 无 |
 | `aurora_control` | 无 |
+| `aurora_tools` | 无 |
 | `aurora_world` | 无 |
 | `aurora_world.configuration` | `aurora_world`, `aurora_config` |
 | `aurora_world.environment` | `aurora_world` |
@@ -78,9 +78,6 @@ MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接�
 | `org.aurora.agent:handlers/model_call/execute` | `hook_handler` | `aurora_agent` |
 | `org.aurora.agent:handlers/react/build_prompt` | `component` | `aurora_agent` |
 | `org.aurora.agent:handlers/react/build_prompt/execute` | `hook_handler` | `aurora_agent` |
-| `org.aurora.agent:handlers/react/execute_tools` | `component` | `aurora_agent` |
-| `org.aurora.agent:handlers/react/execute_tools/children` | `hook_slot` | `aurora_agent` |
-| `org.aurora.agent:handlers/react/execute_tools/execute` | `hook_handler` | `aurora_agent` |
 | `org.aurora.agent:handlers/react/interpret_response` | `component` | `aurora_agent` |
 | `org.aurora.agent:handlers/react/interpret_response/execute` | `hook_handler` | `aurora_agent` |
 | `org.aurora.agent:handlers/react/record_observation` | `component` | `aurora_agent` |
@@ -93,9 +90,6 @@ MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接�
 | `org.aurora.agent:react/infer` | `hook_slot` | `aurora_agent` |
 | `org.aurora.agent:react/observe` | `hook_slot` | `aurora_agent` |
 | `org.aurora.agent:react/prepare` | `hook_slot` | `aurora_agent` |
-| `org.aurora.agent:registries/tools` | `registry` | `aurora_agent` |
-| `org.aurora.agent:tools/after_call` | `hook_slot` | `aurora_agent` |
-| `org.aurora.agent:tools/before_call` | `hook_slot` | `aurora_agent` |
 
 ### org.aurora.api
 
@@ -248,6 +242,17 @@ MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接�
 | `org.aurora.core:registries/schemas` | `registry` | `aurora_core` |
 | `org.aurora.core:registries/services` | `registry` | `aurora_core` |
 | `org.aurora.core:registries/state_keys` | `registry` | `aurora_core` |
+
+### org.aurora.tools
+
+| ID | kind | provider |
+| --- | --- | --- |
+| `org.aurora.tools:components/executor` | `component` | `aurora_tools` |
+| `org.aurora.tools:components/executor/children` | `hook_slot` | `aurora_tools` |
+| `org.aurora.tools:components/executor/execute` | `hook_handler` | `aurora_tools` |
+| `org.aurora.tools:executor/after_call` | `hook_slot` | `aurora_tools` |
+| `org.aurora.tools:executor/before_call` | `hook_slot` | `aurora_tools` |
+| `org.aurora.tools:registries/tools` | `registry` | `aurora_tools` |
 
 ### org.aurora.world
 

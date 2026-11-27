@@ -8,7 +8,6 @@ from dataclasses import asdict
 from typing import cast
 from uuid import uuid4
 
-from aurora_adapter.model import JsonValue
 from aurora_adapter.model.contract import ChoiceClient, ChoiceRequest
 from aurora_adapter.model.usage import usage_scope
 from aurora_agent.react import AgentBusyError
@@ -17,7 +16,7 @@ from aurora_control import ExecutionRequest
 from aurora_core import entry_from, hook_handler
 from aurora_core.ctx import Context, StateChange
 from aurora_core.hooks import HookConnections
-from aurora_core.json_data import decode_json, encode_json
+from aurora_core.json_data import JsonValue, decode_json, encode_json
 from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_world import ENVIRONMENT, RECORDS, CursorError, WorldRecords
 

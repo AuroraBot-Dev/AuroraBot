@@ -5,7 +5,7 @@ import json
 from typing import cast
 
 import pytest
-from aurora_adapter.model import JsonValue, ModelProtocolError, ToolCall
+from aurora_adapter.model import ModelProtocolError
 from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import ModelCall
 from aurora_agent.model import plugin as model_plugin
@@ -13,15 +13,17 @@ from aurora_agent.react import ReActAgent
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import ReActContext, ReActDefaults
 from aurora_agent.react_defaults import plugin as defaults_plugin
-from aurora_agent.tools import TOOLS, ToolExecutor, ToolSpec
-from aurora_agent.tools import plugin as tools_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, StateBinding, component_entries
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
 from aurora_core.discovery import register_plugins
 from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
+from aurora_core.json_data import JsonValue
 from aurora_core.registry import RegistryEntry
+from aurora_tools.contract import ToolCall
+from aurora_tools.execution import TOOLS, ToolExecutor, ToolSpec
+from aurora_tools.execution import plugin as tools_plugin
 
 STATE = Id("dev.defaults:state/data")
 COMPONENT = Id("dev.defaults:handlers/compute")

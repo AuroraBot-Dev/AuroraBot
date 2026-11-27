@@ -1,8 +1,8 @@
 """按 bot 实例定位运行管理器；公共操作定义与运行实例分别管理。"""
 
-from aurora_adapter.model import JsonValue
 from aurora_agent.runtime import AgentRuntime, RunHandle, Submission
 from aurora_core import Id, operation
+from aurora_core.json_data import JsonValue
 
 RUN_CONTROL = Id("org.aurora.bot:services/run_control")
 RUN_SUBMIT = Id("org.aurora.bot:operations/run/submit")

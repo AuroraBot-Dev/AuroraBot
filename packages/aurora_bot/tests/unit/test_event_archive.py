@@ -3,12 +3,12 @@
 import json
 
 import pytest
-from aurora_agent.tools import ToolExecutionError
 from aurora_bot.event_archive import EventArchive
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import register_plugins
 from aurora_core.json_data import encode_json
+from aurora_tools.execution import ToolExecutionError
 from aurora_world import RECORDS, WorldRecords
 from aurora_world.plugin import plugin
 

@@ -16,37 +16,48 @@ def test_control_distribution_owns_its_plugin_and_definitions():
     )
 
 
-def test_agent_distribution_owns_its_plugins_and_definitions():
+def test_agent_and_tools_distributions_own_their_plugins_and_definitions():
     requirements = metadata.requires("aurora-agent")
     assert requirements is not None
     assert not any(requirement.startswith(("aurora-bot", "aurora-cli", "aurora-api")) for requirement in requirements)
     entries = metadata.entry_points(group=ENTRY_POINT_GROUP)
     names = []
-    for module in ("react", "react_defaults", "model", "tools"):
+    for module in ("react", "react_defaults", "model"):
         names.append(f"aurora_agent.{module}")
         matches = [point for point in entries if point.name == names[-1]]
         assert len(matches) == 1
         assert matches[0].value == f"aurora_agent.{module}:plugin"
-    plugins = load_plugins(enabled=names)
+    tools = load_plugins(enabled=["aurora_tools"])[0]
+    assert all(entry.id.namespace == "org.aurora.tools" and entry.provider == "aurora_tools" for entry in tools.entries)
+    assert {point.name for point in metadata.distribution("aurora-tools").entry_points} == {"aurora_tools"}
+    assert not any(point.name == "aurora_agent.tools" for point in entries)
+    tools_requirements = metadata.requires("aurora-tools")
+    assert tools_requirements is not None
+    assert not any(
+        requirement.startswith(("aurora-adapter", "aurora-agent", "aurora-bot", "aurora-cli", "aurora-api"))
+        for requirement in tools_requirements
+    )
+    plugins = load_plugins(enabled=[*names, "aurora_tools"])
     assert all(
         entry.id.namespace == "org.aurora.agent" and entry.provider == "aurora_agent"
         for plugin in plugins
+        if plugin.name != "aurora_tools"
         for entry in plugin.entries
     )
 
 
 def test_workspace_plugins_use_the_aurora_discovery_group():
-    for name in ("aurora-agent", "aurora-control", "aurora-bot", "aurora-adapter", "aurora-world"):
+    for name in ("aurora-agent", "aurora-tools", "aurora-control", "aurora-bot", "aurora-adapter", "aurora-world"):
         points = metadata.distribution(name).entry_points
         assert points and all(point.group == "aurora.plugins" for point in points)
 
 
 def test_self_control_definitions_are_bot_owned_and_configuration_is_opt_in():
-    from aurora_agent.tools import ToolSpec
     from aurora_bot.assembly import plugin
     from aurora_bot.assembly_config import parse_config
     from aurora_bot.self_control import COMPONENT, SELF_TOOLS
     from aurora_bot.self_control_state import SELF_CONTROL
+    from aurora_tools.execution import ToolSpec
 
     entries = {entry.id: entry for entry in plugin().entries}
     expected = {SELF_CONTROL, COMPONENT, *SELF_TOOLS.values()}

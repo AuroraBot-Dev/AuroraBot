@@ -4,8 +4,6 @@ import asyncio
 from typing import cast
 
 import pytest
-from aurora_adapter.model import ToolDefinition
-from aurora_agent.tools import TOOLS, ToolBatchState, ToolExecutor, ToolRejected, ToolSpec, plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding, component_entries
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context, StateKey
@@ -14,6 +12,8 @@ from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
 from aurora_core.json_data import encode_json
 from aurora_core.registry import RegistryEntry
+from aurora_tools.contract import ToolBatchState, ToolDefinition
+from aurora_tools.execution import TOOLS, ToolExecutor, ToolRejected, ToolSpec, plugin
 
 STATE = Id("dev.tools:state/data")
 COMPONENT = Id("dev.tools:handlers/add")

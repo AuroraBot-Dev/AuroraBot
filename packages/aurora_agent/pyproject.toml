@@ -1,20 +1,18 @@
 [project]
 name = "aurora-agent"
 version = "0.1.0"
-description = "Aurora agent execution, model calls and tools"
+description = "Aurora agent execution, model calls and default phases"
 requires-python = ">=3.12"
 dependencies = [
     "aurora-core>=0.1.0",
     "aurora-control>=0.1.0",
     "aurora-adapter>=0.1.0",
-    "jsonschema>=4.26.0",
-    "referencing>=0.37.0",
+    "aurora-tools>=0.1.0",
 ]
 
 [project.entry-points."aurora.plugins"]
 "aurora_agent.model" = "aurora_agent.model:plugin"
 "aurora_agent.react" = "aurora_agent.react:plugin"
-"aurora_agent.tools" = "aurora_agent.tools:plugin"
 "aurora_agent.react_defaults" = "aurora_agent.react_defaults:plugin"
 
 [build-system]

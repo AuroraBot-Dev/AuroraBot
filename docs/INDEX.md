@@ -12,7 +12,7 @@
 | [上下文与运行](context.md) | 模型输入、历史、字符预算、cadence、笔记与自身控制 |
 | [当前架构](aurorabot-design-v0.2.3.md) | 包职责、生命周期、执行与传输边界 |
 | [公共 ID 目录](aurorabot-id-catalog-v0.2.3.md) | 当前插件实际登记的 ID、类型和提供者 |
-| [执行包边界](aurora_agent_extraction_assessment.md) | control / agent / bot 独立性与尚未实现的 harness |
+| [执行包边界](aurora_agent_extraction_assessment.md) | control / tools / agent / bot 独立性与尚未实现的 harness |
 | [开发与验证](development.md) | 检查入口、回归夹具、分发验收和文档维护 |
 | [变更与验收记录](CHAGELOG.md) | 按日期保留已发生的变更与验证结果 |
 

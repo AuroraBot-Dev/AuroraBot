@@ -5,12 +5,12 @@ import json
 from typing import cast
 
 import pytest
-from aurora_adapter.model import ToolCall
 from aurora_adapter.model.testing import FakeReply
 from aurora_bot.assembly_config import CONFIG, MESSAGES
 from aurora_bot.work_notes import NOTE_TOOLS, NOTES
 from aurora_control import ExecutionPlug, ExecutionRequest, component_entries
 from aurora_core import Id
+from aurora_tools.contract import ToolCall
 from aurora_world.configuration import plugin as configuration_plugin
 from aurora_world.plugin import plugin as world_plugin
 from test_default_assembly import seed, setup

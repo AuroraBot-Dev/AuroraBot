@@ -3,14 +3,14 @@ name = "aurora-adapter"
 version = "0.1.0"
 description = "Aurora external protocol adapters"
 requires-python = ">=3.12"
-dependencies = ["aurora-core>=0.1.0"]
+dependencies = ["aurora-core>=0.1.0", "aurora-tools>=0.1.0"]
 
 [project.optional-dependencies]
 model = ["aurora-config>=0.1.0"]
 litellm = ["aurora-adapter[model]>=0.1.0", "litellm>=1.106.6,<1.107"]
 mcp = ["aurora-config>=0.1.0", "mcp==2.3.0", "httpx2>=2.16,<3", "tomli-w>=1.2,<2", "anyio>=4.15,<5"]
 mcp-world = ["aurora-adapter[mcp]>=0.1.0", "aurora-world[config]>=0.1.0"]
-mcp-tools = ["aurora-adapter[mcp]>=0.1.0", "aurora-agent>=0.1.0"]
+mcp-tools = ["aurora-adapter[mcp]>=0.1.0"]
 mcp-bot = ["aurora-adapter[mcp-tools,mcp-world]>=0.1.0", "aurora-bot>=0.1.0"]
 
 [project.entry-points."aurora.plugins"]

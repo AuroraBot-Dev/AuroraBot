@@ -2,17 +2,16 @@
 
 import asyncio
 
-from aurora_agent.tools import TOOLS, ToolInstance, ToolSpec
 from aurora_control import ExecutionPlug, StateBinding, component_entries
 from aurora_core import Id, entry_from, hook_handler
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
+from aurora_core.json_data import JsonValue
 from aurora_core.lifecycle import PREPARE, LifecycleComponent
 from aurora_core.registry import DefinitionRegistry, RegistryEntry
 from aurora_core.storage import StorageService
-
-from aurora_adapter.model import JsonValue
+from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
 
 from .catalog import discover_tools, select_tools
 from .clients import MCPClients
@@ -144,5 +143,5 @@ def plugin() -> Plugin:
             *component_entries(COMPONENT, MCPTool, MCPTool.execute, provider="aurora_adapter.mcp.tools"),
             entry_from(MCPTools.prepare, provider="aurora_adapter.mcp.tools"),
         ),
-        requires=("aurora_adapter.mcp", "aurora_agent.tools"),
+        requires=("aurora_adapter.mcp", "aurora_tools"),
     )

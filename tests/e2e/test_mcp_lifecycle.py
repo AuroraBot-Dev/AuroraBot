@@ -63,11 +63,8 @@ def test_mcp_distribution_and_plugin_boundaries():
     requirements = metadata.requires("aurora-adapter")
     assert requirements is not None
     assert all("extra == 'mcp-bot'" in item for item in requirements if item.startswith("aurora-bot"))
-    assert all(
-        "extra == 'mcp-tools'" in item or "extra == 'mcp-bot'" in item
-        for item in requirements
-        if item.startswith("aurora-agent")
-    )
+    assert not any(item.startswith("aurora-agent") for item in requirements)
+    assert "aurora-tools>=0.1.0" in requirements
     assert all(
         "extra == 'mcp-world'" in item or "extra == 'mcp-bot'" in item
         for item in requirements

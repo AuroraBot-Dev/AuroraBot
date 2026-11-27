@@ -396,7 +396,7 @@ flowchart TD
 
 ### W01 提取通用工具与中立数据
 
-**改动范围：** [agent/tools.py](../packages/aurora_agent/src/aurora_agent/tools.py)、[model/contract.py](../packages/aurora_adapter/src/aurora_adapter/model/contract.py)、[core JSON](../packages/aurora_core/src/aurora_core/json_data.py)、新 `packages/aurora_tools`，以及所有工具消费者。
+**改动范围：** [agent/tools.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_agent/src/aurora_agent/tools.py)、[model/contract.py](../packages/aurora_adapter/src/aurora_adapter/model/contract.py)、[core JSON](../packages/aurora_core/src/aurora_core/json_data.py)、新 `packages/aurora_tools`，以及所有工具消费者。
 
 - 将 JsonValue 归入 core 的 JSON 能力；ToolDefinition、ToolCall 归 tools 中立契约模块。模型消息、MCP、工具执行与 Bot 改为引用同一份类型。
 - 将 ToolSpec、ToolFactory、ToolInstance、ToolExecutor、工具目录、before/after、工具结果与批次数据移到 tools；ReAct 历史解释留在 agent 默认阶段。

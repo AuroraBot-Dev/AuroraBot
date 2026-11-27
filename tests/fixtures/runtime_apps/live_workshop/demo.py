@@ -18,8 +18,6 @@ from aurora_agent.model import plugin as model_plugin
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import ReActContext
 from aurora_agent.react_defaults import plugin as defaults_plugin
-from aurora_agent.tools import TOOLS, ToolInstance, ToolSpec
-from aurora_agent.tools import plugin as tools_plugin
 from aurora_bot.assembly import DefaultAssembly
 from aurora_bot.assembly import plugin as assembly_plugin
 from aurora_bot.assembly_config import AGENTS, CONFIG, MESSAGES, RUN, WORK
@@ -35,6 +33,8 @@ from aurora_core.ctx import StateKey
 from aurora_core.discovery import Plugin
 from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import RegistryEntry
+from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
+from aurora_tools.execution import plugin as tools_plugin
 from aurora_world import RECORDS, SOURCE_STATUS, SOURCES, SourceInstance, SourceSpec
 from aurora_world.configuration import CONFIG_STATE as WORLD_CONFIG
 from aurora_world.configuration import configured_sources_component

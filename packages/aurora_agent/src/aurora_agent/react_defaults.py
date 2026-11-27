@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 from typing import NotRequired, TypedDict, cast
 
-from aurora_adapter.model import ChatRequest, Message, ModelProtocolError, ToolCall
+from aurora_adapter.model import ChatRequest, Message, ModelProtocolError
 from aurora_adapter.model.content import validate_content
 from aurora_adapter.model.usage import usage_scope
 from aurora_control import ExecutionLink, ExecutionPlug, ExecutionRequest, InstanceStateBinding, component_entries
@@ -12,12 +12,13 @@ from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.ids import Id
 from aurora_core.json_data import encode_json
+from aurora_tools.contract import ToolBatchState, ToolCall, ToolResult
+from aurora_tools.execution import ToolExecutor, failure, read_request
 
 from .compaction import CompactionState, HistoryCompactor, validate_compaction
 from .input_budget import ModelInputBudget, ModelInputBudgetExceeded, read_exchange_ends
 from .model import ModelCall, ModelCallState
 from .react import Guidance, ReActAgent
-from .tools import ToolBatchState, ToolExecutor, ToolResult, failure, read_request
 
 logger = logging.getLogger(__name__)
 
@@ -283,5 +284,5 @@ def plugin() -> Plugin:
                 provider="aurora_agent",
             )
         ),
-        requires=("aurora_agent.react", "aurora_agent.model", "aurora_agent.tools"),
+        requires=("aurora_agent.react", "aurora_agent.model", "aurora_tools"),
     )

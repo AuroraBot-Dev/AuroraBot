@@ -1,6 +1,6 @@
 # AuroraBot 当前架构
 
-核对日期：2026-11-10。文件名沿用现有引用，内容描述当前实现；旧 v0.2.3 设计保存在[历史归档](archive/2026-11-09/aurorabot-design-v0.2.3.md)。
+核对日期：2026-11-27。文件名沿用现有引用，内容描述当前实现；旧 v0.2.3 设计保存在[历史归档](archive/2026-11-09/aurorabot-design-v0.2.3.md)。
 
 Aurora 以 ID 登记、共享 ctx 和显式连接组织插件。后端负责装配与执行，TUI 和 Panel 通过共享客户端观察、提交输入和取消运行。面向个人单租户使用；命名空间和实例 ID 用于组织定义与数据，不构成租户隔离。
 
@@ -11,15 +11,16 @@ Aurora 以 ID 登记、共享 ctx 和显式连接组织插件。后端负责装�
 | aurora_core | ID、登记、ctx、订阅、连接、调用、生命周期、持久化；不处理 TOML 或模型业务 |
 | aurora_config | 基于 core 声明配置、校验结构与关联、补缺模板、加载 TOML；提供可选配置编辑端点 |
 | aurora_control | 仅依赖 core；执行身份、状态绑定、插头插槽与 Serial、Branch、While、Parallel |
-| aurora_agent | ReAct、模型调用、工具执行、默认阶段与 AgentRuntime；不依赖 bot、CLI、API |
-| aurora_adapter | 基础包依赖 core；model 提供模型契约与供应商适配，mcp 提供协议与工具/世界桥；额外依赖通过 extra 安装 |
+| aurora_tools | 工具数据契约、ToolSpec/Factory/Instance、执行器与 before/after 槽；依赖 core/control 与 schema 库，不依赖模型、agent 或 Bot |
+| aurora_agent | ReAct、模型调用、默认阶段与 AgentRuntime；使用 tools，不依赖 bot、CLI、API |
+| aurora_adapter | 基础包依赖 core/tools；model 提供模型契约与供应商适配，mcp 提供协议与工具/世界桥；额外依赖通过 extra 安装 |
 | aurora_bot | 默认配置、装配、资源、运行操作、直接交流、笔记、显式文本记忆、业务视图、cadence 与自身控制 |
 | aurora_cli / aurora_api | 宿主、命令交互、HTTP/WS 传输；复用 bot 运行语义 |
 | aurora_world | 来源管理、事件原文归档、近期视图、环境观察；含时间、天气及可选 MCP 世界接入 |
 | aurora_logging | 日志配置 |
 | aurora_client / apps | TS 共享客户端、OpenTUI、Vue Panel、静态站点；不装配 Python 插件 |
 
-执行依赖方向为 `bot → agent → control → core`。agent 和 bot 可以直接使用 core 与 adapter.model；配置通过 aurora_config 接入。独立 aurora_harness 尚未实现，安装助手复用已有 MCP 产品装配。
+执行依赖方向为 `bot → agent → tools → control → core`，agent 也可直接使用 control。agent 和 bot 可以直接使用 core 与 adapter.model；配置通过 aurora_config 接入。独立 aurora_harness 尚未实现，安装助手复用已有 MCP 产品装配。
 
 ## ID、ctx 与插件
 
@@ -44,6 +45,8 @@ ctx 值使用可序列化 JSON，运行期客户端和连接不进入快照。�
 每个 agent 实例只有一个 AgentRuntime 所有者。用户直接交流、cadence 和计划唤醒都向这个所有者提交引导；运行中的输入在推理边界接纳。等待者取消不隐式取消 agent，显式取消会等待清理。调用等待决定执行结束，不能用残留状态判断完成。
 
 ReAct 提供 prepare、infer、act、observe、finish、error 阶段连接。默认阶段构造模型输入、调用模型、执行工具，把完整请求与返回一起写回历史。模型无工具调用且正常 stop 时结束；工具错误作为观察返回，不自动重试副作用。
+
+JsonValue 由 core.json_data 定义，ToolCall/ToolDefinition 与工具批次结果由 aurora_tools.contract 定义；模型包直接引用中立工具契约，不导出工具类型。
 
 模型消息支持文本和结构化内容，思考文本及供应商需要的思考块保留在工具往返中。输入预算以应用层 JSON 字符和内嵌文件字节计，不是 token 上限。详见[上下文与运行](context.md)。
 

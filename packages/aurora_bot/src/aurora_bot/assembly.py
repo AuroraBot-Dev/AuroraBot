@@ -17,7 +17,6 @@ from aurora_agent.model import ModelCall
 from aurora_agent.react import AgentBusyError, ReActAgent
 from aurora_agent.react_defaults import ReActContext, ReActDefaults
 from aurora_agent.runtime import AgentRuntime
-from aurora_agent.tools import TOOLS, ToolExecutor, ToolInstance, ToolSpec
 from aurora_config import ConfigSpec, ConfigTemplate, config_entries
 from aurora_control import ExecutionRequest, InstanceStateBinding, StateBinding
 from aurora_core import entry_from, hook_handler
@@ -28,6 +27,7 @@ from aurora_core.ids import Id
 from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import DefinitionRegistry, RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_tools.execution import TOOLS, ToolExecutor, ToolInstance, ToolSpec
 from aurora_world import WorldRecords
 from aurora_world.configuration import CONFIGURATION as WORLD_CONFIGURATION
 from aurora_world.configuration import configured_sources_component
@@ -668,7 +668,7 @@ def plugin() -> Plugin:
             "aurora_adapter.model",
             "aurora_agent.model",
             "aurora_agent.react",
-            "aurora_agent.tools",
+            "aurora_tools",
             "aurora_agent.react_defaults",
         ),
     )

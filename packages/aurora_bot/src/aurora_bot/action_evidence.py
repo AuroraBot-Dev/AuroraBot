@@ -5,14 +5,14 @@ import time
 from copy import deepcopy
 from typing import cast
 
-from aurora_adapter.model import JsonValue, ToolCall
-from aurora_agent.tools import TOOLS, ToolBatchRequest, ToolExecutionError, ToolInstance, ToolResult, ToolSpec
 from aurora_control import ExecutionPlug, ExecutionRequest, StateBinding, component_entries
 from aurora_core import Id
 from aurora_core.ctx import Context
-from aurora_core.json_data import decode_json, encode_json
+from aurora_core.json_data import JsonValue, decode_json, encode_json
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_tools.contract import ToolBatchRequest, ToolCall, ToolResult
+from aurora_tools.execution import TOOLS, ToolExecutionError, ToolInstance, ToolSpec
 
 READ_ACTION = Id("org.aurora.bot:tools/actions/read")
 COMPONENT = Id("org.aurora.bot:components/actions/read")

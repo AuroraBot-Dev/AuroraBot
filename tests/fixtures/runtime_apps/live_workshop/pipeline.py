@@ -3,10 +3,10 @@
 import asyncio
 from typing import cast
 
-from aurora_agent.tools import ToolInstance
 from aurora_control import Branch, ExecutionPlug, ExecutionSlot, Parallel, Serial, StateBinding, While
 from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
+from aurora_tools.execution import ToolInstance
 
 PIPELINE = Id("dev.example.workshop:state/pipeline")
 INSPECT = Id("dev.example.workshop:handlers/inspect")

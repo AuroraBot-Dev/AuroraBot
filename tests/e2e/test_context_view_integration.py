@@ -6,10 +6,10 @@ from dataclasses import replace
 from typing import cast
 
 import pytest
-from aurora_agent.tools import ToolInstance, ToolSpec
 from aurora_bot.assembly_config import CONFIG, MESSAGES, WORK
 from aurora_bot.conversation import CONVERSATION, ConversationEndpoint
 from aurora_control import ExecutionPlug
+from aurora_tools.execution import ToolInstance, ToolSpec
 from aurora_world.configuration import plugin as configuration_plugin
 from aurora_world.plugin import plugin as world_plugin
 from test_default_assembly import COMPONENT, TOOL, seed, setup

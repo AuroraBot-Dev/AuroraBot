@@ -16,8 +16,6 @@ from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import ReActContext, ReActDefaults
 from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_agent.runtime import AgentRuntime
-from aurora_agent.tools import TOOLS, ToolExecutor, ToolSpec
-from aurora_agent.tools import plugin as tools_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, StateBinding, component_entries
 from aurora_core import Id, entry_from, hook_handler
 from aurora_core.bootstrap import bootstrap
@@ -28,6 +26,8 @@ from aurora_core.lifecycle import CLEAN, STOP, Lifecycle, LifecycleComponent, in
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_tools.execution import TOOLS, ToolExecutor, ToolSpec
+from aurora_tools.execution import plugin as tools_plugin
 
 STATE = Id("dev.example.react:state/data")
 ADD = Id("dev.example.react:handlers/add")

@@ -14,8 +14,6 @@ from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import plugin as model_plugin
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import plugin as defaults_plugin
-from aurora_agent.tools import TOOLS, ToolInstance, ToolSpec
-from aurora_agent.tools import plugin as tools_plugin
 from aurora_bot.assembly import DefaultAssembly
 from aurora_bot.assembly import plugin as assembly_plugin
 from aurora_config import CONFIGURATION, configuration_component
@@ -30,6 +28,8 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
+from aurora_tools.execution import plugin as tools_plugin
 from configuration import configured_plugins
 
 ADAPTER = Id("dev.example.default:adapters/fake")

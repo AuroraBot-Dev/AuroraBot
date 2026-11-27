@@ -12,7 +12,6 @@ from aurora_adapter.model import (
     ModelFactory,
     ModelProtocolError,
     ResponseBuffer,
-    ToolCall,
     UnsupportedCapability,
     collect_response,
 )
@@ -22,6 +21,7 @@ from aurora_core.admission import AdmissionStatus, inspect_admissions
 from aurora_core.bootstrap import bootstrap
 from aurora_core.discovery import register_plugins
 from aurora_core.json_data import decode_json, encode_json
+from aurora_tools.contract import ToolCall
 
 
 def request() -> ChatRequest:

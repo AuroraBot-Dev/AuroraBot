@@ -5,6 +5,7 @@ description = "AuroraBot default composition and plugins"
 requires-python = ">=3.12"
 dependencies = [
     "aurora-agent>=0.1.0",
+    "aurora-tools>=0.1.0",
     "aurora-core>=0.1.0", "aurora-config>=0.1.0",
     "aurora-control>=0.1.0",
     "aurora-adapter[litellm]>=0.1.0",

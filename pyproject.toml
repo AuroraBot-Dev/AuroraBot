@@ -35,6 +35,7 @@ source = [
     "aurora_core",
     "aurora_control",
     "aurora_agent",
+    "aurora_tools",
     "aurora_cli",
     "aurora_bot",
     "aurora_api",
@@ -69,6 +70,7 @@ extraPaths = [
     "packages/aurora_core/src",
     "packages/aurora_control/src",
     "packages/aurora_agent/src",
+    "packages/aurora_tools/src",
     "packages/aurora_bot/src",
     "packages/aurora_cli/src",
     "packages/aurora_api/src",
@@ -83,6 +85,7 @@ members = [
     "packages/aurora_core",
     "packages/aurora_control",
     "packages/aurora_agent",
+    "packages/aurora_tools",
     "packages/aurora_bot",
     "packages/aurora_cli",
     "packages/aurora_api",
@@ -96,6 +99,7 @@ aurora-config = { workspace = true }
 aurora-core = { workspace = true }
 aurora-control = { workspace = true }
 aurora-agent = { workspace = true }
+aurora-tools = { workspace = true }
 aurora-bot = { workspace = true }
 aurora-cli = { workspace = true }
 aurora-api = { workspace = true }

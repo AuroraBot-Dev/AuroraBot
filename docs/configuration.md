@@ -65,7 +65,7 @@ file_input = false
 
 `aurora_bot.memory` 是独立启用的 Bot 插件，首次安装助手不默认启用。插件默认使用普通 ReAct 工具，按需保存和检索文本；可额外开启 [压缩时自动保存](context.md#压缩时自动保存长期记忆)，将被压缩记录先落盘、摘要后台索引，不依赖模型主动调用保存工具。
 
-先补齐以下配置，再在 `config/host.toml` 的现有 `plugins` 列表中添加 `"aurora_bot.memory"`。保留默认 Bot 的依赖插件，包括 `aurora_bot.assembly`、`aurora_adapter.model`、`aurora_config`、`aurora_agent.tools`；只安装包不等于启用插件。
+先补齐以下配置，再在 `config/host.toml` 的现有 `plugins` 列表中添加 `"aurora_bot.memory"`。保留默认 Bot 的依赖插件，包括 `aurora_bot.assembly`、`aurora_adapter.model`、`aurora_config`、`aurora_tools`；只安装包不等于启用插件。
 
 在模型 `profiles.toml` 添加独立向量 profile，模型名称和地址按实际供应商修改。向量请求通过 LiteLLM `aembedding`，支持已接入实例传输的 OpenAI 兼容供应商，以及 Voyage、Cohere 等原生协议。下例使用 OpenAI 兼容的 `/embeddings` 端点，`base_url` 填包含 `/v1` 的 API 根路径，不填完整 `/embeddings` 路径；不接受聊天能力和思考配置。当前传输范围以 [LiteLLMClient](../packages/aurora_adapter/src/aurora_adapter/model/litellm.py) 为准，不等于 LiteLLM 的全部供应商；未接入的兼容服务可显式选择 `provider = "openai"`。
 

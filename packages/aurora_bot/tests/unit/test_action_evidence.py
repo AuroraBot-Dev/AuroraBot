@@ -4,13 +4,13 @@ import json
 import sqlite3
 
 import pytest
-from aurora_agent.tools import ToolExecutionError
 from aurora_bot.action_evidence import ActionEvidence
 from aurora_bot.assembly_config import parse_config
 from aurora_bot.context_view import BusinessContextView
 from aurora_control import ExecutionRequest
 from aurora_core.json_data import encode_json
 from aurora_core.storage import StorageService
+from aurora_tools.execution import ToolExecutionError
 
 
 def call(identity="one"):

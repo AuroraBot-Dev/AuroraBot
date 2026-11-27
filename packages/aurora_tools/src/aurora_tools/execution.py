@@ -6,10 +6,9 @@ import math
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Literal, NotRequired, Protocol, TypedDict, cast
+from typing import Literal, Protocol, cast
 from uuid import uuid4
 
-from aurora_adapter.model import JsonValue, ToolCall, ToolDefinition
 from aurora_control import (
     ExecutionLink,
     ExecutionPlug,
@@ -24,40 +23,18 @@ from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
-from aurora_core.json_data import encode_json
+from aurora_core.json_data import JsonValue, encode_json
 from aurora_core.registry import DefinitionRegistry, RegistryEntry
 from aurora_core.storage import StorageService
 from jsonschema import Draft202012Validator, ValidationError
 from referencing import Registry
 
-TOOLS = Id("org.aurora.agent:registries/tools")
-BEFORE_CALL = Id("org.aurora.agent:tools/before_call")
-AFTER_CALL = Id("org.aurora.agent:tools/after_call")
+from .contract import ToolBatchRequest, ToolBatchState, ToolCall, ToolDefinition, ToolResult
+
+TOOLS = Id("org.aurora.tools:registries/tools")
+BEFORE_CALL = Id("org.aurora.tools:executor/before_call")
+AFTER_CALL = Id("org.aurora.tools:executor/after_call")
 _logger = logging.getLogger(__name__)
-
-
-class ToolBatchRequest(TypedDict):
-    """一次推理产生的工具批次，turn_id 用于排除其他推理留下的结果。"""
-
-    turn_id: str
-    calls: list[ToolCall]
-
-
-class ToolResult(TypedDict):
-    """可进入模型观察的单次结果；取消及未执行也有明确状态。"""
-
-    call_id: str
-    name: str
-    status: Literal["completed", "failed", "cancelled"]
-    value: NotRequired[JsonValue]
-    error: NotRequired[dict[str, str]]
-
-
-class ToolBatchState(TypedDict):
-    turn_id: str
-    execution_id: str
-    status: Literal["running", "completed", "failed", "cancelled"]
-    results: list[ToolResult]
 
 
 class ToolRecorder(Protocol):
@@ -207,7 +184,7 @@ class ToolExecutor:
     工具不得留下未托管的后台任务；本组件不做自动重试或动作去重。
     """
 
-    definition_id = Id("org.aurora.agent:handlers/react/execute_tools")
+    definition_id = Id("org.aurora.tools:components/executor")
 
     def __init__(
         self,
@@ -381,13 +358,13 @@ class ToolExecutor:
 
 def plugin() -> Plugin:
     return Plugin(
-        "aurora_agent.tools",
+        "aurora_tools",
         (
-            RegistryEntry(TOOLS, "registry", ToolReceiver(), "aurora_agent", register_to=REGISTRY_DIRECTORY),
+            RegistryEntry(TOOLS, "registry", ToolReceiver(), "aurora_tools", register_to=REGISTRY_DIRECTORY),
             *component_entries(
-                ToolExecutor.definition_id, ToolExecutor, ToolExecutor.execute, provider="aurora_agent", children=True
+                ToolExecutor.definition_id, ToolExecutor, ToolExecutor.execute, provider="aurora_tools", children=True
             ),
-            execution_slot_entry(BEFORE_CALL, provider="aurora_agent"),
-            execution_slot_entry(AFTER_CALL, provider="aurora_agent"),
+            execution_slot_entry(BEFORE_CALL, provider="aurora_tools"),
+            execution_slot_entry(AFTER_CALL, provider="aurora_tools"),
         ),
     )

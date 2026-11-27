@@ -13,7 +13,6 @@ from aurora_adapter.model import (
     ModelConfig,
     ModelError,
     ModelProtocolError,
-    ToolCall,
     UnsupportedCapability,
     collect_response,
 )
@@ -23,6 +22,7 @@ from aurora_adapter.model.usage import usage_scope
 from aurora_core.bootstrap import bootstrap
 from aurora_core.discovery import register_plugins
 from aurora_core.json_data import decode_json, encode_json
+from aurora_tools.contract import ToolCall
 
 if TYPE_CHECKING:
     from aurora_adapter.model.litellm import LiteLLMClient

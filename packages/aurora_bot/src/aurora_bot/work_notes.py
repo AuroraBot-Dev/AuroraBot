@@ -6,12 +6,12 @@ from re import fullmatch
 from time import time
 from typing import cast
 
-from aurora_agent.tools import TOOLS, ToolExecutionError, ToolInstance, ToolSpec
 from aurora_config import ConfigSchema
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, component_entries
 from aurora_core import Id
 from aurora_core.ctx import Context, StateKey
 from aurora_core.registry import RegistryEntry
+from aurora_tools.execution import TOOLS, ToolExecutionError, ToolInstance, ToolSpec
 
 from .assembly_config import WORK, ToolSelection
 

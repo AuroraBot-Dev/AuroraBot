@@ -6,7 +6,6 @@ from typing import cast
 
 import httpx
 import tomli_w
-from aurora_adapter.model import JsonValue
 from aurora_adapter.model.config import ADAPTERS, ModelAdapter
 from aurora_adapter.model.litellm import LiteLLMClient
 from aurora_adapter.model.testing import FakeReply
@@ -14,6 +13,7 @@ from aurora_bot.assembly_config import MESSAGES
 from aurora_bot.memory import MEMORY_TOOLS
 from aurora_bot.memory import plugin as memory_plugin
 from aurora_core import Id
+from aurora_core.json_data import JsonValue
 from aurora_core.registry import RegistryEntry
 
 from tests.e2e.test_default_assembly import ADAPTER, settings, setup

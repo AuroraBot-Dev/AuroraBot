@@ -2,10 +2,9 @@
 
 from typing import NotRequired, TypedDict, cast
 
-from aurora_adapter.model import JsonValue
 from aurora_config import ConfigSchema
 from aurora_core.ids import Id
-from aurora_core.json_data import encode_json
+from aurora_core.json_data import JsonValue, encode_json
 
 CONFIG = Id("org.aurora.bot:state/config")
 AGENTS = Id("org.aurora.bot:state/agents")

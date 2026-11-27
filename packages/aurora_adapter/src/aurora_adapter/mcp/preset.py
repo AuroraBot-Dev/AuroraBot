@@ -22,7 +22,7 @@ PLUGINS = (
     "aurora_adapter.model",
     "aurora_agent.model",
     "aurora_agent.react",
-    "aurora_agent.tools",
+    "aurora_tools",
     "aurora_agent.react_defaults",
     "aurora_bot.assembly",
     "aurora_adapter.mcp",

@@ -3,9 +3,10 @@
 from copy import deepcopy
 from typing import Any, cast
 
-from aurora_core.json_data import decode_json, encode_json
+from aurora_core.json_data import JsonValue, decode_json, encode_json
+from aurora_tools.contract import ToolCall
 
-from .contract import ChatRequest, ChatResponse, FinishReason, JsonValue, ModelProtocolError, ReasoningBlock, ToolCall
+from .contract import ChatRequest, ChatResponse, FinishReason, ModelProtocolError, ReasoningBlock
 from .response import ResponseBuffer
 
 

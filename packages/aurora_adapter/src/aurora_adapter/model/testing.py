@@ -6,17 +6,10 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 
+from aurora_tools.contract import ToolCall
+
 from .content import require_capabilities
-from .contract import (
-    ChatCapabilities,
-    ChatChunk,
-    ChatRequest,
-    ChatResponse,
-    FinishReason,
-    ModelError,
-    ReasoningBlock,
-    ToolCall,
-)
+from .contract import ChatCapabilities, ChatChunk, ChatRequest, ChatResponse, FinishReason, ModelError, ReasoningBlock
 from .response import collect_response
 
 

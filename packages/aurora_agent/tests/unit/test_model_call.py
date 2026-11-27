@@ -3,7 +3,7 @@
 import asyncio
 
 import pytest
-from aurora_adapter.model import ChatCapabilities, ModelError, ToolCall, UnsupportedCapability
+from aurora_adapter.model import ChatCapabilities, ModelError, UnsupportedCapability
 from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import ModelCall
 from aurora_agent.model import plugin as model_plugin
@@ -15,6 +15,7 @@ from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
 from aurora_core.json_data import encode_json
 from aurora_core.registry import RegistryEntry
+from aurora_tools.contract import ToolCall
 
 INPUT = Id("dev.model:state/input")
 OUTPUT = Id("dev.model:state/output")

@@ -42,6 +42,35 @@ assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
     assert '"status": "completed"' in (tmp_path / "framework" / "ctx.json").read_text(encoding="utf-8")
 
 
+def test_tools_roundtrip_without_agent_model_or_hosts():
+    launcher = """
+import importlib.abc
+import runpy
+import sys
+
+blocked = {'aurora_agent', 'aurora_adapter', 'aurora_bot', 'aurora_cli', 'aurora_api', 'litellm', 'mcp'}
+
+class AbsentPackages(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in blocked:
+            raise ModuleNotFoundError('独立工具环境不提供：' + fullname)
+
+sys.meta_path.insert(0, AbsentPackages())
+runpy.run_path(sys.argv[1], run_name='__main__')
+assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
+"""
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "tools_roundtrip.py"
+    result = subprocess.run(
+        [sys.executable, "-c", launcher, str(fixture)], capture_output=True, text=True, timeout=15, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "events": ["before", "tool", "after"],
+        "result": 5,
+        "working_states_cleared": True,
+    }
+
+
 def test_agent_roundtrip_and_restore_without_bot_or_hosts(tmp_path):
     launcher = """
 import importlib.abc
@@ -59,9 +88,12 @@ sys.meta_path.insert(0, AbsentPackages())
 from aurora_agent.runtime import AgentRuntime
 from aurora_core.discovery import load_plugins
 plugins = load_plugins(enabled=[
-    'aurora_agent.model', 'aurora_agent.react', 'aurora_agent.tools', 'aurora_agent.react_defaults',
+    'aurora_agent.model', 'aurora_agent.react', 'aurora_tools', 'aurora_agent.react_defaults',
 ])
-assert all(entry.provider == 'aurora_agent' for plugin in plugins for entry in plugin.entries)
+assert all(
+    entry.provider == ('aurora_tools' if plugin.name == 'aurora_tools' else 'aurora_agent')
+    for plugin in plugins for entry in plugin.entries
+)
 source = sys.argv.pop(1)
 runpy.run_path(source, run_name='__main__')
 assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
@@ -116,6 +148,7 @@ adapters = [entry for entry in plugin.entries if entry.kind == 'adapter']
 assert all(isinstance(entry.target, ModelAdapter) and entry.register_to == ADAPTERS for entry in adapters)
 assert {entry.target.kind for entry in adapters} == {'chat', 'choice', 'embedding'}
 assert all(entry.id.namespace == 'org.aurora.adapter' for entry in plugin.entries)
+assert 'aurora_tools.execution' not in sys.modules
 assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
 """
     result = subprocess.run([sys.executable, "-c", launcher], capture_output=True, text=True, timeout=15, check=False)

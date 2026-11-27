@@ -13,7 +13,6 @@ import uvicorn
 from aurora_adapter.mcp import CLIENT_STATUS, PROTOCOL_VERSION, MCPClients
 from aurora_adapter.mcp.catalog import automatic_name
 from aurora_adapter.mcp.tools import MCPTools
-from aurora_agent.tools import ToolExecutor, ToolSpec
 from aurora_config import configuration_component
 from aurora_control import ExecutionRequest, StateBinding
 from aurora_core import Id
@@ -25,6 +24,7 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_tools.execution import ToolExecutor, ToolSpec
 from mcp.server import MCPServer
 
 STATE = Id("dev.mcp:state/work")
@@ -94,7 +94,7 @@ async def run(
                     await asyncio.sleep(0.01)
         registry = bootstrap()
         install_lifecycle_slots(registry)
-        enabled = ["aurora_config", "aurora_adapter.mcp", "aurora_agent.tools", "aurora_adapter.mcp.tools"]
+        enabled = ["aurora_config", "aurora_adapter.mcp", "aurora_tools", "aurora_adapter.mcp.tools"]
         if with_bot:
             enabled += [
                 "aurora_adapter.model",
