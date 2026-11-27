@@ -68,7 +68,7 @@ Controller 是公共基类定义，不是可独立运行的第五种控制流程
 
 ### 3.1 aurora_adapter.model
 
-源码：[models.py](../../../packages/aurora_adapter/src/aurora_adapter/model/models.py)、[protocols.py](../../../packages/aurora_adapter/src/aurora_adapter/model/protocols.py)、[fake.py](../../../packages/aurora_adapter/src/aurora_adapter/model/fake.py)。
+源码：[models.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/432f4eda4411b34cf2c0d66699951c9be60218df/packages/aurora_adapter/src/aurora_adapter/model/models.py)、[protocols.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/432f4eda4411b34cf2c0d66699951c9be60218df/packages/aurora_adapter/src/aurora_adapter/model/protocols.py)、[fake.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/432f4eda4411b34cf2c0d66699951c9be60218df/packages/aurora_adapter/src/aurora_adapter/model/fake.py)。
 
 - Message、ToolDefinition、ToolCall、ModelRequest、ModelResponse 与 ModelChunk 用 TypedDict 表达普通 JSON 数据，不包含 SDK 对象。
 - ToolCall 包含完整 id、name、arguments；参数必须是完整 JSON 对象。供应商的参数片段由适配层组装，bot 不消费半截 JSON；文本仍逐段输出。
@@ -150,7 +150,7 @@ uv run aurora --plugin aurora_control --plugin aurora_agent.model --plugin auror
 行为证据：
 
 - [组件身份](../../../packages/aurora_control/tests/unit/test_component_identity.py)：定义层级、实例隔离与展示引用。
-- [模型协议](../../../packages/aurora_adapter/tests/contract/test_model_protocol.py)：流关闭、能力拒绝、结束和工具请求。
+- [模型协议](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/tests/contract/test_model_protocol.py)：流关闭、能力拒绝、结束和工具请求。
 - [控制组件](../../../packages/aurora_control/tests/unit/test_control.py)、[模型组件](../../../packages/aurora_agent/tests/unit/test_model_call.py)：组合、失败、取消、临时状态清理与部分文本。
 - [控制示例](../../../tests/e2e/test_control_flow_example.py)、[独立 Agent 示例](../../../tests/e2e/test_react_defaults_example.py)：真实进程、退出码与最终快照。
 - [宿主关闭](../../../tests/e2e/test_lifecycle_persistence.py)、[CLI 进程](../../../tests/e2e/test_cli.py)：在途写入、最终落盘和重启恢复。

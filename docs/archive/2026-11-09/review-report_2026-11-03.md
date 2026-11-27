@@ -96,7 +96,7 @@
 
 **判断：部分成立。清理异常值得优先修复；结构拆分属于后续复用建议。**
 
-- [assembly.py](../../../packages/aurora_bot/src/aurora_bot/assembly.py) 的 _activate 在 finally 中调用 _compact。若清理抛错，原始失败或取消可能被替代，应保留原异常及清理失败信息；没有原始异常时也不能仅记录日志后宣称成功。
+- [assembly.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly.py) 的 _activate 在 finally 中调用 _compact。若清理抛错，原始失败或取消可能被替代，应保留原异常及清理失败信息；没有原始异常时也不能仅记录日志后宣称成功。
 - 显式 activate 在 runtime.current 非空时拒绝执行；[runtime.py](../../../packages/aurora_agent/src/aurora_agent/runtime.py) 也会拒绝在显式激活占用期间接管。两个入口不等于两个调度者同时执行，不能直接认定违反单一调度所有者。
 - 模型和工具所有权、地址分配、保留策略本来属于装配职责。[拆包评估第 4.3 节](aurora_agent_extraction_assessment.md#43-恢复与清理需要可复用实现) 支持提取中断修正和 pending 保留等小范围辅助，不要求把所有策略迁入 agent。
 
@@ -117,8 +117,8 @@
 
 **判断：部分成立。类别：宿主复用边界，初稿影响范围夸大。**
 
-- [world.py](../../../packages/aurora_adapter/src/aurora_adapter/mcp/world.py) 将 ctx/clients 写入 SourceSpec 的工厂 binding，并拒绝第二次绑定；关闭不解除该绑定。同一份定义对象的重新装配确实受限。
-- [tools.py](../../../packages/aurora_adapter/src/aurora_adapter/mcp/tools.py) 的工厂持有宿主 MCPTools，定义仍会留在该 registry 中。但工具目录在初次审查基线就已先构建 entries，再调用 register_many 原子登记；“先构建临时目录、全部校验后原子登记”是现有行为。
+- [world.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/world.py) 将 ctx/clients 写入 SourceSpec 的工厂 binding，并拒绝第二次绑定；关闭不解除该绑定。同一份定义对象的重新装配确实受限。
+- [tools.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/tools.py) 的工厂持有宿主 MCPTools，定义仍会留在该 registry 中。但工具目录在初次审查基线就已先构建 entries，再调用 register_many 原子登记；“先构建临时目录、全部校验后原子登记”是现有行为。
 - [DefinitionRegistry](../../../packages/aurora_core/src/aurora_core/registry.py) 是实例对象，不是进程级单例；插件工厂每次创建新对象。因此同进程使用新 registry 和新插件对象重建宿主，并不必然遇到旧绑定。
 - Lifecycle 本身只允许启动一次。若要求失败后复用原 registry 或原插件对象，应先明确该支持范围，不能把重启宿主和复用已经关闭的宿主混为一谈。
 

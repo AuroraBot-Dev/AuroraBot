@@ -1,5 +1,7 @@
 # 插件体系新基线实施计划
 
+> **实施进度（2026-11-27）。** W01–W08 已完成；W09 的宿主入口与助手装配已随前序工作切换，本轮同步文档，但 CLI 插件目录/装配计划/实际图查询仍待实施。`aurora-meta catalog`、`id list` 和 Python `Host.graph` 已存在，不等同于全部查询入口完成。W10 的分发、安装隔离与检查已在各工作包持续验收，最终收口及审查问题尚未全部完成。本计划保留原决策和工作包完成条件，不能将下文拟议命令当作当前用法。实际行为见[文档索引](INDEX.md)，验收见[变更记录](CHAGELOG.md)。
+
 本计划依据[能力归属与拆分方案](plugin-capability-boundaries.md)和[插件元信息与集中装配方案](aurora-meta-proposal.md)，将包拆分、元信息、实例导出与产品装配作为一次完整的基线切换。代码起点为 `d6217150`，能力清点见 `07ddadd5` 的拆分文档。本文是后续实施清单，本次只新增计划文档。
 
 **直接切换到新基线，不提供旧包、旧入口、旧 ID、旧配置或旧快照的兼容实现。** 开发过程可以小步提交，交付时只有一种声明来源、一种宿主装配入口和一套默认接线。实现以信任开发者为前提，沿用已有执行与资源管理语义，不增加防御性框架。
@@ -420,7 +422,7 @@ flowchart TD
 
 ### W03 提取生成器并完成真实实例导出
 
-**改动范围：** [core/components.py](../packages/aurora_core/src/aurora_core/components.py)、[core/declarations.py](../packages/aurora_core/src/aurora_core/declarations.py)、[config/build_meta.py](../packages/aurora_config/build_meta.py)、[构建钩子](../packages/aurora_config/hatch_build.py)、新 `tooling/aurora_meta_build`。
+**改动范围：** [core/components.py](../packages/aurora_core/src/aurora_core/components.py)、[core/declarations.py](../packages/aurora_core/src/aurora_core/declarations.py)、[config/build_meta.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_config/build_meta.py)、[构建钩子](../packages/aurora_config/hatch_build.py)、新 `tooling/aurora_meta_build`。
 
 - 把生成器提取为不依赖运行包的构建工具，加入 workspace 的构建开发依赖；支持多清单、独立符号空间、版本 2 目录和每清单生成模块。
 - 按第 5.1 节补齐 create/export/bind、业务槽与资源显式导出，保留现有 `@plug` 的方法身份语义；core 不导入 control。
@@ -433,7 +435,7 @@ flowchart TD
 
 ### W04 提取宿主并切换配置入口
 
-**改动范围：** [CLI host](../packages/aurora_cli/src/aurora_cli/host.py)、[CLI 引导](../packages/aurora_cli/src/aurora_cli/configuration.py)、[config/assembly.py](../packages/aurora_config/src/aurora_config/assembly.py)、[config/host.py](../packages/aurora_config/src/aurora_config/host.py)、[ConfigTemplate](../packages/aurora_config/src/aurora_config/templates.py)、新 `packages/aurora_host`。
+**改动范围：** [CLI host](../packages/aurora_cli/src/aurora_cli/host.py)、[CLI 引导](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_cli/src/aurora_cli/configuration.py)、[config/assembly.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_config/src/aurora_config/assembly.py)、[config/host.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_config/src/aurora_config/host.py)、[ConfigTemplate](../packages/aurora_config/src/aurora_config/templates.py)、新 `packages/aurora_host`。
 
 - host 持有 AssemblyPlan 读取、实例创建/导出/绑定、两类连接、Lifecycle 与运行图。配置服务仅持有 ConfigSpec、TOML 与编辑能力。
 - 移除宿主对 CommandContext、命令名和产品 assembly ID 的依赖；CLI 作为宿主消费者执行命令。
@@ -446,7 +448,7 @@ flowchart TD
 
 ### W05 解耦 world 与 memory
 
-**改动范围：** [world 包](../packages/aurora_world/)、[Bot memory](../packages/aurora_bot/src/aurora_bot/memory/)、新 `packages/aurora_memory`。
+**改动范围：** [world 包](../packages/aurora_world/)、[Bot memory](https://github.com/AuroraBot-Dev/AuroraBot/tree/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/memory)、新 `packages/aurora_memory`。
 
 - world 的 records/state/archive 与 sources/registry/托管分成同包内两个插件；configuration 与 environment 调整 requires 和定义归属。
 - records 与 sources 显式导出组件和资源；sources 接收 records，SourceFactory 通过来源选择得到明确资源引用；对来源内部 start/stop/run/on_context_change 的实现保持直接协议调用。
@@ -472,7 +474,7 @@ flowchart TD
 
 ### W07 拆开 Bot 能力与配置
 
-**改动范围：** [assembly.py](../packages/aurora_bot/src/aurora_bot/assembly.py)、[assembly_config.py](../packages/aurora_bot/src/aurora_bot/assembly_config.py)、第 2.2 节对应的现有实现。
+**改动范围：** [assembly.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly.py)、[assembly_config.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly_config.py)、第 2.2 节对应的现有实现。
 
 - 按七个新能力插件与既有 cadence 分配全部定义、状态、配置和资源；每个公开定义有一个拥有者。
 - runtime 只绑定 AgentRuntime 与运行入口，不复制 ReAct、调度或工具执行；conversation/commands/self_control/cadence 借用同一个 runtime。

@@ -35,7 +35,7 @@
 | 世界来源 | 精确资源 URI、资源更新通知及单事件正文 | 保留原边界，扩展通知或事件日志另行接入 |
 | 关闭 | 已有连接借用、停止接纳和依赖顺序 | 增加子进程与后代回收，扩展 B3 矩阵 |
 
-相关代码：[客户端](../../../packages/aurora_adapter/src/aurora_adapter/mcp/clients.py)、[配置](../../../packages/aurora_adapter/src/aurora_adapter/mcp/configuration.py)、[工具桥](../../../packages/aurora_adapter/src/aurora_adapter/mcp/tools.py)、[资源通知桥](../../../packages/aurora_adapter/src/aurora_adapter/mcp/world.py)。
+相关代码：[客户端](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/clients.py)、[配置](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/configuration.py)、[工具桥](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/tools.py)、[资源通知桥](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/mcp/world.py)。
 
 已核对的接入样本：
 

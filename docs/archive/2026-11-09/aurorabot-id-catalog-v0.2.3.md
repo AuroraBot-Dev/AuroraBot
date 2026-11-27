@@ -312,7 +312,7 @@ MCP 客户端与桥接实现计划归属可选包 `aurora_adapter.mcp`，不再�
 
 ### 6.5 世界记录与 cadence 的归属
 
-`aurora_world` 的[插件入口](../../../packages/aurora_world/src/aurora_world/plugin.py)已登记下列记录与来源定义，启用时不创建来源或任务，仅依赖 core。包提供进程内 `WorldRecords.append/get/read/read_content` 和 `WorldSources` 装配；read_content 按数据库与记录身份返回 WorldContentPage 原始 JSON 片段，不新增公共 ID 或修改数据库/快照格式。变化观察复用 core 的 ctx 订阅，不另建世界 operation 或事件的同义 ID。
+`aurora_world` 的[插件入口](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_world/src/aurora_world/plugin.py)已登记下列记录与来源定义，启用时不创建来源或任务，仅依赖 core。包提供进程内 `WorldRecords.append/get/read/read_content` 和 `WorldSources` 装配；read_content 按数据库与记录身份返回 WorldContentPage 原始 JSON 片段，不新增公共 ID 或修改数据库/快照格式。变化观察复用 core 的 ctx 订阅，不另建世界 operation 或事件的同义 ID。
 
 | 当前定义 | kind | 定位与职责 |
 | --- | --- | --- |

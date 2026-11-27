@@ -136,7 +136,7 @@ flowchart LR
 - [AgentRuntime](../../../packages/aurora_agent/src/aurora_agent/runtime.py) 已负责单一调度、运行中接纳、取消与关闭；[ReActAgent](../../../packages/aurora_agent/src/aurora_agent/react.py) 在每次推理前调用 prepare，可作为视图刷新的接入边界。
 - [cadence](../../../packages/aurora_bot/src/aurora_bot/cadence/forwarder.py) 默认逐条提交原始 payload；显式 decision 模式由受控随机时钟触发类型化判断，以固定模板携带观察时间、业务视图及决策身份提交引导。观察位置、事件引导位置和投递回执分开保存，均不表示业务完成；配置与恢复边界见[启动指南](START.md#决策-cadence受控随机时钟与类型化判断)。
 - [world 记录服务](../../../packages/aurora_world/src/aurora_world/records.py) 已提供事件数据库、近期事件视图与独立环境状态。ctx 中的近期窗口不能代替完整事件归档，也不是每个 bot 的待办清单。
-- [默认装配](../../../packages/aurora_bot/src/aurora_bot/assembly.py) 已保留消息上下文并清理部分运行临时状态，按配置接入笔记、归档和行动证据。执行证据独立事务保存，运行中间状态不充当长期记录。
+- [默认装配](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_bot/src/aurora_bot/assembly.py) 已保留消息上下文并清理部分运行临时状态，按配置接入笔记、归档和行动证据。执行证据独立事务保存，运行中间状态不充当长期记录。
 
 ### 已实现的世界视图边界
 
