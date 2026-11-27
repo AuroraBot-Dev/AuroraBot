@@ -396,7 +396,7 @@ flowchart TD
 
 ### W01 提取通用工具与中立数据
 
-**改动范围：** [agent/tools.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_agent/src/aurora_agent/tools.py)、[model/contract.py](../packages/aurora_adapter/src/aurora_adapter/model/contract.py)、[core JSON](../packages/aurora_core/src/aurora_core/json_data.py)、新 `packages/aurora_tools`，以及所有工具消费者。
+**改动范围：** [agent/tools.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_agent/src/aurora_agent/tools.py)、[model/contract.py](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/src/aurora_adapter/model/contract.py)、[core JSON](../packages/aurora_core/src/aurora_core/json_data.py)、新 `packages/aurora_tools`，以及所有工具消费者。
 
 - 将 JsonValue 归入 core 的 JSON 能力；ToolDefinition、ToolCall 归 tools 中立契约模块。模型消息、MCP、工具执行与 Bot 改为引用同一份类型。
 - 将 ToolSpec、ToolFactory、ToolInstance、ToolExecutor、工具目录、before/after、工具结果与批次数据移到 tools；ReAct 历史解释留在 agent 默认阶段。
@@ -408,7 +408,7 @@ flowchart TD
 
 ### W02 拆开 model 与 MCP 的发行边界
 
-**改动范围：** [adapter 包](../packages/aurora_adapter/)、新 `packages/aurora_model`、`packages/aurora_mcp`、Bot 产品预设来源。
+**改动范围：** [adapter 包](https://github.com/AuroraBot-Dev/AuroraBot/blob/d6217150fa40fc72fc7fa580b177705a53eb7398/packages/aurora_adapter/)、新 `packages/aurora_model`、`packages/aurora_mcp`、Bot 产品预设来源。
 
 - model 目录整体归 model 包；将协议/目录、配置声明、LiteLLM 分成三个逻辑插件和可选依赖。testing 中的假模型随协议测试迁移。
 - MCP 客户端、传输、配置、目录和工具/world 桥归 MCP 包；tools/world 的 import 与 extra 分开。

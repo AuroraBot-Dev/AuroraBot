@@ -5,11 +5,11 @@ import json
 from typing import cast
 
 import pytest
-from aurora_adapter.model.testing import FakeReply
 from aurora_bot.assembly_config import CONFIG, MESSAGES
 from aurora_bot.event_archive import READ_EVENT
 from aurora_bot.work_notes import NOTES
 from aurora_core.json_data import JsonValue, encode_json
+from aurora_model.testing import FakeReply
 from aurora_tools.contract import ToolCall
 from aurora_world.configuration import plugin as configuration_plugin
 from aurora_world.plugin import plugin as world_plugin

@@ -9,9 +9,11 @@
 | aurora_control | 执行身份、状态绑定、连接契约、四种控制组合 | agent、模型、bot、CLI、API |
 | aurora_tools | 中立工具数据、工具定义/工厂/实例、执行器与 before/after 槽 | agent、模型、bot、CLI、API |
 | aurora_agent | ReAct、模型调用、默认阶段、AgentRuntime | bot、CLI、API |
+| aurora_model | 模型协议、适配器目录；配置与供应商分别按 extra 接入 | MCP、agent、bot；基础包不依赖配置或 SDK |
+| aurora_mcp | MCP 客户端与协议配置；tools/world 桥按 extra 接入 | model、agent、bot；客户端不依赖 tools/world |
 | aurora_bot | 默认状态地址、配置、资源、产品运行与交流入口 | 不复制 agent 执行或调度机制 |
 
-control、tools 和 agent 的定义分别属于 org.aurora.control、org.aurora.tools 和 org.aurora.agent；由 bot 分配的消息、引导和运行地址属于 org.aurora.bot，通过状态绑定注入组件。adapter 基础包可提供模型契约，供应商 SDK 不因导入 agent 而必需。
+control、tools 和 agent 的定义分别属于 org.aurora.control、org.aurora.tools 和 org.aurora.agent；由 bot 分配的消息、引导和运行地址属于 org.aurora.bot，通过状态绑定注入组件。aurora_model 基础包提供模型契约，供应商 SDK 不因导入 agent 而必需。
 
 每个 agent 的执行必须由一个运行所有者统一管理。组件调用结束与状态保留是两件事；资源关闭、历史裁剪、快照恢复策略由装配和宿主明确。
 

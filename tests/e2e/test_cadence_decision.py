@@ -9,8 +9,6 @@ from typing import cast
 
 import pytest
 import tomli_w
-from aurora_adapter.model.config import ADAPTERS, BINDINGS, ModelAdapter
-from aurora_adapter.model.config import CONFIG as MODEL_CONFIG
 from aurora_agent.react import AgentBusyError
 from aurora_bot.assembly_config import CONFIG
 from aurora_bot.cadence import plugin as cadence_plugin
@@ -22,6 +20,9 @@ from aurora_core import Id
 from aurora_core.json_data import encode_json
 from aurora_core.registry import RegistryEntry
 from aurora_core.snapshots import JsonSnapshotStore
+from aurora_model.config import BINDINGS
+from aurora_model.config import CONFIG as MODEL_CONFIG
+from aurora_model.registry import ADAPTERS, ModelAdapter
 from aurora_world.plugin import plugin as world_plugin
 from test_cadence import append, state, until
 from test_default_assembly import seed, setup

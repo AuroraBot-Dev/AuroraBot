@@ -13,14 +13,15 @@ Aurora 以 ID 登记、共享 ctx 和显式连接组织插件。后端负责装�
 | aurora_control | 仅依赖 core；执行身份、状态绑定、插头插槽与 Serial、Branch、While、Parallel |
 | aurora_tools | 工具数据契约、ToolSpec/Factory/Instance、执行器与 before/after 槽；依赖 core/control 与 schema 库，不依赖模型、agent 或 Bot |
 | aurora_agent | ReAct、模型调用、默认阶段与 AgentRuntime；使用 tools，不依赖 bot、CLI、API |
-| aurora_adapter | 基础包依赖 core/tools；model 提供模型契约与供应商适配，mcp 提供协议与工具/世界桥；额外依赖通过 extra 安装 |
+| aurora_model | 基础包依赖 core/tools，提供模型协议与适配器目录；配置与 LiteLLM 分别通过 config、litellm extra 安装 |
+| aurora_mcp | MCP 客户端、传输、配置与目录；工具桥、世界桥分别通过 tools、world extra 安装，不依赖 Bot 或模型 |
 | aurora_bot | 默认配置、装配、资源、运行操作、直接交流、笔记、显式文本记忆、业务视图、cadence 与自身控制 |
 | aurora_cli / aurora_api | 宿主、命令交互、HTTP/WS 传输；复用 bot 运行语义 |
 | aurora_world | 来源管理、事件原文归档、近期视图、环境观察；含时间、天气及可选 MCP 世界接入 |
 | aurora_logging | 日志配置 |
 | aurora_client / apps | TS 共享客户端、OpenTUI、Vue Panel、静态站点；不装配 Python 插件 |
 
-执行依赖方向为 `bot → agent → tools → control → core`，agent 也可直接使用 control。agent 和 bot 可以直接使用 core 与 adapter.model；配置通过 aurora_config 接入。独立 aurora_harness 尚未实现，安装助手复用已有 MCP 产品装配。
+执行依赖方向为 `bot → agent → tools → control → core`，agent 也可直接使用 control。agent 和 bot 可以直接使用 core 与 aurora_model；配置通过 aurora_config 接入。独立 aurora_harness 尚未实现，安装助手复用已有 MCP 产品装配。
 
 ## ID、ctx 与插件
 
@@ -50,21 +51,23 @@ JsonValue 由 core.json_data 定义，ToolCall/ToolDefinition 与工具批次结
 
 模型消息支持文本和结构化内容，思考文本及供应商需要的思考块保留在工具往返中。输入预算以应用层 JSON 字符和内嵌文件字节计，不是 token 上限。详见[上下文与运行](context.md)。
 
-记忆插件 `aurora_bot.memory` 通过现有工具工厂接入，Bot 所有者负责关闭它的数据库与向量客户端。向量协议及 LiteLLM 传输归 `aurora_adapter.model`，模型 profile 通过统一模型注册表按 embedding 用途解析。原文和可重建索引保存在插件 SQLite，不增加 agent 调度所有者、不将记忆策略下沉到 core。使用与持久化约束见[文本记忆配置](configuration.md#显式文本记忆朴素-rag)。
+记忆插件 `aurora_bot.memory` 通过现有工具工厂接入，Bot 所有者负责关闭它的数据库与向量客户端。向量协议及 LiteLLM 传输归 `aurora_model`，模型 profile 通过统一模型注册表按 embedding 用途解析。原文和可重建索引保存在插件 SQLite，不增加 agent 调度所有者、不将记忆策略下沉到 core。使用与持久化约束见[文本记忆配置](configuration.md#显式文本记忆朴素-rag)。
 
 ## 模型边界
 
-`aurora_adapter.model` 按职责平铺：`contract.py` 提供 SDK 无关的数据与 ChatClient、ChoiceClient、EmbeddingClient、泛型 ModelFactory；`config.py` 解析配置与用途；`content.py` 校验输入及预算；`response.py` 收集响应与校验向量；`litellm.py` 持有供应商客户端，`_codec.py` 转换 Aurora 消息；`testing.py` 提供确定性假模型，`plugin.py` 登记定义并延迟导入 SDK。
+`aurora_model` 按职责平铺：`contract.py` 提供 SDK 无关的数据与 ChatClient、ChoiceClient、EmbeddingClient、泛型 ModelFactory；`config.py` 解析配置与用途；`content.py` 校验输入及预算；`response.py` 收集响应与校验向量；`litellm.py` 持有供应商客户端，`_codec.py` 转换 Aurora 消息；`testing.py` 提供确定性假模型。`registry.py` 提供 ADAPTERS 和 ModelAdapter；`plugin.py` 登记协议与目录，`configuration.py` 登记配置，`supplier.py` 登记 LiteLLM 工厂并延迟导入 SDK。
 
 三类客户端共用 LiteLLMClient 的实例传输、并发约束、错误脱敏与关闭逻辑；聊天调用 `acompletion`，向量调用 `aembedding`。流中的文本即时交付，工具及思考碎片使用 LiteLLM 的 ChunkProcessor 合并，再校验完整身份、参数及签名；不调用完整 stream_chunk_builder 重算 token 或重复缓存正文。SDK 类型不进入 ctx 或上层协议。
 
 LiteLLM 固定在 `>=1.106.6,<1.107`。当前高层 decisions 接口不透传实例 client，choice 使用 SDK 的 prepare_call、供应商转换及底层 handler 注入连接。OpenAI embedding 分支会覆盖零重试设置，因此自有 OpenAI 客户端固定零重试；DeepSeek 聊天沿用 OpenAI 兼容路由保留文件及思考字段。这些是升级 SDK 时须复验的薄适配边界，未引入共享 Router。
 
-自定义插件迁移：旧 `models/protocols/decisions/embeddings` 的协议统一从包公共出口或 `contract` 导入，响应收集和向量校验从 `response` 导入，`configuration` 改为 `config`，`fake` 改为 `testing`；`ModelClient/Request/Response/Chunk/Capabilities` 分别改为对应的 `Chat*`。三个 resolver 合并为 `resolve_model(..., kind="chat"|"choice"|"embedding")`，返回 `ResolvedModel[T]`；工厂使用 `ModelAdapter(kind, factory)` 登记到 `registries/model/adapters`，不再使用 choice_adapters 或 embedding_adapters。
+模型插件分别为 `aurora_model`、`aurora_model.configuration`、`aurora_model.litellm`；后两者要求显式启用基础模型插件，配置插件另需 `aurora_config`。供应商插件不要求配置插件，调用方也可直接传入 ModelConfig 创建客户端。Bot 使用 TOML 时启用配置插件，实际供应商由宿主清单选择。
 
-公共 ID 的命名空间仍为 `org.aurora.adapter`：`services/model/client` 改为 `services/model/chat_client`；四个 `schemas/model/{request,response,chunk,capabilities}` 改为 `schemas/model/chat/{request,response,chunk,capabilities}`。choice/embedding 服务、插件名、配置及业务状态 ID 保持原值。旧模块、旧工厂类型和旧 ID 无兼容转发；TOML 与索引迁移见[升级说明](configuration.md#从旧模型配置升级)。
+模型公开 ID 归 `org.aurora.model`，MCP 公开 ID 归 `org.aurora.mcp`，local_path 移除重复的 model/mcp 前缀。旧 adapter 包、入口及 ID 已移除，无兼容转发。TOML、工具选择与索引影响见[升级说明](configuration.md#从旧模型配置升级)。
 
 ## MCP 与世界输入
+
+MCP 产品选择由 `aurora_bot.mcp` 模块和 `aurora_bot.mcp_preset` 命令提供，`aurora_bot.assembly` 插件导出 `org.aurora.bot:assemblies/mcp`。它们是 Bot 产品代码，不是 MCP 插件；仅在执行所选装配时导入工具桥，启用世界来源时才导入世界桥。
 
 MCP 使用 schema_version=2 的 servers 配置；支持 remote HTTP 和 local stdio。客户端统一持有连接，工具桥和世界桥借用同一连接。工具目录只进入已启用的工具桥；世界资源必须在 world 配置中显式选择。
 

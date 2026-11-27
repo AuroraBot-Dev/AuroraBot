@@ -11,8 +11,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from aurora_adapter.mcp import PROTOCOL_VERSION, MCPClients
-from aurora_adapter.mcp import transports as module
 from aurora_config import configuration_component
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
@@ -21,6 +19,8 @@ from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.storage import StorageService
+from aurora_mcp import PROTOCOL_VERSION, MCPClients
+from aurora_mcp import transports as module
 from mcp.types import ServerCapabilities
 
 
@@ -29,7 +29,7 @@ def test_mcp_roundtrip_without_execution_world_or_product_packages(tmp_path):
 import importlib.abc
 import runpy
 import sys
-blocked = {'aurora_agent', 'aurora_bot', 'aurora_control', 'aurora_adapter.model',
+blocked = {'aurora_agent', 'aurora_bot', 'aurora_control', 'aurora_model', 'aurora_tools',
            'aurora_cli', 'aurora_api', 'aurora_world'}
 class AbsentPackages(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
@@ -60,20 +60,15 @@ assert not any(name == item or name.startswith(item + '.') for name in sys.modul
 
 
 def test_mcp_distribution_and_plugin_boundaries():
-    requirements = metadata.requires("aurora-adapter")
+    requirements = metadata.requires("aurora-mcp")
     assert requirements is not None
-    assert all("extra == 'mcp-bot'" in item for item in requirements if item.startswith("aurora-bot"))
-    assert not any(item.startswith("aurora-agent") for item in requirements)
-    assert "aurora-tools>=0.1.0" in requirements
-    assert all(
-        "extra == 'mcp-world'" in item or "extra == 'mcp-bot'" in item
-        for item in requirements
-        if item.startswith("aurora-world")
-    )
-    assert "mcp==2.3.0; extra == 'mcp'" in requirements
-    plugins = load_plugins(enabled=["aurora_config", "aurora_adapter.mcp"])
-    plugin = next(item for item in plugins if item.name == "aurora_adapter.mcp")
-    assert all(entry.id.namespace == "org.aurora.adapter" for entry in plugin.entries)
+    assert not any(item.startswith(("aurora-agent", "aurora-model", "aurora-bot")) for item in requirements)
+    assert "aurora-tools>=0.1.0; extra == 'tools'" in requirements
+    assert "aurora-world[config]>=0.1.0; extra == 'world'" in requirements
+    assert "mcp==2.3.0" in requirements
+    plugins = load_plugins(enabled=["aurora_config", "aurora_mcp"])
+    plugin = next(item for item in plugins if item.name == "aurora_mcp")
+    assert all(entry.id.namespace == "org.aurora.mcp" for entry in plugin.entries)
 
 
 @pytest.mark.parametrize("selection", ["empty", "selected", "failure", "cancel"])
@@ -98,9 +93,9 @@ def test_configured_host_preserves_files_and_finishes_resources_before_snapshot(
         monkeypatch.setattr(module, "open_client", connect)
         registry = bootstrap()
         install_lifecycle_slots(registry)
-        register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_adapter.mcp"]))
+        register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_mcp"]))
         ctx, hooks, storage = Context(registry), HookConnections(registry), StorageService(tmp_path)
-        path = storage.configuration_directory() / "org.aurora.adapter" / "mcp.toml"
+        path = storage.configuration_directory() / "org.aurora.mcp" / "config.toml"
         text = '# 用户配置\nschema_version = 2\n[servers.test]\ntype = "remote"\nprotocol = "2026-07-28"\nurl = "http://127.0.0.1:8000/mcp"\n'
         if selection != "empty":
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -4,14 +4,14 @@ import logging
 from collections.abc import Callable
 from typing import NotRequired, TypedDict, cast
 
-from aurora_adapter.model import ChatRequest, Message, ModelProtocolError
-from aurora_adapter.model.content import validate_content
-from aurora_adapter.model.usage import usage_scope
 from aurora_control import ExecutionLink, ExecutionPlug, ExecutionRequest, InstanceStateBinding, component_entries
 from aurora_core.ctx import Context
 from aurora_core.discovery import Plugin
 from aurora_core.ids import Id
 from aurora_core.json_data import encode_json
+from aurora_model import ChatRequest, Message, ModelProtocolError
+from aurora_model.content import validate_content
+from aurora_model.usage import usage_scope
 from aurora_tools.contract import ToolBatchState, ToolCall, ToolResult
 from aurora_tools.execution import ToolExecutor, failure, read_request
 

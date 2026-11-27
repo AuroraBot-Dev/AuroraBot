@@ -4,8 +4,8 @@ import asyncio
 import json
 
 import pytest
-from aurora_adapter.model import ModelError
 from aurora_bot.memory.store import MemoryStore
+from aurora_model import ModelError
 from aurora_tools.execution import ToolExecutionError
 
 

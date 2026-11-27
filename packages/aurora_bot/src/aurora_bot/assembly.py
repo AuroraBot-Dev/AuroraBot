@@ -7,10 +7,6 @@ from functools import partial
 from pathlib import Path
 from typing import cast
 
-from aurora_adapter.model import ChatClient, require_capabilities
-from aurora_adapter.model.config import BINDINGS, resolve_model
-from aurora_adapter.model.config import CONFIG as MODEL_CONFIG
-from aurora_adapter.model.contract import ChoiceClient
 from aurora_agent.compaction import HistoryCompactor
 from aurora_agent.input_budget import ModelInputBudget
 from aurora_agent.model import ModelCall
@@ -27,6 +23,10 @@ from aurora_core.ids import Id
 from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import DefinitionRegistry, RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_model import ChatClient, require_capabilities
+from aurora_model.config import BINDINGS, resolve_model
+from aurora_model.config import CONFIG as MODEL_CONFIG
+from aurora_model.contract import ChoiceClient
 from aurora_tools.execution import TOOLS, ToolExecutor, ToolInstance, ToolSpec
 from aurora_world import WorldRecords
 from aurora_world.configuration import CONFIGURATION as WORLD_CONFIGURATION
@@ -612,6 +612,9 @@ def assemble(
 
 
 def plugin() -> Plugin:
+    from .mcp import ASSEMBLY as MCP_ASSEMBLY
+    from .mcp import assemble as assemble_mcp
+
     operations = RunOperations()
     return Plugin(
         "aurora_bot.assembly",
@@ -626,6 +629,13 @@ def plugin() -> Plugin:
             ),
             RegistryEntry(
                 ASSEMBLY, "assembly", assemble, "aurora_bot", register_to=Id("org.aurora.core:registries/resources")
+            ),
+            RegistryEntry(
+                MCP_ASSEMBLY,
+                "assembly",
+                assemble_mcp,
+                "aurora_bot",
+                register_to=Id("org.aurora.core:registries/resources"),
             ),
             RegistryEntry(
                 RUN_CONTROL,
@@ -665,7 +675,8 @@ def plugin() -> Plugin:
         ),
         requires=(
             "aurora_config",
-            "aurora_adapter.model",
+            "aurora_model",
+            "aurora_model.configuration",
             "aurora_agent.model",
             "aurora_agent.react",
             "aurora_tools",

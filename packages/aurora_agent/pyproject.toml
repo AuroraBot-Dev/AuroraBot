@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aurora-core>=0.1.0",
     "aurora-control>=0.1.0",
-    "aurora-adapter>=0.1.0",
+    "aurora-model>=0.1.0",
     "aurora-tools>=0.1.0",
 ]
 

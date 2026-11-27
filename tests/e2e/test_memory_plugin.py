@@ -6,15 +6,15 @@ from typing import cast
 
 import httpx
 import tomli_w
-from aurora_adapter.model.config import ADAPTERS, ModelAdapter
-from aurora_adapter.model.litellm import LiteLLMClient
-from aurora_adapter.model.testing import FakeReply
 from aurora_bot.assembly_config import MESSAGES
 from aurora_bot.memory import MEMORY_TOOLS
 from aurora_bot.memory import plugin as memory_plugin
 from aurora_core import Id
 from aurora_core.json_data import JsonValue
 from aurora_core.registry import RegistryEntry
+from aurora_model.litellm import LiteLLMClient
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.testing import FakeReply
 
 from tests.e2e.test_default_assembly import ADAPTER, settings, setup
 
@@ -56,7 +56,7 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
                             for action, identity in MEMORY_TOOLS.items()
                         ],
                     },
-                    "org.aurora.adapter/model/profiles.toml": {
+                    "org.aurora.model/profiles.toml": {
                         "primary": {"adapter": str(ADAPTER), "model": "fake"},
                         "embedding": {
                             "adapter": str(adapter),
@@ -66,7 +66,7 @@ def test_memory_plugin_roundtrip_restore_and_resource_ownership(tmp_path, monkey
                             "credential": "MEMORY_TEST_KEY",
                         },
                     },
-                    "org.aurora.adapter/model/bindings.toml": {"reasoning": "primary", "memory": "embedding"},
+                    "org.aurora.model/bindings.toml": {"reasoning": "primary", "memory": "embedding"},
                 }
                 for relative, value in files.items():
                     path = tmp_path / "config" / relative
@@ -170,8 +170,8 @@ def test_unbounded_task_archives_during_index_outage_and_recovers_queue_on_resta
             )
             for value, relative in (
                 (config, "org.aurora.bot/config.toml"),
-                (profiles, "org.aurora.adapter/model/profiles.toml"),
-                (bindings, "org.aurora.adapter/model/bindings.toml"),
+                (profiles, "org.aurora.model/profiles.toml"),
+                (bindings, "org.aurora.model/bindings.toml"),
             ):
                 path = tmp_path / "config" / relative
                 path.parent.mkdir(parents=True, exist_ok=True)

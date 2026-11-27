@@ -5,12 +5,12 @@ import json
 from typing import cast
 
 import pytest
-from aurora_adapter.model.testing import FakeReply
 from aurora_agent.react import AgentBusyError
 from aurora_bot.assembly_config import CONFIG
 from aurora_bot.cadence.timing import CadenceTiming
 from aurora_bot.self_control_state import SELF_CONTROL
 from aurora_control import ExecutionRequest
+from aurora_model.testing import FakeReply
 from test_cadence import append, state, until
 from test_cadence import configured as forwarding
 from test_cadence_decision import configured as deciding

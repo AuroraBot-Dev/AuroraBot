@@ -10,11 +10,6 @@ import httpx
 import pytest
 import tomli_w
 from aiohttp import ClientSession
-from aurora_adapter.model import ChatCapabilities, UnsupportedCapability
-from aurora_adapter.model.config import ADAPTERS, BINDINGS, ModelAdapter
-from aurora_adapter.model.config import CONFIG as MODEL_CONFIG
-from aurora_adapter.model.plugin import plugin as adapter_plugin
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import plugin as model_plugin
 from aurora_agent.react import AgentBusyError
 from aurora_agent.react import plugin as react_plugin
@@ -43,6 +38,14 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_model import ChatCapabilities, UnsupportedCapability
+from aurora_model.config import BINDINGS
+from aurora_model.config import CONFIG as MODEL_CONFIG
+from aurora_model.configuration import plugin as model_configuration_plugin
+from aurora_model.plugin import plugin as adapter_plugin
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.supplier import plugin as litellm_plugin
+from aurora_model.testing import FakeModel, FakeReply
 from aurora_tools.contract import ToolDefinition
 from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
 from aurora_tools.execution import plugin as tools_plugin
@@ -56,7 +59,7 @@ COMPONENT = Id("dev.assembly:handlers/echo")
 @pytest.mark.parametrize("streaming,provider", [(False, "openai"), (True, "compatible")])
 def test_litellm_default_assembly_tool_roundtrip_and_restore(tmp_path, monkeypatch, streaming, provider):
     monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-    from aurora_adapter.model.litellm import LiteLLMClient
+    from aurora_model.litellm import LiteLLMClient
 
     original = LiteLLMClient.__init__
     transports, requests = [], []
@@ -107,7 +110,7 @@ def test_litellm_default_assembly_tool_roundtrip_and_restore(tmp_path, monkeypat
         def configure():
             ctx.set(CONFIG, {**settings(), "streaming": streaming})
             profile: dict[str, object] = {
-                "adapter": "org.aurora.adapter:adapters/model/litellm/chat",
+                "adapter": "org.aurora.model:adapters/litellm/chat",
                 "model": "openai/gpt-4o-mini",
                 "credential": "MODEL_TEST_KEY",
             }
@@ -178,7 +181,16 @@ def setup(
     register_plugins(registry, extra_plugins)
     register_plugins(
         registry,
-        (adapter_plugin(), model_plugin(), react_plugin(), tools_plugin(), defaults_plugin(), assembly_plugin()),
+        (
+            adapter_plugin(),
+            model_configuration_plugin(),
+            litellm_plugin(),
+            model_plugin(),
+            react_plugin(),
+            tools_plugin(),
+            defaults_plugin(),
+            assembly_plugin(),
+        ),
     )
     install_lifecycle_slots(registry)
     ctx, hooks = Context(registry), HookConnections(registry)
@@ -277,8 +289,8 @@ def setup(
                     configure()
                     for key, relative in (
                         (CONFIG, "org.aurora.bot/config.toml"),
-                        (MODEL_CONFIG, "org.aurora.adapter/model/profiles.toml"),
-                        (BINDINGS, "org.aurora.adapter/model/bindings.toml"),
+                        (MODEL_CONFIG, "org.aurora.model/profiles.toml"),
+                        (BINDINGS, "org.aurora.model/bindings.toml"),
                     ):
                         path = root / "config" / relative
                         path.parent.mkdir(parents=True, exist_ok=True)
@@ -514,6 +526,8 @@ def test_registered_assembly_runs_through_cli_host_without_bot_cli_dependency(tm
             ["--data-dir", str(tmp_path), "--assembly", str(ASSEMBLY), "ctx", "get", str(CONFIG)],
             plugins=(
                 adapter_plugin(),
+                model_configuration_plugin(),
+                litellm_plugin(),
                 model_plugin(),
                 react_plugin(),
                 tools_plugin(),
@@ -1015,6 +1029,8 @@ def test_run_operations_are_visible_in_cli_without_starting_assembly(tmp_path, m
             ["--data-dir", str(data), "id", "list"],
             plugins=(
                 adapter_plugin(),
+                model_configuration_plugin(),
+                litellm_plugin(),
                 model_plugin(),
                 react_plugin(),
                 tools_plugin(),
@@ -1045,6 +1061,8 @@ async def cli_setup(root, *, behavior="normal"):
     events.clear()
     plugins = (
         adapter_plugin(),
+        model_configuration_plugin(),
+        litellm_plugin(),
         model_plugin(),
         react_plugin(),
         tools_plugin(),
@@ -1088,7 +1106,7 @@ def test_bot_cli_submit_tool_loop_and_activate_restore(tmp_path):
 
 @pytest.mark.parametrize("failure", [False, True])
 def test_bot_cli_streams_before_completion_and_reports_failure(tmp_path, monkeypatch, failure):
-    from aurora_adapter.model import ModelError
+    from aurora_model import ModelError
 
     async def scenario():
         plugins, argv, clients, _, _ = await cli_setup(tmp_path)
@@ -1270,7 +1288,7 @@ import runpy
 import signal
 import sys
 from pathlib import Path
-from aurora_adapter.model.testing import FakeModel
+from aurora_model.testing import FakeModel
 
 source = runpy.run_path(sys.argv[1])
 entry = importlib.import_module("aurora_cli.main")

@@ -6,10 +6,10 @@ import sqlite3
 from typing import cast
 
 import pytest
-from aurora_adapter.model.testing import FakeReply
 from aurora_bot.assembly_config import CONFIG, WORK
 from aurora_bot.work_notes import WorkNotes
 from aurora_control import ExecutionRequest
+from aurora_model.testing import FakeReply
 from test_default_assembly import seed, setup
 
 

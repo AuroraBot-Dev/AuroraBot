@@ -6,5 +6,5 @@ from importlib import metadata
 def test_unified_distribution_dependencies():
     requirements = metadata.requires("aurorabot-ai")
     assert requirements is not None
-    for package in ("aurora-bot", "aurora-cli", "aurora-api", "aurora-world[environment]"):
+    for package in ("aurora-bot[mcp-world]", "aurora-cli", "aurora-api", "aurora-world[environment]"):
         assert any(requirement.startswith(f"{package}>=") for requirement in requirements)

@@ -7,20 +7,20 @@ import logging
 from pathlib import Path
 from typing import cast
 
-from aurora_adapter.mcp import CLIENT_STATUS
-from aurora_adapter.mcp.bot import ASSEMBLY
-from aurora_adapter.mcp.preset import PLUGINS as MCP_PLUGINS
-from aurora_adapter.mcp.world import WORLD_STATUS
 from aurora_api.access import AccessPolicy, token_from_env
 from aurora_bot.assembly_config import AGENTS, MESSAGES, RUN, WORK
 from aurora_bot.cadence.state import CHECKPOINT
 from aurora_bot.conversation import CONVERSATION
+from aurora_bot.mcp import ASSEMBLY
+from aurora_bot.mcp_preset import PLUGINS as MCP_PLUGINS
 from aurora_bot.self_control_state import SELF_CONTROL
 from aurora_bot.work_notes import NOTES
 from aurora_cli.commander import run_cli
 from aurora_cli.configuration import read_host_config
 from aurora_config import CONFIGURATION
 from aurora_logging import configure_logging
+from aurora_mcp import CLIENT_STATUS
+from aurora_mcp.world import WORLD_STATUS
 from aurora_world import ENVIRONMENT, RECORDS, SOURCE_STATUS
 from dotenv import load_dotenv
 
@@ -31,7 +31,7 @@ PLUGINS = (
     "aurora_world",
     "aurora_world.configuration",
     "aurora_world.environment",
-    "aurora_adapter.mcp.world",
+    "aurora_mcp.world",
     "aurora_bot.cadence",
     "aurora_api",
 )

@@ -22,13 +22,14 @@ def write_host(root, content):
 
 def test_host_enables_plugins_before_discovery_without_initializing_resources(tmp_path, monkeypatch):
     monkeypatch.setenv("COLUMNS", "160")
-    content = 'plugins = ["aurora_adapter.model"]\nassembly = "dev.missing:assemblies/app"\n'
+    content = 'plugins = ["aurora_model", "aurora_model.configuration", "aurora_model.litellm"]\nassembly = "dev.missing:assemblies/app"\n'
     write_host(tmp_path, content)
     output = StringIO()
     asyncio.run(run_cli(["-d", str(tmp_path), "id", "list"], output=output))
-    assert "org.aurora.adapter:state/model/config" in output.getvalue()
+    assert "org.aurora.model:state/config" in output.getvalue()
     assert not (tmp_path / "framework").exists()
-    assert not (tmp_path / "config/org.aurora.adapter").exists()
+    assert not (tmp_path / "config/org.aurora.model").exists()
+    assert not (tmp_path / "config/org.aurora.mcp").exists()
     assert (tmp_path / "config/host.toml").read_text(encoding="utf-8") == content
 
 
@@ -70,11 +71,26 @@ def test_explicit_plugin_and_assembly_selection_override_host_defaults(tmp_path,
 
     async def execute(context, command, values, **options):
         selections.append(options["assembly"])
-        assert context.registry.get(Id("org.aurora.adapter:adapters/model/litellm/chat"))
+        assert context.registry.get(Id("org.aurora.model:adapters/litellm/chat"))
         return 0
 
     monkeypatch.setattr("aurora_cli.host.execute", execute)
-    asyncio.run(run_cli(["-d", str(tmp_path), "--plugin", "aurora_adapter.model", *arguments], output=StringIO()))
+    asyncio.run(
+        run_cli(
+            [
+                "-d",
+                str(tmp_path),
+                "--plugin",
+                "aurora_model",
+                "--plugin",
+                "aurora_model.configuration",
+                "--plugin",
+                "aurora_model.litellm",
+                *arguments,
+            ],
+            output=StringIO(),
+        )
+    )
     assert selections == [Id("dev.selected:assemblies/app")]
 
 

@@ -8,7 +8,7 @@ ID 格式为 `<namespace>:<domain>/<local_path>`。表中只列实际定义；�
 
 状态值使用 ID 与精确 location 寻址。bot 的 instance_id、run_id、execution_id 分别表示实例、运行和一次执行；不要为每个运行另造定义 ID。control 与 agent 定义归所属包，bot 分配的运行地址仍归 bot。
 
-MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接目录返回之前无法枚举。组件实例和工具执行连接同样在装配阶段建立，不混入本静态表。运行期 ctx 服务由宿主绑定，查询列表不是远端访问白名单。
+MCP 动态工具以 `org.aurora.mcp:tools/<工具名>` 登记；连接目录返回之前无法枚举。组件实例和工具执行连接同样在装配阶段建立，不混入本静态表。运行期 ctx 服务由宿主绑定，查询列表不是远端访问白名单。
 
 ## 插件入口
 
@@ -16,59 +16,27 @@ MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接�
 
 | entry point / Plugin.name | requires |
 | --- | --- |
-| `aurora_adapter.mcp` | `aurora_config` |
-| `aurora_adapter.mcp.bot` | `aurora_adapter.mcp.tools`, `aurora_bot.assembly` |
-| `aurora_adapter.mcp.tools` | `aurora_adapter.mcp`, `aurora_tools` |
-| `aurora_adapter.mcp.world` | `aurora_adapter.mcp`, `aurora_world.configuration` |
-| `aurora_adapter.model` | `aurora_config` |
 | `aurora_agent.model` | 无 |
 | `aurora_agent.react` | 无 |
 | `aurora_agent.react_defaults` | `aurora_agent.react`, `aurora_agent.model`, `aurora_tools` |
 | `aurora_api` | 无 |
-| `aurora_bot.assembly` | `aurora_config`, `aurora_adapter.model`, `aurora_agent.model`, `aurora_agent.react`, `aurora_tools`, `aurora_agent.react_defaults` |
+| `aurora_bot.assembly` | `aurora_config`, `aurora_model`, `aurora_model.configuration`, `aurora_agent.model`, `aurora_agent.react`, `aurora_tools`, `aurora_agent.react_defaults` |
 | `aurora_bot.cadence` | `aurora_bot.assembly`, `aurora_world`, `aurora_config` |
-| `aurora_bot.memory` | `aurora_bot.assembly`, `aurora_adapter.model`, `aurora_config`, `aurora_tools` |
+| `aurora_bot.memory` | `aurora_bot.assembly`, `aurora_model`, `aurora_model.configuration`, `aurora_config`, `aurora_tools` |
 | `aurora_config` | 无 |
 | `aurora_control` | 无 |
+| `aurora_mcp` | `aurora_config` |
+| `aurora_mcp.tools` | `aurora_mcp`, `aurora_tools` |
+| `aurora_mcp.world` | `aurora_mcp`, `aurora_world.configuration` |
+| `aurora_model` | 无 |
+| `aurora_model.configuration` | `aurora_model`, `aurora_config` |
+| `aurora_model.litellm` | `aurora_model` |
 | `aurora_tools` | 无 |
 | `aurora_world` | 无 |
 | `aurora_world.configuration` | `aurora_world`, `aurora_config` |
 | `aurora_world.environment` | `aurora_world` |
 
 ## 静态定义
-
-### org.aurora.adapter
-
-| ID | kind | provider |
-| --- | --- | --- |
-| `org.aurora.adapter:adapters/model/litellm/chat` | `adapter` | `aurora_adapter.model` |
-| `org.aurora.adapter:adapters/model/litellm/choice` | `adapter` | `aurora_adapter.model` |
-| `org.aurora.adapter:adapters/model/litellm/embedding` | `adapter` | `aurora_adapter.model` |
-| `org.aurora.adapter:assemblies/mcp/default_bot` | `assembly` | `aurora_adapter.mcp.bot` |
-| `org.aurora.adapter:components/mcp/tool` | `component` | `aurora_adapter.mcp.tools` |
-| `org.aurora.adapter:components/mcp/tool/execute` | `hook_handler` | `aurora_adapter.mcp.tools` |
-| `org.aurora.adapter:configs/mcp` | `config` | `aurora_adapter.mcp` |
-| `org.aurora.adapter:configs/model/bindings` | `config` | `aurora_adapter.model` |
-| `org.aurora.adapter:configs/model/profiles` | `config` | `aurora_adapter.model` |
-| `org.aurora.adapter:handlers/mcp/clean` | `hook_handler` | `aurora_adapter.mcp` |
-| `org.aurora.adapter:handlers/mcp/configure` | `hook_handler` | `aurora_adapter.mcp` |
-| `org.aurora.adapter:handlers/mcp/prepare` | `hook_handler` | `aurora_adapter.mcp` |
-| `org.aurora.adapter:handlers/mcp/stop` | `hook_handler` | `aurora_adapter.mcp` |
-| `org.aurora.adapter:handlers/mcp/tools/prepare` | `hook_handler` | `aurora_adapter.mcp.tools` |
-| `org.aurora.adapter:registries/model/adapters` | `registry` | `aurora_adapter.model` |
-| `org.aurora.adapter:schemas/model/chat/capabilities` | `schema` | `aurora_adapter.model` |
-| `org.aurora.adapter:schemas/model/chat/chunk` | `schema` | `aurora_adapter.model` |
-| `org.aurora.adapter:schemas/model/chat/request` | `schema` | `aurora_adapter.model` |
-| `org.aurora.adapter:schemas/model/chat/response` | `schema` | `aurora_adapter.model` |
-| `org.aurora.adapter:services/model/chat_client` | `service` | `aurora_adapter.model` |
-| `org.aurora.adapter:services/model/choice_client` | `service` | `aurora_adapter.model` |
-| `org.aurora.adapter:services/model/embedding_client` | `service` | `aurora_adapter.model` |
-| `org.aurora.adapter:sources/mcp/resources` | `source` | `aurora_adapter.mcp.world` |
-| `org.aurora.adapter:state/mcp/clients` | `state_key` | `aurora_adapter.mcp` |
-| `org.aurora.adapter:state/mcp/config` | `state_key` | `aurora_adapter.mcp` |
-| `org.aurora.adapter:state/mcp/world` | `state_key` | `aurora_adapter.mcp.world` |
-| `org.aurora.adapter:state/model/bindings` | `state_key` | `aurora_adapter.model` |
-| `org.aurora.adapter:state/model/config` | `state_key` | `aurora_adapter.model` |
 
 ### org.aurora.agent
 
@@ -102,6 +70,7 @@ MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接�
 | ID | kind | provider |
 | --- | --- | --- |
 | `org.aurora.bot:assemblies/default` | `assembly` | `aurora_bot` |
+| `org.aurora.bot:assemblies/mcp` | `assembly` | `aurora_bot` |
 | `org.aurora.bot:commands/run/activate` | `command` | `aurora_bot` |
 | `org.aurora.bot:commands/run/cancel` | `command` | `aurora_bot` |
 | `org.aurora.bot:commands/run/submit` | `command` | `aurora_bot` |
@@ -221,17 +190,17 @@ MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接�
 | ID | kind | provider |
 | --- | --- | --- |
 | `org.aurora.core:events/ctx/changed` | `event` | `aurora_core` |
+| `org.aurora.core:lifecycle/clean` | `hook_slot` | `aurora_core` |
+| `org.aurora.core:lifecycle/config` | `hook_slot` | `aurora_core` |
+| `org.aurora.core:lifecycle/prepare` | `hook_slot` | `aurora_core` |
+| `org.aurora.core:lifecycle/start` | `hook_slot` | `aurora_core` |
+| `org.aurora.core:lifecycle/stop` | `hook_slot` | `aurora_core` |
 | `org.aurora.core:operations/ctx/delete` | `operation` | `aurora_core` |
 | `org.aurora.core:operations/ctx/get` | `operation` | `aurora_core` |
 | `org.aurora.core:operations/ctx/list` | `operation` | `aurora_core` |
 | `org.aurora.core:operations/ctx/set` | `operation` | `aurora_core` |
 | `org.aurora.core:operations/ctx/subscribe` | `operation` | `aurora_core` |
 | `org.aurora.core:operations/ctx/unsubscribe` | `operation` | `aurora_core` |
-| `org.aurora.core:lifecycle/clean` | `hook_slot` | `aurora_core` |
-| `org.aurora.core:lifecycle/config` | `hook_slot` | `aurora_core` |
-| `org.aurora.core:lifecycle/prepare` | `hook_slot` | `aurora_core` |
-| `org.aurora.core:lifecycle/start` | `hook_slot` | `aurora_core` |
-| `org.aurora.core:lifecycle/stop` | `hook_slot` | `aurora_core` |
 | `org.aurora.core:registries/events` | `registry` | `aurora_core` |
 | `org.aurora.core:registries/hook_handlers` | `registry` | `aurora_core` |
 | `org.aurora.core:registries/hook_slots` | `registry` | `aurora_core` |
@@ -242,6 +211,43 @@ MCP 动态工具以 `org.aurora.adapter:tools/mcp/<工具名>` 登记；连接�
 | `org.aurora.core:registries/schemas` | `registry` | `aurora_core` |
 | `org.aurora.core:registries/services` | `registry` | `aurora_core` |
 | `org.aurora.core:registries/state_keys` | `registry` | `aurora_core` |
+
+### org.aurora.mcp
+
+| ID | kind | provider |
+| --- | --- | --- |
+| `org.aurora.mcp:components/tool` | `component` | `aurora_mcp.tools` |
+| `org.aurora.mcp:components/tool/execute` | `hook_handler` | `aurora_mcp.tools` |
+| `org.aurora.mcp:configs/default` | `config` | `aurora_mcp` |
+| `org.aurora.mcp:handlers/clean` | `hook_handler` | `aurora_mcp` |
+| `org.aurora.mcp:handlers/configure` | `hook_handler` | `aurora_mcp` |
+| `org.aurora.mcp:handlers/prepare` | `hook_handler` | `aurora_mcp` |
+| `org.aurora.mcp:handlers/stop` | `hook_handler` | `aurora_mcp` |
+| `org.aurora.mcp:handlers/tools/prepare` | `hook_handler` | `aurora_mcp.tools` |
+| `org.aurora.mcp:sources/resources` | `source` | `aurora_mcp.world` |
+| `org.aurora.mcp:state/clients` | `state_key` | `aurora_mcp` |
+| `org.aurora.mcp:state/config` | `state_key` | `aurora_mcp` |
+| `org.aurora.mcp:state/world` | `state_key` | `aurora_mcp.world` |
+
+### org.aurora.model
+
+| ID | kind | provider |
+| --- | --- | --- |
+| `org.aurora.model:adapters/litellm/chat` | `adapter` | `aurora_model.litellm` |
+| `org.aurora.model:adapters/litellm/choice` | `adapter` | `aurora_model.litellm` |
+| `org.aurora.model:adapters/litellm/embedding` | `adapter` | `aurora_model.litellm` |
+| `org.aurora.model:configs/bindings` | `config` | `aurora_model.configuration` |
+| `org.aurora.model:configs/profiles` | `config` | `aurora_model.configuration` |
+| `org.aurora.model:registries/adapters` | `registry` | `aurora_model` |
+| `org.aurora.model:schemas/chat/capabilities` | `schema` | `aurora_model` |
+| `org.aurora.model:schemas/chat/chunk` | `schema` | `aurora_model` |
+| `org.aurora.model:schemas/chat/request` | `schema` | `aurora_model` |
+| `org.aurora.model:schemas/chat/response` | `schema` | `aurora_model` |
+| `org.aurora.model:services/chat_client` | `service` | `aurora_model` |
+| `org.aurora.model:services/choice_client` | `service` | `aurora_model` |
+| `org.aurora.model:services/embedding_client` | `service` | `aurora_model` |
+| `org.aurora.model:state/bindings` | `state_key` | `aurora_model.configuration` |
+| `org.aurora.model:state/config` | `state_key` | `aurora_model.configuration` |
 
 ### org.aurora.tools
 

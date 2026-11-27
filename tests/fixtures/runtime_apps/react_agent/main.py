@@ -7,8 +7,6 @@ import math
 from pathlib import Path
 from typing import cast
 
-from aurora_adapter.model import ChatRequest
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import ModelCall
 from aurora_agent.model import plugin as model_plugin
 from aurora_agent.react import ReActAgent
@@ -26,6 +24,8 @@ from aurora_core.lifecycle import CLEAN, STOP, Lifecycle, LifecycleComponent, in
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_model import ChatRequest
+from aurora_model.testing import FakeModel, FakeReply
 from aurora_tools.execution import TOOLS, ToolExecutor, ToolSpec
 from aurora_tools.execution import plugin as tools_plugin
 

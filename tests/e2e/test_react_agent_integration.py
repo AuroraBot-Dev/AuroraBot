@@ -4,8 +4,6 @@ import asyncio
 from typing import cast
 
 import pytest
-from aurora_adapter.model import ChatRequest, Message, ModelError
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import ModelCall, ModelCallState
 from aurora_agent.model import plugin as model_plugin
 from aurora_agent.react import Guidance, ReActAgent
@@ -20,6 +18,8 @@ from aurora_core.lifecycle import STOP, Lifecycle, LifecycleComponent, install_l
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_model import ChatRequest, Message, ModelError
+from aurora_model.testing import FakeModel, FakeReply
 from aurora_tools.contract import ToolDefinition
 
 STATE = Id("dev.react.integration:state/data")

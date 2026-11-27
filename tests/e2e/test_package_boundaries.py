@@ -13,7 +13,7 @@ import importlib.abc
 import runpy
 import sys
 
-blocked = {'aurora_agent', 'aurora_bot', 'aurora_adapter', 'aurora_cli', 'aurora_api'}
+blocked = {'aurora_agent', 'aurora_bot', 'aurora_model', 'aurora_mcp', 'aurora_cli', 'aurora_api'}
 
 class AbsentPackages(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
@@ -48,7 +48,7 @@ import importlib.abc
 import runpy
 import sys
 
-blocked = {'aurora_agent', 'aurora_adapter', 'aurora_bot', 'aurora_cli', 'aurora_api', 'litellm', 'mcp'}
+blocked = {'aurora_agent', 'aurora_model', 'aurora_mcp', 'aurora_bot', 'aurora_cli', 'aurora_api', 'litellm', 'mcp'}
 
 class AbsentPackages(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
@@ -124,30 +124,33 @@ def test_model_protocol_and_plugin_discovery_do_not_import_sdks():
     launcher = """
 import importlib.abc
 import sys
-blocked = {'litellm', 'mcp', 'httpx', 'httpx2', 'aurora_agent', 'aurora_bot', 'aurora_world'}
+blocked = {'litellm', 'mcp', 'httpx', 'httpx2', 'aurora_agent', 'aurora_bot', 'aurora_world', 'aurora_mcp', 'aurora_config'}
 class AbsentPackages(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname.split('.')[0] in blocked:
             raise ModuleNotFoundError('模型发现环境不提供：' + fullname)
 sys.meta_path.insert(0, AbsentPackages())
-from aurora_adapter.model.testing import FakeModel, FakeReply
-from aurora_adapter.model.config import ADAPTERS, ModelAdapter
+from aurora_model.testing import FakeModel, FakeReply
+from aurora_model.registry import ADAPTERS, ModelAdapter
 from aurora_core.discovery import load_plugins
-plugins = load_plugins(enabled=['aurora_config', 'aurora_adapter.model'])
-plugin = next(item for item in plugins if item.name == 'aurora_adapter.model')
+assert [plugin.name for plugin in load_plugins(enabled=['aurora_model'])] == ['aurora_model']
+assert 'aurora_tools.execution' not in sys.modules
+blocked.remove('aurora_config')
+plugins = load_plugins(enabled=['aurora_config', 'aurora_model', 'aurora_model.configuration', 'aurora_model.litellm'])
+entries = [entry for plugin in plugins if plugin.name.startswith('aurora_model') for entry in plugin.entries]
 assert {
-    'org.aurora.adapter:registries/model/adapters',
-    'org.aurora.adapter:services/model/chat_client',
-    'org.aurora.adapter:services/model/choice_client',
-    'org.aurora.adapter:adapters/model/litellm/choice',
-    'org.aurora.adapter:services/model/embedding_client',
-    'org.aurora.adapter:adapters/model/litellm/chat',
-    'org.aurora.adapter:adapters/model/litellm/embedding',
-} <= {str(entry.id) for entry in plugin.entries}
-adapters = [entry for entry in plugin.entries if entry.kind == 'adapter']
+    'org.aurora.model:registries/adapters',
+    'org.aurora.model:services/chat_client',
+    'org.aurora.model:services/choice_client',
+    'org.aurora.model:adapters/litellm/choice',
+    'org.aurora.model:services/embedding_client',
+    'org.aurora.model:adapters/litellm/chat',
+    'org.aurora.model:adapters/litellm/embedding',
+} <= {str(entry.id) for entry in entries}
+adapters = [entry for entry in entries if entry.kind == 'adapter']
 assert all(isinstance(entry.target, ModelAdapter) and entry.register_to == ADAPTERS for entry in adapters)
 assert {entry.target.kind for entry in adapters} == {'chat', 'choice', 'embedding'}
-assert all(entry.id.namespace == 'org.aurora.adapter' for entry in plugin.entries)
+assert all(entry.id.namespace == 'org.aurora.model' for entry in entries)
 assert 'aurora_tools.execution' not in sys.modules
 assert not blocked.intersection(name.split('.')[0] for name in sys.modules)
 """

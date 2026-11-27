@@ -3,9 +3,6 @@
 import asyncio
 
 import pytest
-from aurora_adapter.model.config import ADAPTERS, BINDINGS, CONFIG, ModelAdapter, resolve_model
-from aurora_adapter.model.plugin import plugin
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_bot.assembly import environment_credential
 from aurora_bot.assembly_config import parse_config
 from aurora_core.bootstrap import bootstrap
@@ -13,6 +10,12 @@ from aurora_core.ctx import Context
 from aurora_core.discovery import register_plugins
 from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
+from aurora_model.config import BINDINGS, CONFIG, resolve_model
+from aurora_model.configuration import plugin as model_configuration_plugin
+from aurora_model.plugin import plugin
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.supplier import plugin as litellm_plugin
+from aurora_model.testing import FakeModel, FakeReply
 
 ADAPTER = Id("dev.configuration:adapters/fake")
 
@@ -58,7 +61,14 @@ def test_invalid_bot_configuration_is_rejected(change):
 )
 def test_model_config_validation_is_atomic(profile):
     registry = bootstrap()
-    register_plugins(registry, (plugin(),))
+    register_plugins(
+        registry,
+        (
+            plugin(),
+            model_configuration_plugin(),
+            litellm_plugin(),
+        ),
+    )
     ctx = Context(registry)
     try:
         ctx.set(CONFIG, {"valid": {"adapter": str(ADAPTER), "model": "m"}})
@@ -123,7 +133,14 @@ def test_empty_or_missing_runtime_credentials_fail_explicitly(monkeypatch):
 
 def test_bindings_reject_non_string_targets():
     registry = bootstrap()
-    register_plugins(registry, (plugin(),))
+    register_plugins(
+        registry,
+        (
+            plugin(),
+            model_configuration_plugin(),
+            litellm_plugin(),
+        ),
+    )
     ctx = Context(registry)
     try:
         with pytest.raises(ValueError):

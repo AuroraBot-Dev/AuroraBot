@@ -4,11 +4,10 @@ version = "0.1.0"
 description = "AuroraBot unified installation package"
 requires-python = ">=3.12"
 dependencies = [
-    "aurora-bot>=0.1.0",
+    "aurora-bot[mcp-world]>=0.1.0",
     "aurora-cli>=0.1.0",
     "aurora-api>=0.1.0",
     "aurora-world[environment]>=0.1.0",
-    "aurora-adapter[mcp-bot]>=0.1.0",
     "python-dotenv>=1.2,<2",
 ]
 
@@ -30,7 +29,8 @@ dev = [
 
 [tool.coverage.run]
 source = [
-    "aurora_adapter",
+    "aurora_model",
+    "aurora_mcp",
     "aurora_config",
     "aurora_core",
     "aurora_control",
@@ -65,7 +65,8 @@ include = [
 ]
 exclude = ["**/__pycache__", "**/node_modules", ".venv", "build", "dist"]
 extraPaths = [
-    "packages/aurora_adapter/src",
+    "packages/aurora_model/src",
+    "packages/aurora_mcp/src",
     "packages/aurora_config/src",
     "packages/aurora_core/src",
     "packages/aurora_control/src",
@@ -80,7 +81,8 @@ extraPaths = [
 
 [tool.uv.workspace]
 members = [
-    "packages/aurora_adapter",
+    "packages/aurora_model",
+    "packages/aurora_mcp",
     "packages/aurora_config",
     "packages/aurora_core",
     "packages/aurora_control",
@@ -94,7 +96,8 @@ members = [
 ]
 
 [tool.uv.sources]
-aurora-adapter = { workspace = true }
+aurora-model = { workspace = true }
+aurora-mcp = { workspace = true }
 aurora-config = { workspace = true }
 aurora-core = { workspace = true }
 aurora-control = { workspace = true }

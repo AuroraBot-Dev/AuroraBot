@@ -10,10 +10,6 @@ from functools import partial
 from typing import cast
 from uuid import uuid4
 
-from aurora_adapter.model.config import ADAPTERS, BINDINGS, ModelAdapter
-from aurora_adapter.model.config import CONFIG as MODEL_CONFIG
-from aurora_adapter.model.plugin import plugin as adapter_plugin
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import plugin as model_plugin
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import ReActContext
@@ -33,6 +29,13 @@ from aurora_core.ctx import StateKey
 from aurora_core.discovery import Plugin
 from aurora_core.lifecycle import CLEAN, PREPARE, START, STOP, LifecycleComponent
 from aurora_core.registry import RegistryEntry
+from aurora_model.config import BINDINGS
+from aurora_model.config import CONFIG as MODEL_CONFIG
+from aurora_model.configuration import plugin as model_configuration_plugin
+from aurora_model.plugin import plugin as adapter_plugin
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.supplier import plugin as litellm_plugin
+from aurora_model.testing import FakeModel, FakeReply
 from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
 from aurora_tools.execution import plugin as tools_plugin
 from aurora_world import RECORDS, SOURCE_STATUS, SOURCES, SourceInstance, SourceSpec
@@ -402,6 +405,8 @@ def plugins(*, with_world=True):
     )
     selected = (
         adapter_plugin(),
+        model_configuration_plugin(),
+        litellm_plugin(),
         control_plugin(),
         model_plugin(),
         react_plugin(),

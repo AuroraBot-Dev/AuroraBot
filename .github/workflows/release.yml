@@ -48,7 +48,7 @@ jobs:
           paths = ['pyproject.toml'] + [
               f'packages/{name}/pyproject.toml'
               for name in ('aurora_core', 'aurora_config', 'aurora_control', 'aurora_agent',
-                           'aurora_adapter', 'aurora_bot', 'aurora_cli', 'aurora_api',
+                           'aurora_tools', 'aurora_model', 'aurora_mcp', 'aurora_bot', 'aurora_cli', 'aurora_api',
                            'aurora_logging', 'aurora_world')
           ]
           for path in paths:

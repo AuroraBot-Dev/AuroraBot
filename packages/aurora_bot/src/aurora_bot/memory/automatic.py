@@ -4,9 +4,9 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
-from aurora_adapter.model import EmbeddingClient
-from aurora_adapter.model.usage import usage_scope
 from aurora_agent.compaction import CompactionRecord
+from aurora_model import EmbeddingClient
+from aurora_model.usage import usage_scope
 
 from .store import MemoryStore
 

@@ -2,9 +2,9 @@
 
 from copy import deepcopy
 
-from aurora_adapter.model import ChatRequest, Message
-from aurora_adapter.model.content import MAX_FILE_BYTES, request_size
 from aurora_core.json_data import encode_json
+from aurora_model import ChatRequest, Message
+from aurora_model.content import MAX_FILE_BYTES, request_size
 
 
 def read_exchange_ends(messages: list[Message], value: object) -> list[int]:

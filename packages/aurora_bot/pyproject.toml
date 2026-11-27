@@ -8,9 +8,13 @@ dependencies = [
     "aurora-tools>=0.1.0",
     "aurora-core>=0.1.0", "aurora-config>=0.1.0",
     "aurora-control>=0.1.0",
-    "aurora-adapter[litellm]>=0.1.0",
+    "aurora-model[config,litellm]>=0.1.0",
     "aurora-world[config]>=0.1.0",
 ]
+
+[project.optional-dependencies]
+mcp = ["aurora-mcp[tools]>=0.1.0", "tomli-w>=1.2,<2"]
+mcp-world = ["aurora-mcp[tools,world]>=0.1.0", "tomli-w>=1.2,<2"]
 
 [project.entry-points."aurora.plugins"]
 "aurora_bot.assembly" = "aurora_bot.assembly:plugin"

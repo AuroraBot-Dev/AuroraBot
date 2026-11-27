@@ -7,10 +7,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import tomli_w
-from aurora_adapter.model import ChatRequest, ModelConfig
-from aurora_adapter.model.config import ADAPTERS, BINDINGS, ModelAdapter
-from aurora_adapter.model.plugin import plugin as adapter_plugin
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.model import plugin as model_plugin
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import plugin as defaults_plugin
@@ -28,6 +24,13 @@ from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.registry import RegistryEntry
 from aurora_core.storage import StorageService
+from aurora_model import ChatRequest, ModelConfig
+from aurora_model.config import BINDINGS
+from aurora_model.configuration import plugin as model_configuration_plugin
+from aurora_model.plugin import plugin as adapter_plugin
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.supplier import plugin as litellm_plugin
+from aurora_model.testing import FakeModel, FakeReply
 from aurora_tools.execution import TOOLS, ToolInstance, ToolSpec
 from aurora_tools.execution import plugin as tools_plugin
 from configuration import configured_plugins
@@ -80,6 +83,8 @@ async def run(args: argparse.Namespace) -> None:
             (
                 configuration_plugin(),
                 adapter_plugin(),
+                model_configuration_plugin(),
+                litellm_plugin(),
                 model_plugin(),
                 react_plugin(),
                 tools_plugin(),
@@ -135,7 +140,7 @@ async def run(args: argparse.Namespace) -> None:
             value = ctx.get(BINDINGS)
             assert isinstance(value, dict)
             value["reasoning"] = args.profile
-            path = args.data_dir / "config/org.aurora.adapter/model/bindings.toml"
+            path = args.data_dir / "config/org.aurora.model/bindings.toml"
             path.write_text(tomli_w.dumps(value), encoding="utf-8")
             ctx.set(BINDINGS, value)
 

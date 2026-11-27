@@ -5,11 +5,11 @@ import json
 from copy import deepcopy
 
 import pytest
-from aurora_adapter.model import ModelError, ModelProtocolError
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_agent.compaction import HistoryCompactor
 from aurora_agent.input_budget import ModelInputBudget, ModelInputBudgetExceeded
 from aurora_core.json_data import encode_json
+from aurora_model import ModelError, ModelProtocolError
+from aurora_model.testing import FakeModel, FakeReply
 
 
 def history():

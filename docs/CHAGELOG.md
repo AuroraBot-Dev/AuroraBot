@@ -2,6 +2,18 @@
 
 ## 2026-11-27
 
+### 完成 W02 模型与 MCP 发行边界拆分
+
+- 新增 aurora_model、aurora_mcp，删除 aurora_adapter 的发行声明、源码和旧入口。模型协议与中立目录由 aurora_model 提供，模型 TOML 声明由 aurora_model.configuration 提供，LiteLLM 工厂由 aurora_model.litellm 提供；config 与 litellm 为独立 extra。ModelAdapter/ADAPTERS 归 registry，不通过配置模块获取协议目录；基础导入和插件发现不加载供应商 SDK。
+- MCP 客户端、传输、配置、目录及工具/world 桥迁入 aurora_mcp；tools、world 分别按 extra 安装，基础包不依赖 model、tools、world 或 Bot。MCP 产品装配和预设生成移到 aurora_bot.mcp / aurora_bot.mcp_preset，产品装配 ID 为 org.aurora.bot:assemblies/mcp，由已有 aurora_bot.assembly 插件导出；不新增 MCP Bot 插件或兼容入口。Bot 按选择延迟导入 MCP 桥，工具桥复用同一客户端。
+- 模型/MCP 公共定义分别归 org.aurora.model / org.aurora.mcp，local_path 移除重复的 model/mcp 前缀；动态工具 ID、实例名、模型绑定、凭证消费者、产品预设、onboarding、测试和文档同步切换。配置文件位于 config/org.aurora.model/{profiles,bindings}.toml 和 config/org.aurora.mcp/config.toml。包内 config.toml(s) 文件名保持当前格式，plugin.config 命名由 W04 实施。
+- 同步根安装集合、workspace/sources、类型/覆盖率路径、锁文件及发布版本检查包清单；Bot 提供 mcp / mcp-world 产品 extra。删除仅服务旧格式的 MCP migrate 命令和特殊迁移提示，当前 schema 直接校验声明，不探测或转换旧文件。
+- 既有模型与 MCP 测试搬入所属包，产品预设测试归 Bot；删除旧转换器专属 7 项测试及已不存在的 MCP Bot 插件依赖测试。现有独立进程边界测试增加基础模型无配置包、全部模型插件发现无 SDK、MCP 无工具/模型及世界桥无工具的验证；模板测试核对两个发行包的资源归属，不复制原有协议测试。
+- 完整回归再次复现上轮 stdio 截断诊断竞态：同一 ExceptionGroup 同时含 process_exited 与 stdout_incomplete 时，汇总回退为 connect_failed。汇总优先保留具体管道故障；新增一条确定性单测覆盖实际异常组合，保留已有真实进程断言。相关 MCP、宿主与安装声明回归 71 项通过，1 项既有 Windows 专属测试在 Linux 跳过。
+- Python 3.12 已安装开发环境：日常 `uv run --locked aurora check` 12.84 秒，完整 `uv run --locked aurora check --full` 36.51 秒；1222 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过和 37 条依赖警告。未增加 worker、超时、重试或放宽有效断言。当前文档的 130 个本地链接、workspace/插件入口及发布检查格式已核对。
+- 13 个 wheel 构建通过。工作区外干净环境验证 control、tools、agent 的执行与恢复；model 基础包无 config/SDK 的协议及发现、config extra 无 SDK 的模板读取、litellm extra 无 config 的登记与客户端创建/关闭；MCP 客户端、工具桥、世界桥分别在不安装其他桥或 Bot/agent/model 的环境完成本机协议往返。Bot 基础安装未携带 MCP，查询产品装配定义不加载 LiteLLM。wheel 包含模型/MCP 模板，不包含旧 adapter 包；未调用真实供应商。
+- 用户配置和自定义接线直接使用新包、插件、ID 与路径。模型/MCP 配置及观察状态不持久化，Bot 业务状态 ID 保持当前值；历史工具身份和用户快照不改写，未知状态不静默忽略。记忆索引包含 adapter ID，改名后的旧索引需由用户显式重建；原文保留，不自动调用供应商。详见配置指南的升级表。W03 及后续工作包尚未实施，README.md、AGENTS.md 未修改。
+
 ### 完成 W01 通用工具契约与执行器拆分
 
 - 新增 aurora_tools 发行包。contract 提供 ToolDefinition、ToolCall、批次请求/状态及 ToolResult，只依赖 core 的 JsonValue；execution 提供工具定义、工厂、实例、执行器与前后插槽，依赖 core/control 和原有 schema 库。JsonValue 移到 aurora_core.json_data，模型协议直接引用中立契约，不加载工具执行器。

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import cast
 
 import uvicorn
-from aurora_adapter.mcp import CLIENT_STATUS, CONFIG_STATE, PROTOCOL_VERSION, MCPClientError, MCPClients
 from aurora_config import configuration_component
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
@@ -17,6 +16,7 @@ from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import Lifecycle, install_lifecycle_slots
 from aurora_core.persistence import ContextPersistence
 from aurora_core.storage import StorageService
+from aurora_mcp import CLIENT_STATUS, CONFIG_STATE, PROTOCOL_VERSION, MCPClientError, MCPClients
 from mcp.server import MCPServer
 
 
@@ -48,9 +48,9 @@ async def run(root: Path) -> dict:
                 await asyncio.sleep(0.01)
         registry = bootstrap()
         install_lifecycle_slots(registry)
-        register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_adapter.mcp"]))
+        register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_mcp"]))
         ctx, hooks, storage = Context(registry), HookConnections(registry), StorageService(root)
-        config = storage.configuration_directory() / "org.aurora.adapter" / "mcp.toml"
+        config = storage.configuration_directory() / "org.aurora.mcp" / "config.toml"
         config.parent.mkdir(parents=True, exist_ok=True)
         text = (
             f'schema_version = 2\n[servers.local]\ntype = "remote"\nprotocol = "2026-07-28"\nurl = "http://127.0.0.1:{port}/mcp"\n'
@@ -68,9 +68,7 @@ async def run(root: Path) -> dict:
         )
         await host.start()
         try:
-            observed = cast(
-                dict, ctx.get(CLIENT_STATUS, location={"owner": "aurora_adapter/mcp", "connection_id": "local"})
-            )
+            observed = cast(dict, ctx.get(CLIENT_STATUS, location={"owner": "aurora_mcp", "connection_id": "local"}))
             assert observed["phase"] == "ready" and observed["accepting"]
             async with owner.connection("local") as client:
                 assert client.protocol_version == PROTOCOL_VERSION
@@ -93,9 +91,7 @@ async def run(root: Path) -> dict:
                 with_error = error.code == "request_failed"
             assert with_error
             assert (
-                cast(dict, ctx.get(CLIENT_STATUS, location={"owner": "aurora_adapter/mcp", "connection_id": "local"}))[
-                    "error"
-                ]
+                cast(dict, ctx.get(CLIENT_STATUS, location={"owner": "aurora_mcp", "connection_id": "local"}))["error"]
                 == "request_failed"
             )
         finally:

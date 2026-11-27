@@ -4,9 +4,9 @@ from copy import deepcopy
 from typing import cast
 
 import pytest
-from aurora_adapter.model import content as model_content
 from aurora_bot.cadence.inputs import model_guidance
 from aurora_core.json_data import decode_json
+from aurora_model import content as model_content
 from aurora_world import WorldPosition, WorldRecord
 
 

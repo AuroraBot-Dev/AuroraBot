@@ -1,6 +1,6 @@
 # 配置与 MCP
 
-核对日期：2026-11-10。首次启动见[助手指南](../examples/START.md)，运行入口见[操作指南](operations.md)。
+核对日期：2026-11-27。首次启动见[助手指南](../examples/START.md)，运行入口见[操作指南](operations.md)。
 
 ## 配置与数据目录
 
@@ -10,9 +10,9 @@
 | --- | --- |
 | `config/host.toml` | 显式插件列表与装配 ID |
 | `config/org.aurora.bot/config.toml` | Bot 实例、模型角色、工具与功能开关 |
-| `config/org.aurora.adapter/model/profiles.toml` | 供应商、模型、适配器与凭证环境变量名 |
-| `config/org.aurora.adapter/model/bindings.toml` | reasoning / cadence 等角色到 profile 的绑定 |
-| `config/org.aurora.adapter/mcp.toml` | MCP 连接和工具选择 |
+| `config/org.aurora.model/profiles.toml` | 供应商、模型、适配器与凭证环境变量名 |
+| `config/org.aurora.model/bindings.toml` | reasoning / cadence 等角色到 profile 的绑定 |
+| `config/org.aurora.mcp/config.toml` | MCP 连接和工具选择 |
 | `config/org.aurora.world/config.toml` | 已启用 world 配置插件时的来源与视图 |
 | `config/org.aurora.bot/cadence.toml` | 已启用 cadence 时的决策节律配置 |
 | `config/org.aurora.bot/memory.toml` | 已启用记忆插件时的向量角色与分块配置 |
@@ -28,7 +28,7 @@
 
 ```toml
 [primary]
-adapter = "org.aurora.adapter:adapters/model/litellm/chat"
+adapter = "org.aurora.model:adapters/litellm/chat"
 provider = "deepseek"
 model = "deepseek-flash"
 credential = "AURORA_MODEL_API_KEY"
@@ -43,21 +43,29 @@ file_input = false
 
 需要思考时，在支持的 profile 中添加 `thinking` 表或 `reasoning_effort`；未填写时沿用供应商默认。文件输入须与模型真实能力一致，不能仅靠声明获得多模态能力。
 
-聊天、choice 和 embedding 共用 `aurora-adapter[litellm]`，分别选择 `org.aurora.adapter:adapters/model/litellm/chat`、`.../choice`、`.../embedding`。三类角色都通过同一注册表解析并检查用途；choice 和 embedding 不接受 `capabilities`、`thinking`、`reasoning_effort`。模型路由、供应商参数与响应转换使用 LiteLLM；客户端保留实例连接所有权，不共享全局路由器或修改 SDK 全局设置。请求不自动重试、不跟随重定向。
+聊天、choice 和 embedding 共用 `aurora-model[litellm]`，分别选择 `org.aurora.model:adapters/litellm/chat`、`.../choice`、`.../embedding`。三类角色都通过同一注册表解析并检查用途；choice 和 embedding 不接受 `capabilities`、`thinking`、`reasoning_effort`。模型路由、供应商参数与响应转换使用 LiteLLM；客户端保留实例连接所有权，不共享全局路由器或修改 SDK 全局设置。请求不自动重试、不跟随重定向。
 
 ### 从旧模型配置升级
 
-已有 TOML 不会被模板覆盖，请在停止宿主后手动替换 profile 的 `adapter`：
+W02 直接切换到独立 model / MCP 发行包，不读取旧 adapter 路径、不提供 ID 别名或旧格式转换命令。停止宿主后按新基线手动准备配置：
 
-| 旧值（均以 `org.aurora.adapter:adapters/model/` 开头） | 新值（相同前缀） |
+| 旧位置或选择 | 新位置或选择 |
 | --- | --- |
-| `litellm` | `litellm/chat` |
-| `litellm_choice` | `litellm/choice` |
-| `openai_embedding` | `litellm/embedding` |
+| `config/org.aurora.adapter/model/{profiles,bindings}.toml` | `config/org.aurora.model/{profiles,bindings}.toml` |
+| `config/org.aurora.adapter/mcp.toml` | `config/org.aurora.mcp/config.toml` |
+| 插件 `aurora_adapter.model` | `aurora_model`、`aurora_model.configuration`，使用 LiteLLM 时另启用 `aurora_model.litellm` |
+| 插件 `aurora_adapter.mcp`、`.tools`、`.world` | `aurora_mcp`、`aurora_mcp.tools`、`aurora_mcp.world` |
+| 插件 `aurora_adapter.mcp.bot` | 删除此选择；产品装配归现有 `aurora_bot.assembly` 插件 |
+| 装配 `org.aurora.adapter:assemblies/mcp/default_bot` | `org.aurora.bot:assemblies/mcp` |
+| `org.aurora.adapter:<domain>/model/<path>` | `org.aurora.model:<domain>/<path>` |
+| `org.aurora.adapter:<domain>/mcp/<path>` | `org.aurora.mcp:<domain>/<path>` |
+| 配置声明 `org.aurora.adapter:configs/mcp` | `org.aurora.mcp:configs/default` |
 
-旧 `openai_embedding` profile 还需增加 `provider = "openai"`，继续使用原有模型和 API 根地址。角色绑定名、凭证变量名和配置文件位置保持不变；安装依赖将 `aurora-adapter[embedding]` 改为 `aurora-adapter[litellm]`。没有旧 ID 别名或自动迁移。
+profile 的 adapter、Bot 的 tools 选择、world 的 source 选择和自定义订阅需一起更新；凭证环境变量名与角色绑定名可以保持。更早版本的 LiteLLM 工厂应直接选择 `adapters/litellm/chat`、`choice` 或 `embedding`；OpenAI 向量模型需填写 `provider = "openai"`。
 
-本次没有改名业务状态 ID 或改变消息 JSON，既有业务快照无需改写。记忆索引指纹包含 adapter ID，因此升级后须显式调用 `memory_reindex` 才能搜索旧记忆；原文仍可读取或删除，升级过程不会调用供应商、重建索引或清理用户数据。自定义插件的 Python 接口与服务/schema ID 迁移见[模型边界](aurorabot-design-v0.2.3.md#模型边界)。
+模型和 MCP 配置/观察状态均不持久化；Bot 业务状态 ID 和消息 JSON 保持当前格式。业务历史中已记录的工具身份仍是历史数据，宿主不改写快照、不忽略未登记状态。记忆索引指纹包含 adapter ID，切换后旧索引需由用户显式执行 `memory_reindex`；原文保留，升级不调用供应商、不重建索引或清理用户数据。建议使用独立数据目录验收新基线。
+
+安装与启用分别选择：`aurora-model` 提供协议；`aurora-model[config]` 提供配置；`aurora-model[litellm]` 安装供应商 SDK。`aurora-mcp` 可独立作为客户端，工具/世界桥分别安装 `aurora-mcp[tools]`、`aurora-mcp[world]`。产品安装 `aurora-bot[mcp]` 或 `aurora-bot[mcp-world]`，通过 `python -m aurora_bot.mcp_preset <data-dir>`（按需加 `--world`）生成显式宿主选择和缺失模板。
 
 ## 显式文本记忆（朴素 RAG）
 
@@ -65,20 +73,20 @@ file_input = false
 
 `aurora_bot.memory` 是独立启用的 Bot 插件，首次安装助手不默认启用。插件默认使用普通 ReAct 工具，按需保存和检索文本；可额外开启 [压缩时自动保存](context.md#压缩时自动保存长期记忆)，将被压缩记录先落盘、摘要后台索引，不依赖模型主动调用保存工具。
 
-先补齐以下配置，再在 `config/host.toml` 的现有 `plugins` 列表中添加 `"aurora_bot.memory"`。保留默认 Bot 的依赖插件，包括 `aurora_bot.assembly`、`aurora_adapter.model`、`aurora_config`、`aurora_tools`；只安装包不等于启用插件。
+先补齐以下配置，再在 `config/host.toml` 的现有 `plugins` 列表中添加 `"aurora_bot.memory"`。保留默认 Bot 的依赖插件，包括 `aurora_bot.assembly`、`aurora_model`、`aurora_model.configuration`、`aurora_config`、`aurora_tools`；选择 LiteLLM profile 时另启用 `aurora_model.litellm`；只安装包不等于启用插件。
 
-在模型 `profiles.toml` 添加独立向量 profile，模型名称和地址按实际供应商修改。向量请求通过 LiteLLM `aembedding`，支持已接入实例传输的 OpenAI 兼容供应商，以及 Voyage、Cohere 等原生协议。下例使用 OpenAI 兼容的 `/embeddings` 端点，`base_url` 填包含 `/v1` 的 API 根路径，不填完整 `/embeddings` 路径；不接受聊天能力和思考配置。当前传输范围以 [LiteLLMClient](../packages/aurora_adapter/src/aurora_adapter/model/litellm.py) 为准，不等于 LiteLLM 的全部供应商；未接入的兼容服务可显式选择 `provider = "openai"`。
+在模型 `profiles.toml` 添加独立向量 profile，模型名称和地址按实际供应商修改。向量请求通过 LiteLLM `aembedding`，支持已接入实例传输的 OpenAI 兼容供应商，以及 Voyage、Cohere 等原生协议。下例使用 OpenAI 兼容的 `/embeddings` 端点，`base_url` 填包含 `/v1` 的 API 根路径，不填完整 `/embeddings` 路径；不接受聊天能力和思考配置。当前传输范围以 [LiteLLMClient](../packages/aurora_model/src/aurora_model/litellm.py) 为准，不等于 LiteLLM 的全部供应商；未接入的兼容服务可显式选择 `provider = "openai"`。
 
 ```toml
 [memory_embedding]
-adapter = "org.aurora.adapter:adapters/model/litellm/embedding"
+adapter = "org.aurora.model:adapters/litellm/embedding"
 provider = "openai"
 model = "text-embedding-3-small"
 base_url = "https://api.openai.com/v1"
 credential = "AURORA_EMBEDDING_API_KEY"
 ```
 
-在模型 `bindings.toml` 增加 `memory = "memory_embedding"`，保留原有 `reasoning` 等绑定。凭证从运行期环境读取；无鉴权的本地兼容服务可省略 `credential`。供应商依赖统一属于 `aurora-adapter[litellm]`，Bot 分发已包含此 extra；基础 adapter 和独立 agent 不因此依赖 HTTP 客户端或模型 SDK。
+在模型 `bindings.toml` 增加 `memory = "memory_embedding"`，保留原有 `reasoning` 等绑定。凭证从运行期环境读取；无鉴权的本地兼容服务可省略 `credential`。供应商依赖统一属于 `aurora-model[litellm]`，Bot 分发已包含此 extra；基础 model 和独立 agent 不因此依赖 HTTP 客户端或模型 SDK。
 
 `config/org.aurora.bot/memory.toml` 在首次加载插件时从[包模板](../packages/aurora_bot/src/aurora_bot/memory/config.tomls/memory.toml)补缺，也可预先写入：
 
@@ -129,7 +137,7 @@ instance_id = "memory/reindex"
 
 ## 本地 terminal MCP
 
-助手使用的完整可复制模板是 [mcp.toml](../examples/onboarding/config.tomls/org.aurora.adapter/mcp.toml)。启动命令为 `uvx --from terminal-mcp==0.4.7 terminal-mcp`，工作目录是宿主明确传入的仓库根目录。首次下载需要网络。
+助手使用的完整可复制模板是 [mcp.toml](../examples/onboarding/config.tomls/org.aurora.mcp/config.toml)。启动命令为 `uvx --from terminal-mcp==0.4.7 terminal-mcp`，工作目录是宿主明确传入的仓库根目录。首次下载需要网络。
 
 | 远端工具 | Bot 中的名称 |
 | --- | --- |
@@ -162,22 +170,22 @@ include = ["echo"]
 aliases = { echo = "service_echo" }
 ```
 
-默认发现全部工具并自动命名；显式 include/exclude 控制集合，include=[] 不暴露工具，aliases 覆盖名称。安装助手只选择上表 7 个工具。公共动态定义属于 `org.aurora.adapter:tools/mcp/<工具名>`。
+默认发现全部工具并自动命名；显式 include/exclude 控制集合，include=[] 不暴露工具，aliases 覆盖名称。安装助手只选择上表 7 个工具。公共动态定义属于 `org.aurora.mcp:tools/<工具名>`。
 
-安装 extra 与启用插件分别处理。工具链需要 aurora_adapter.mcp、aurora_adapter.mcp.tools 及 agent 工具插件；默认 MCP Bot 装配另需 aurora_adapter.mcp.bot 与 aurora_bot.assembly。完整最小清单见助手的 [host.toml](../examples/onboarding/config.tomls/host.toml)。
+安装 extra 与启用插件分别处理。工具链需要 aurora_mcp、aurora_mcp.tools 及 agent 工具插件；默认 MCP Bot 装配另需 aurora_bot.mcp 与 aurora_bot.assembly。完整最小清单见助手的 [host.toml](../examples/onboarding/config.tomls/host.toml)。
 
 独立生成正式 MCP 产品模板，可在目标目录不存在或已核对后执行：
 
 ```powershell
-uv run --locked python -m aurora_adapter.mcp.preset data --api
+uv run --locked python -m aurora_bot.mcp_preset data --api
 ```
 
 它只补缺文件。已有 host 与候选不同会输出差异和 host.mcp.toml，不覆盖原选择，需审阅后显式应用。填写目标目录中的模型和 MCP 配置，再按操作指南启动。
 
-旧 MCP 格式通过 `python -m aurora_adapter.mcp.migrate 旧文件 --output 新候选` 生成迁移候选；不会自动迁移快照、插件名或旧命名空间。其他客户端的 JSON 配置不能直接作为 Aurora TOML 使用。
+旧 MCP 格式通过 `python -m aurora_mcp.migrate 旧文件 --output 新候选` 生成迁移候选；不会自动迁移快照、插件名或旧命名空间。其他客户端的 JSON 配置不能直接作为 Aurora TOML 使用。
 
 ## 世界与主动行为
 
-正式产品可启用 aurora_world、aurora_world.configuration、aurora_world.environment，以及可选 aurora_adapter.mcp.world；world 配置用 sources 显式选择来源、source_id 和配置。MCP 来源还需 connection_id 和资源 URI，借用已配置客户端。安装助手不启用这些插件。
+正式产品可启用 aurora_world、aurora_world.configuration、aurora_world.environment，以及可选 aurora_mcp.world；world 配置用 sources 显式选择来源、source_id 和配置。MCP 来源还需 connection_id 和资源 URI，借用已配置客户端。安装助手不启用这些插件。
 
-时间、天气、世界事件、cadence、笔记和计划唤醒的语义见[上下文与运行](context.md)。配置结构以包内模板和 schema 为准：[world](../packages/aurora_world/src/aurora_world/config.toml)、[MCP](../packages/aurora_adapter/src/aurora_adapter/config.tomls/mcp.toml)、[Bot](../packages/aurora_bot/src/aurora_bot/config.toml)、[cadence](../packages/aurora_bot/src/aurora_bot/cadence/config.tomls/cadence.toml)。
+时间、天气、世界事件、cadence、笔记和计划唤醒的语义见[上下文与运行](context.md)。配置结构以包内模板和 schema 为准：[world](../packages/aurora_world/src/aurora_world/config.toml)、[MCP](../packages/aurora_mcp/src/aurora_mcp/config.toml)、[Bot](../packages/aurora_bot/src/aurora_bot/config.toml)、[cadence](../packages/aurora_bot/src/aurora_bot/cadence/config.tomls/cadence.toml)。

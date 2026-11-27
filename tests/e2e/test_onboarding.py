@@ -9,8 +9,6 @@ from uuid import uuid4
 
 import pytest
 import tomli_w
-from aurora_adapter.model.config import ADAPTERS, ModelAdapter
-from aurora_adapter.model.testing import FakeModel, FakeReply
 from aurora_cli.commander import run_cli
 from aurora_config import read_toml
 from aurora_config.files import configuration_files
@@ -19,6 +17,8 @@ from aurora_core.bootstrap import bootstrap
 from aurora_core.discovery import Plugin, load_plugins, register_plugins
 from aurora_core.lifecycle import install_lifecycle_slots
 from aurora_core.registry import RegistryEntry
+from aurora_model.registry import ADAPTERS, ModelAdapter
+from aurora_model.testing import FakeModel, FakeReply
 
 ROOT = Path(__file__).resolve().parents[2]
 APPLICATION = ROOT / "examples/onboarding/main.py"
@@ -34,7 +34,7 @@ def test_initialization_preserves_files_and_validates_minimal_configuration(tmp_
     assert asyncio.run(source["run"](["--init", "--data-dir", str(tmp_path)])) == 0
     directory = tmp_path / "config"
     host = read_toml(directory / "host.toml")
-    assert host["assembly"] == "org.aurora.adapter:assemblies/mcp/default_bot"
+    assert host["assembly"] == "org.aurora.bot:assemblies/mcp"
     assert not {"aurora_world", "aurora_world.configuration", "aurora_bot.cadence"} & set(host["plugins"])
     registry = bootstrap()
     install_lifecycle_slots(registry)
@@ -45,13 +45,13 @@ def test_initialization_preserves_files_and_validates_minimal_configuration(tmp_
     bot = read_toml(directory / "org.aurora.bot/config.toml")
     assert bot["input_budget"]["enabled"] and bot["input_budget"]["max_chars"] == 48000
     assert all(not bot[name]["enabled"] for name in ("context_view", "notes", "self_control", "archive", "actions"))
-    servers = read_toml(directory / "org.aurora.adapter/mcp.toml")["servers"]
+    servers = read_toml(directory / "org.aurora.mcp/config.toml")["servers"]
     assert set(servers) == {"terminal"}
     terminal = servers["terminal"]
     assert terminal["command"] == ["uvx", "--from", "terminal-mcp==0.4.7", "terminal-mcp"]
     assert len(terminal["tools"]["include"]) == 7
     assert set(terminal["tools"]["include"]) == set(terminal["tools"]["aliases"])
-    profile = directory / "org.aurora.adapter/model/profiles.toml"
+    profile = directory / "org.aurora.model/profiles.toml"
     profile.write_text("# 用户自有配置\n", encoding="utf-8")
     before = {p.relative_to(directory): p.read_bytes() for p in directory.rglob("*.toml")}
     source["initialize"](tmp_path)
@@ -65,7 +65,7 @@ def test_onboarding_roundtrip_restores_history_without_automatic_activation(tmp_
     directory = tmp_path / "config"
     fixture = ROOT / "tests/fixtures/mcp_stdio_server.py"
     trace = tmp_path / "terminal"
-    (directory / "org.aurora.adapter/mcp.toml").write_text(
+    (directory / "org.aurora.mcp/config.toml").write_text(
         tomli_w.dumps(
             {
                 "schema_version": 2,
@@ -81,7 +81,7 @@ def test_onboarding_roundtrip_restores_history_without_automatic_activation(tmp_
         encoding="utf-8",
     )
     adapter = Id("dev.onboarding:adapters/fake")
-    (directory / "org.aurora.adapter/model/profiles.toml").write_text(
+    (directory / "org.aurora.model/profiles.toml").write_text(
         tomli_w.dumps({"primary": {"adapter": str(adapter), "model": "offline"}}),
         encoding="utf-8",
     )

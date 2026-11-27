@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from aurora_adapter.mcp import CLIENT_STATUS, CONFIG_STATE, MCPClientError, MCPClients
 from aurora_core.bootstrap import bootstrap
 from aurora_core.ctx import Context
 from aurora_core.discovery import load_plugins, register_plugins
 from aurora_core.hooks import HookConnections
 from aurora_core.lifecycle import install_lifecycle_slots
+from aurora_mcp import CLIENT_STATUS, CONFIG_STATE, MCPClientError, MCPClients
 from mcp.types import CallToolRequest, CallToolRequestParams, CallToolResult
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_stdio_server.py"
@@ -61,7 +61,7 @@ def alive(pid):
 def environment(root, mode="normal", protocol="legacy", **overrides):
     registry = bootstrap()
     install_lifecycle_slots(registry)
-    register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_adapter.mcp"]))
+    register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_mcp"]))
     ctx = Context(registry)
     owner = MCPClients(ctx, HookConnections(registry), workspace_root=root)
     server = {
@@ -293,7 +293,7 @@ def test_stdio_exited_parent_with_inherited_pipe_cannot_hold_session_open(tmp_pa
 
 @pytest.mark.parametrize("mode", ["normal", "pollution"])
 def test_stdio_cleanup_failure_is_reported_even_during_failed_handshake(tmp_path, monkeypatch, mode):
-    from aurora_adapter.mcp import stdio
+    from aurora_mcp import stdio
 
     close = stdio._close
 

@@ -6,9 +6,9 @@ from pathlib import Path
 from time import time
 from uuid import uuid4
 
-from aurora_adapter.model import EmbeddingClient, normalize_vectors
 from aurora_agent.compaction import CompactionRecord
 from aurora_core.json_data import encode_json
+from aurora_model import EmbeddingClient, normalize_vectors
 from aurora_tools.execution import ToolExecutionError
 
 MAX_MEMORIES = 1000

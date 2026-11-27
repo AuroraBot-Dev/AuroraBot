@@ -15,7 +15,7 @@ uv run --locked python examples/onboarding/main.py --init
 
 ## 2. 填写模型
 
-编辑 `build/onboarding/config/org.aurora.adapter/model/profiles.toml`，填写你的 `provider`、`model`，需要时添加 `base_url`。模板以 DeepSeek 为例，模型须支持工具调用和流式输出。
+编辑 `build/onboarding/config/org.aurora.model/profiles.toml`，填写你的 `provider`、`model`，需要时添加 `base_url`。模板以 DeepSeek 为例，模型须支持工具调用和流式输出。
 
 在项目根目录 `.env` 中填写 `AURORA_MODEL_API_KEY=你的密钥`；也可设置同名环境变量。`credential` 填环境变量名，不填密钥。
 

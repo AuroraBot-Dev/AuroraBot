@@ -116,7 +116,7 @@ tokens 只包含原始 HTTP JSON 或 SSE 中供应商明确报告的非负整数
 
 status 区分 completed、failed、cancelled 和 incomplete（响应流提前结束）；失败、取消或不完整响应中的已报告用量仅代表已观测值，不能据缺失记录断言未计费。elapsed_seconds 包含调用耗时。日志不包含消息正文、文件地址、端点或凭证；目前用于观测，不自动按价格换算费用或停止运行。
 
-实现：[用量记录](../packages/aurora_adapter/src/aurora_adapter/model/usage.py)、[原始传输采集](../packages/aurora_adapter/src/aurora_adapter/model/litellm.py)。
+实现：[用量记录](../packages/aurora_model/src/aurora_model/usage.py)、[原始传输采集](../packages/aurora_model/src/aurora_model/litellm.py)。
 
 ## 世界、笔记与证据
 

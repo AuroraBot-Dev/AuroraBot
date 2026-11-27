@@ -34,7 +34,7 @@ def test_agent_and_tools_distributions_own_their_plugins_and_definitions():
     tools_requirements = metadata.requires("aurora-tools")
     assert tools_requirements is not None
     assert not any(
-        requirement.startswith(("aurora-adapter", "aurora-agent", "aurora-bot", "aurora-cli", "aurora-api"))
+        requirement.startswith(("aurora-model", "aurora-mcp", "aurora-agent", "aurora-bot", "aurora-cli", "aurora-api"))
         for requirement in tools_requirements
     )
     plugins = load_plugins(enabled=[*names, "aurora_tools"])
@@ -47,7 +47,15 @@ def test_agent_and_tools_distributions_own_their_plugins_and_definitions():
 
 
 def test_workspace_plugins_use_the_aurora_discovery_group():
-    for name in ("aurora-agent", "aurora-tools", "aurora-control", "aurora-bot", "aurora-adapter", "aurora-world"):
+    for name in (
+        "aurora-agent",
+        "aurora-tools",
+        "aurora-control",
+        "aurora-bot",
+        "aurora-model",
+        "aurora-mcp",
+        "aurora-world",
+    ):
         points = metadata.distribution(name).entry_points
         assert points and all(point.group == "aurora.plugins" for point in points)
 
@@ -79,18 +87,29 @@ def test_self_control_definitions_are_bot_owned_and_configuration_is_opt_in():
     assert parse_config({"instance_id": "main", "model_role": "reasoning"})["self_control"] == {"enabled": False}
 
 
-def test_adapter_templates_share_one_package_without_path_collisions(tmp_path):
+def test_model_and_mcp_templates_belong_to_independent_distributions(tmp_path):
     from aurora_config.files import configuration_files
     from aurora_core.bootstrap import bootstrap
     from aurora_core.discovery import register_plugins
 
     registry = bootstrap()
-    register_plugins(registry, load_plugins(enabled=["aurora_config", "aurora_adapter.model", "aurora_adapter.mcp"]))
+    register_plugins(
+        registry,
+        load_plugins(
+            enabled=[
+                "aurora_config",
+                "aurora_model",
+                "aurora_model.configuration",
+                "aurora_model.litellm",
+                "aurora_mcp",
+            ]
+        ),
+    )
     files = configuration_files(registry, tmp_path)
     assert {item.path.relative_to(tmp_path).as_posix() for item in files} == {
-        "org.aurora.adapter/model/profiles.toml",
-        "org.aurora.adapter/model/bindings.toml",
-        "org.aurora.adapter/mcp.toml",
+        "org.aurora.model/profiles.toml",
+        "org.aurora.model/bindings.toml",
+        "org.aurora.mcp/config.toml",
     }
-    assert all(item.spec.template.package == "aurora_adapter" for item in files)
+    assert {item.spec.template.package for item in files} == {"aurora_model", "aurora_mcp"}
     assert all(item.spec.template.source().read_bytes() for item in files)
