@@ -340,23 +340,26 @@ def test_recorder_start_errors_are_not_tool_timeout_or_rejection(runtime, error)
     assert state(executor, ctx, request)["results"] == []
 
 
-@pytest.mark.parametrize("failure_at", ["create", "publish"])
-def test_collection_failure_releases_created_members_without_closing_borrowed_resources(runtime, failure_at):
+@pytest.mark.parametrize("failure_at", [None, "create", "publish"])
+def test_collection_merges_selections_and_releases_members_without_closing_borrowed_resources(runtime, failure_at):
+    from types import SimpleNamespace
+
     from aurora_tools.collection import ToolCollection
     from aurora_tools.execution import ToolInstance
 
     registry, ctx, _ = runtime
-    created, closed = [], []
+    created, closed, configurations = [], [], []
     borrowed = object()
 
     async def execute(request):
         pass
 
-    async def factory(*, instance_id, input_state, output_state, resources, **kwargs):
+    async def factory(*, instance_id, input_state, output_state, resources, config, **kwargs):
         assert resources["shared"] is borrowed
         if failure_at == "create" and created:
             raise RuntimeError("创建失败")
         created.append(instance_id)
+        configurations.append(config)
 
         async def close():
             closed.append(instance_id)
@@ -381,7 +384,8 @@ def test_collection_failure_releases_created_members_without_closing_borrowed_re
 
     def publish(members):
         assert len(members) == 2
-        raise RuntimeError("接线失败")
+        if failure_at == "publish":
+            raise RuntimeError("接线失败")
 
     collection = ToolCollection(
         ctx,
@@ -396,17 +400,24 @@ def test_collection_failure_releases_created_members_without_closing_borrowed_re
             "owner": "test",
             "instance_pattern": "{collection}/{name}",
             "location_field": "tool",
-            "tools": [{"id": str(identity), "config": {}} for identity in identities],
+            "tools": [{"id": str(identities[0]), "config": {"prefix": "显式"}}],
+            "include": ["dev.tools:tools/*"],
+            "exclude": [],
         },
         publish_members=publish,
     )
-    collection.bind(tools={"shared": borrowed})
+    collection.bind(catalog=SimpleNamespace(tool_ids=identities), tools={"shared": borrowed})
 
     async def run():
-        with pytest.raises(RuntimeError, match="创建失败|接线失败"):
+        if failure_at is None:
             await collection.prepare()
+            assert [item["name"] for item in collection.definitions()] == ["first", "second"]
+        else:
+            with pytest.raises(RuntimeError, match="创建失败|接线失败"):
+                await collection.prepare()
         await collection.clean()
 
     asyncio.run(run())
+    assert configurations == ([{"prefix": "显式"}] if failure_at == "create" else [{"prefix": "显式"}, {}])
     assert closed == list(reversed(created))
     assert len(created) == (1 if failure_at == "create" else 2)

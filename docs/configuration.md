@@ -124,7 +124,7 @@ aliases = { echo = "service_echo" }
 
 local 服务使用参数数组 `command`、可选 `cwd` 与 `environment`；相对 cwd 基于宿主 `--root`。子进程只继承基础环境及显式 environment，例如 `APP_TOKEN = "{env:APP_TOKEN}"`。remote 使用 url/headers。协议选择与 timeout 字段以[MCP 模板](../packages/aurora_mcp/src/aurora_mcp/plugin.config.toml)及声明契约为准。
 
-MCP 服务的 tools.include/exclude 决定哪些远端定义进入目录；装配中的工具集合再决定使用哪些定义。动态 ID 为 `org.aurora.mcp:tools/<本地工具名>`。集合可以读取目录，也可显式选择工具；当前不要让显式 tools 与目录 include 重复选中同一个 ID，重复会使准备失败。需要单独指定某工具配置时，在目录规则中排除它，再显式列入。
+MCP 服务的 tools.include/exclude 决定哪些远端定义进入目录；装配中的工具集合再决定使用哪些定义。动态 ID 为 `org.aurora.mcp:tools/<本地工具名>`。集合可以读取目录，也可显式选择工具；两种选择按工具 ID 合并，同一工具只创建一次，显式 tools 的配置保留。顺序先按显式列表，再追加目录中其他选中工具；exclude 只影响目录选择。
 
 例如在已有 MCP 预设中修改集合选择，以下仍为局部片段：
 

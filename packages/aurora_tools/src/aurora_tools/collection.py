@@ -32,7 +32,7 @@ class ToolCollection:
                 if any(fnmatchcase(str(identity), pattern) for pattern in self.options["include"])
                 and not any(fnmatchcase(str(identity), pattern) for pattern in self.options["exclude"])
             )
-        return tuple(selected)
+        return tuple(dict.fromkeys(selected))
 
     def definitions(self):
         return [self.registry.get(identity).target.definition for identity in self.tool_ids]
