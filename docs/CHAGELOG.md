@@ -2,6 +2,12 @@
 
 ## 2026-11-27
 
+### 修复 CI 中 ESLint 配置测试的冷启动超时
+
+- Python 3.12 CI 作业的 1228 项 Python 测试均通过；失败发生在 ESLint 声明文件测试，第一次加载完整配置和插件被计入单条测试，耗时 5.6 秒超过默认 5 秒限制。
+- 两条配置用例改为在 `beforeAll` 中共用真实 ESLint 实例，只初始化一次。保留三斜线类型引用、普通注释修复和脚本排序的全部断言，不调整超时、不增加重试或跳过用例。
+- 验证：针对性 ESLint 配置测试 2 项通过；`uv run --locked aurora check --full` 通过，墙钟 38.06 秒，1228 项 Python、131 项前端和 5 项原生终端测试通过，保留 1 项既有平台跳过与 38 条既有依赖警告。
+
 ### 落地配置插件元信息与集中装配首条链路
 
 - `aurora_config` 用 `plugin.meta.toml` 统一声明三个既有公共定义、配置服务组件和 HTTP 契约来源。生成包内 `_meta.py` 与静态 `plugin.meta.json`；`pyproject.toml` 继续独占发行与 entry point 信息。快速契约测试和构建钩子只读核对生成物，wheel 的 `.dist-info/extra_metadata/` 包含静态目录、清单和纯契约导出文件，查询不导入插件。
