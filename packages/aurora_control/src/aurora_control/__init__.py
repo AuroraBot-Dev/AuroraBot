@@ -22,31 +22,40 @@ from .execution import (
 )
 
 
-def _serial(*, ctx, hooks, instance_id, states):
-    return Serial(
-        ctx, ExecutionSlot(_meta.SERIAL, hooks, instance_id=instance_id, states=states, slot_id=_meta.SERIAL_CHILDREN)
-    )
+def _factory(component, symbol, *, parameters=(), inputs=()):
+    definition = getattr(_meta, symbol)
+    children = getattr(_meta, symbol + "_CHILDREN")
+    execute = getattr(_meta, symbol + "_EXECUTE")
 
+    def create(*, ctx, hooks, instance_id, states, options):
+        slot = ExecutionSlot(definition, hooks, instance_id=instance_id, states=states, slot_id=children)
+        return component(ctx, slot, **{name: options[name] for name in parameters})
 
-def _serial_exports(instance: Serial) -> InstanceExport:
-    return InstanceExport(
-        plugs={
-            _meta.SERIAL_EXECUTE: ExecutionPlug(
-                _meta.SERIAL,
-                instance.execute,
-                instance.slot.states,
-                instance.slot.schema,
-                instance_id=instance.slot.instance_id,
-                port_id=plug_id(instance.execute),
-            )
-        },
-        slots={_meta.SERIAL_CHILDREN: instance.slot},
-    )
+    def export(instance):
+        return InstanceExport(
+            plugs={
+                execute: ExecutionPlug(
+                    definition,
+                    instance.execute,
+                    instance.slot.states,
+                    instance.slot.schema,
+                    instance_id=instance.slot.instance_id,
+                    port_id=plug_id(instance.execute),
+                )
+            },
+            slots={children: instance.slot},
+        )
+
+    def bind(instance, resources):
+        for name in inputs:
+            setattr(instance, name, resources[name])
+
+    return ComponentFactory(create, export, (component.execute,), bind if inputs else None)
 
 
 def plugin() -> Plugin:
-    """登记控制定义；Serial 显式导出实际执行端口，不建立实例连接。"""
-    targets = {_meta.CONTROL_STATE: StateKey()}
+    """导出四种控制组件；分支选择与循环条件借用显式资源，不建立实例连接。"""
+    targets = {_meta.CONTROL_STATE: StateKey(), _meta.CONTROL_EXECUTE: Controller.execute}
     for symbol, component in (
         ("CONTROL", Controller),
         ("SERIAL", Serial),
@@ -56,11 +65,14 @@ def plugin() -> Plugin:
     ):
         targets[getattr(_meta, symbol)] = component
         targets[getattr(_meta, symbol + "_CHILDREN")] = HookSlot(_accept_execution)
-        if component is not Serial:
-            targets[getattr(_meta, symbol + "_EXECUTE")] = component.execute
     return _meta.control_plugin(
         targets=targets,
-        components={"serial": ComponentFactory(_serial, _serial_exports, (Serial.execute,))},
+        components={
+            "serial": _factory(Serial, "SERIAL"),
+            "branch": _factory(Branch, "BRANCH", inputs=("select",)),
+            "while": _factory(While, "WHILE", parameters=("max_iterations",), inputs=("condition",)),
+            "parallel": _factory(Parallel, "PARALLEL", parameters=("concurrency",)),
+        },
     )
 
 

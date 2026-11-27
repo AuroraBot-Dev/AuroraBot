@@ -183,10 +183,67 @@
       "components": {
         "serial": {
           "plugin": "control",
-          "summary": "串行等待显式连接的子组件",
-          "inject": ["ctx", "hooks", "instance_id", "states"],
+          "summary": "串行执行显式连接的子组件",
+          "inject": ["ctx", "hooks", "instance_id", "states", "options"],
           "plugs": ["SERIAL_EXECUTE"],
           "slots": ["SERIAL_CHILDREN"]
+        },
+        "branch": {
+          "plugin": "control",
+          "summary": "分支执行显式连接的子组件",
+          "inject": ["ctx", "hooks", "instance_id", "states", "options"],
+          "plugs": ["BRANCH_EXECUTE"],
+          "slots": ["BRANCH_CHILDREN"],
+          "inputs": ["select"]
+        },
+        "while": {
+          "plugin": "control",
+          "summary": "循环执行显式连接的子组件",
+          "inject": ["ctx", "hooks", "instance_id", "states", "options"],
+          "plugs": ["WHILE_EXECUTE"],
+          "slots": ["WHILE_CHILDREN"],
+          "inputs": ["condition"],
+          "options": "while"
+        },
+        "parallel": {
+          "plugin": "control",
+          "summary": "并行执行显式连接的子组件",
+          "inject": ["ctx", "hooks", "instance_id", "states", "options"],
+          "plugs": ["PARALLEL_EXECUTE"],
+          "slots": ["PARALLEL_CHILDREN"],
+          "options": "parallel"
+        }
+      },
+      "contracts": {
+        "while": {
+          "format": "json-schema",
+          "file": "while.schema.json",
+          "content": {
+            "type": "object",
+            "properties": {
+              "max_iterations": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": ["max_iterations"],
+            "additionalProperties": false
+          }
+        },
+        "parallel": {
+          "format": "json-schema",
+          "file": "parallel.schema.json",
+          "content": {
+            "type": "object",
+            "properties": {
+              "concurrency": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": ["concurrency"],
+            "additionalProperties": false
+          }
         }
       }
     }

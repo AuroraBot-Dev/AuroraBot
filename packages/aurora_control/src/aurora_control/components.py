@@ -7,7 +7,19 @@ from contextlib import asynccontextmanager
 import aurora_core as aurora
 from aurora_core.ctx import Context
 
-from ._meta import BRANCH, CONTROL, CONTROL_STATE, PARALLEL, SERIAL, SERIAL_EXECUTE, WHILE
+from ._meta import (
+    BRANCH,
+    BRANCH_EXECUTE,
+    CONTROL,
+    CONTROL_EXECUTE,
+    CONTROL_STATE,
+    PARALLEL,
+    PARALLEL_EXECUTE,
+    SERIAL,
+    SERIAL_EXECUTE,
+    WHILE,
+    WHILE_EXECUTE,
+)
 from .execution import ExecutionLink, ExecutionPlug, ExecutionRequest, ExecutionSlot
 
 
@@ -46,6 +58,7 @@ class Controller:
         assert isinstance(record, dict)
         self.ctx.set(CONTROL_STATE, {**record, **changes}, location=location)
 
+    @aurora.plug(CONTROL_EXECUTE)
     async def execute(self, request: ExecutionRequest) -> None:
         async with self._execution(request):
             await self._run(request)
@@ -98,9 +111,17 @@ class Branch(Controller):
 
     definition_id = BRANCH
 
-    def __init__(self, ctx: Context, slot: ExecutionSlot, select: Callable[[ExecutionRequest], str | None]) -> None:
+    def __init__(
+        self, ctx: Context, slot: ExecutionSlot, select: Callable[[ExecutionRequest], str | None] | None = None
+    ) -> None:
         super().__init__(ctx, slot)
-        self.select = select
+        self.select: Callable[[ExecutionRequest], str | None]
+        if select is not None:
+            self.select = select
+
+    @aurora.plug(BRANCH_EXECUTE)
+    async def execute(self, request: ExecutionRequest) -> None:
+        await super().execute(request)
 
     async def _run(self, request: ExecutionRequest) -> None:
         selected = self.select(request)
@@ -130,15 +151,21 @@ class While(Controller):
         self,
         ctx: Context,
         slot: ExecutionSlot,
-        condition: Callable[[ExecutionRequest], bool],
+        condition: Callable[[ExecutionRequest], bool] | None = None,
         *,
         max_iterations: int,
     ) -> None:
         super().__init__(ctx, slot)
         if type(max_iterations) is not int or max_iterations < 1:
             raise ValueError("循环上限必须为正整数")
-        self.condition = condition
+        self.condition: Callable[[ExecutionRequest], bool]
+        if condition is not None:
+            self.condition = condition
         self.max_iterations = max_iterations
+
+    @aurora.plug(WHILE_EXECUTE)
+    async def execute(self, request: ExecutionRequest) -> None:
+        await super().execute(request)
 
     async def _run(self, request: ExecutionRequest) -> None:
         links = self.slot.links()
@@ -169,6 +196,10 @@ class Parallel(Controller):
         if type(concurrency) is not int or concurrency < 1:
             raise ValueError("并发上限必须为正整数")
         self.concurrency = concurrency
+
+    @aurora.plug(PARALLEL_EXECUTE)
+    async def execute(self, request: ExecutionRequest) -> None:
+        await super().execute(request)
 
     async def _run(self, request: ExecutionRequest) -> None:
         semaphore = asyncio.Semaphore(self.concurrency)

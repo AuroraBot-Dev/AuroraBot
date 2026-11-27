@@ -32,6 +32,7 @@ def test_manifest_generated_catalog_and_runtime_definitions_agree():
         "aurora_world",
         "aurora_memory",
         "aurora_bot",
+        "aurora_api",
     ):
         root = ROOT / "packages" / name
         generate(root, check=True)
@@ -108,12 +109,16 @@ module = "src/aurora_agent/plugins/model/_meta.py"
 
 
 def test_host_file_assembly_connects_real_ports_states_and_resource_owner(tmp_path):
+    from itertools import cycle
+
     import tomli_w
+    from aurora_control import _meta as control_ids
     from aurora_core.components import ComponentDeclaration, ComponentExport, ComponentFactory, InstanceExport
     from aurora_core.discovery import Plugin
     from aurora_core.lifecycle import CLEAN
     from aurora_host import Host, read_assembly
 
+    conditions = cycle((True, True, False))
     client = FakeModel(lambda _: FakeReply(("已绑定",)))
     key = Id("dev.metadata:state/work")
     close = Id("dev.metadata:handlers/close")
@@ -132,9 +137,17 @@ def test_host_file_assembly_connects_real_ports_states_and_resource_owner(tmp_pa
         components={
             "client": ComponentExport(
                 ComponentFactory(
-                    lambda: client, lambda value: InstanceExport(resources={"chat": value}, plugs={close: value.aclose})
+                    lambda: client,
+                    lambda value: InstanceExport(
+                        resources={
+                            "chat": value,
+                            "select": lambda request: "parallel",
+                            "condition": lambda request: next(conditions),
+                        },
+                        plugs={close: value.aclose},
+                    ),
                 ),
-                ComponentDeclaration(resources=("chat",), plugs=(close,)),
+                ComponentDeclaration(resources=("chat", "select", "condition"), plugs=(close,)),
             )
         },
     )
@@ -155,6 +168,25 @@ def test_host_file_assembly_connects_real_ports_states_and_resource_owner(tmp_pa
                         "states": states,
                         "depends_on": ["inference"],
                     },
+                    "loop": {
+                        "plugin": "aurora_control",
+                        "component": "while",
+                        "states": states,
+                        "options": {"max_iterations": 2},
+                        "resources": {"condition": {"instance": "client", "export": "condition"}},
+                    },
+                    "branch": {
+                        "plugin": "aurora_control",
+                        "component": "branch",
+                        "states": states,
+                        "resources": {"select": {"instance": "client", "export": "select"}},
+                    },
+                    "parallel": {
+                        "plugin": "aurora_control",
+                        "component": "parallel",
+                        "states": states,
+                        "options": {"concurrency": 2},
+                    },
                     "inference": {
                         "plugin": "aurora_agent.model",
                         "component": "model_call",
@@ -166,9 +198,20 @@ def test_host_file_assembly_connects_real_ports_states_and_resource_owner(tmp_pa
                     "client": {"plugin": "test.resource", "component": "client"},
                 },
                 "connections": [
+                    *(
+                        {
+                            "plug": {"instance": child, "id": str(getattr(control_ids, plug))},
+                            "slot": {"instance": parent, "id": str(getattr(control_ids, slot))},
+                        }
+                        for child, plug, parent, slot in (
+                            ("loop", "WHILE_EXECUTE", "sequence", "SERIAL_CHILDREN"),
+                            ("branch", "BRANCH_EXECUTE", "loop", "WHILE_CHILDREN"),
+                            ("parallel", "PARALLEL_EXECUTE", "branch", "BRANCH_CHILDREN"),
+                        )
+                    ),
                     {
                         "plug": {"instance": "inference", "id": str(EXECUTE)},
-                        "slot": {"instance": "sequence", "id": str(SERIAL_CHILDREN)},
+                        "slot": {"instance": "parallel", "id": str(control_ids.PARALLEL_CHILDREN)},
                         "priority": 7,
                     },
                     {
@@ -189,7 +232,7 @@ def test_host_file_assembly_connects_real_ports_states_and_resource_owner(tmp_pa
             plug = cast(ExecutionPlug, call.exports.plugs[EXECUTE])
             assert slot is sequence.instance.slot
             assert host.graph.instances["client"].exports.resources["chat"] is client
-            assert len(host.graph.connections) == 2
+            assert len(host.graph.connections) == 5
             await host.start()
             first, second = ExecutionRequest("first"), ExecutionRequest("second")
             plug.states["input"].set(host.ctx, first, {"messages": [{"role": "user", "content": "测试"}]})
@@ -198,6 +241,7 @@ def test_host_file_assembly_connects_real_ports_states_and_resource_owner(tmp_pa
             for request in (first, second):
                 await host.run(cast(ExecutionPlug, sequence.exports.plugs[SERIAL_EXECUTE]), request)
                 assert cast(dict, plug.states["output"].get(host.ctx, request))["text"] == "已绑定"
+            assert len(client.requests) == 4
             assert not client.closed
         finally:
             await host.stop()

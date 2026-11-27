@@ -2,12 +2,10 @@
 
 from typing import Protocol, runtime_checkable
 
-from aurora_core.bootstrap import REGISTRY_DIRECTORY
 from aurora_core.discovery import Plugin
-from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
 
-ENDPOINTS = Id("org.aurora.api:registries/endpoints")
+from ._meta import ENDPOINTS, api_plugin
 
 
 @runtime_checkable
@@ -25,7 +23,4 @@ class EndpointReceiver:
 
 
 def plugin() -> Plugin:
-    return Plugin(
-        "aurora_api",
-        (RegistryEntry(ENDPOINTS, "registry", EndpointReceiver(), "aurora_api", register_to=REGISTRY_DIRECTORY),),
-    )
+    return api_plugin(targets={ENDPOINTS: EndpointReceiver()}, components={})

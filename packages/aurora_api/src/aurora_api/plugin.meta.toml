@@ -1,0 +1,16 @@
+schema_version = 2
+
+[plugins.api]
+entry_point = "aurora_api"
+title = "HTTP 与 WebSocket 传输"
+summary = "接收显式选用的 HTTP 端点，不分发任意操作"
+requires = []
+
+[definitions.ENDPOINTS]
+plugin = "api"
+id = "org.aurora.api:registries/endpoints"
+kind = "registry"
+summary = "HTTP 端点接收方"
+
+[definitions.ENDPOINTS.register_to]
+id = "org.aurora.core:registries/registries"

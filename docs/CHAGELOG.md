@@ -2,6 +2,12 @@
 
 ## 2026-11-27
 
+### 推进 W08：补齐控制组件与 API 清单
+
+- control 的 Serial、Branch、While、Parallel 均导出真实执行方法和子组件槽；选择器与条件通过资源引用绑定，循环及并发上限使用清单契约。控制算法保留在代码中，不引入配置表达式。API 端点接收方切换清单生成定义，并纳入静态目录及 sdist 离线构建。
+- 扩展已有文件装配验收为 Serial → While → Branch → Parallel → ModelCall，验证两次运行、明确的条件资源、共享状态和模型资源关闭；不新增重复业务测试。57 项针对性测试通过；完整检查 34.04 秒，1217 项 Python 测试通过、1 项平台跳过，前端和原生终端检查通过。
+- 本提交完成 W08 的公开组件补齐；宿主目录、旧声明删除及完整可选组合继续实施。既有公共 ID 不变，不修改用户数据；其他手写文档暂缓统一更新。
+
 ### 完成 W07 Bot 能力与配置拆分
 
 - Bot 独立提供 runtime、conversation、commands、notes、actions、self_control、world_view、cadence 八个插件及其清单、生成声明和静态目录。删除 DefaultAssembly、assembly_config、旧代码装配入口及聚合生命周期；模型、工具、世界服务和后台任务均由显式实例及资源引用装配，不保留等价总工厂。

@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "concurrency": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": ["concurrency"],
+  "additionalProperties": false
+}
