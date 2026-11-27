@@ -26,7 +26,15 @@ def test_metadata_build_tool_and_sdists_are_independent_of_workspace_runtime(tmp
 
     build(ROOT / "tooling/aurora_meta_build", "--wheel", "--no-build-isolation")
     wheels = []
-    for name in ("aurora_config", "aurora_control", "aurora_agent", "aurora_model", "aurora_mcp", "aurora_tools"):
+    for name in (
+        "aurora_config",
+        "aurora_control",
+        "aurora_agent",
+        "aurora_model",
+        "aurora_mcp",
+        "aurora_tools",
+        "aurora_bot",
+    ):
         build(ROOT / "packages" / name, "--sdist", "--no-build-isolation")
         (sdist,) = tmp_path.glob(f"{name}-*.tar.gz")
         with tarfile.open(sdist) as archive:
@@ -46,7 +54,7 @@ from pathlib import Path
 
 class NoRuntime(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith(('aurora_core', 'aurora_config', 'aurora_control', 'aurora_agent', 'aurora_model', 'aurora_mcp', 'aurora_tools', 'litellm', 'mcp')):
+        if fullname.startswith(('aurora_core', 'aurora_config', 'aurora_control', 'aurora_agent', 'aurora_model', 'aurora_mcp', 'aurora_tools', 'aurora_bot', 'litellm', 'mcp')):
             raise AssertionError('静态操作不得导入运行包：' + fullname)
 
 sys.meta_path.insert(0, NoRuntime())
@@ -54,7 +62,7 @@ from aurora_meta_build import generate, read_catalog
 root = Path(sys.argv[1])
 for wheel in sys.argv[2:]:
     sys.path.insert(0, wheel)
-for name in ('aurora_config', 'aurora_control', 'aurora_agent', 'aurora_model', 'aurora_mcp', 'aurora_tools'):
+for name in ('aurora_config', 'aurora_control', 'aurora_agent', 'aurora_model', 'aurora_mcp', 'aurora_tools', 'aurora_bot'):
     generate(root / 'packages' / name, check=True)
     catalog = read_catalog(name.replace('_', '-'))
     assert catalog['schema_version'] == 2

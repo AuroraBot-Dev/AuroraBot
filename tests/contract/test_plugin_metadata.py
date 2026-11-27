@@ -31,6 +31,7 @@ def test_manifest_generated_catalog_and_runtime_definitions_agree():
         "aurora_tools",
         "aurora_world",
         "aurora_memory",
+        "aurora_bot",
     ):
         root = ROOT / "packages" / name
         generate(root, check=True)

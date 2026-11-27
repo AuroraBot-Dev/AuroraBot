@@ -1,0 +1,169 @@
+schema_version = 2
+
+[plugins.runtime]
+entry_point = "aurora_bot.runtime"
+title = "运行所有者"
+summary = "导出本能力的定义、端口和资源，由宿主显式装配"
+requires = [
+    "aurora_agent.react",
+]
+
+[definitions.RUN_CONTROL]
+plugin = "runtime"
+id = "org.aurora.bot:services/run_control"
+kind = "service"
+summary = "按产品实例定位运行管理器"
+
+[definitions.RUN_CONTROL.register_to]
+id = "org.aurora.core:registries/services"
+
+[definitions.RUN_SUBMIT]
+plugin = "runtime"
+id = "org.aurora.bot:operations/run/submit"
+kind = "operation"
+summary = "向实例提交引导并返回运行回执"
+
+[definitions.RUN_SUBMIT.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.RUN_ACTIVATE]
+plugin = "runtime"
+id = "org.aurora.bot:operations/run/activate"
+kind = "operation"
+summary = "显式激活实例"
+
+[definitions.RUN_ACTIVATE.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.RUN_CANCEL]
+plugin = "runtime"
+id = "org.aurora.bot:operations/run/cancel"
+kind = "operation"
+summary = "取消匹配运行并等待收尾"
+
+[definitions.RUN_CANCEL.register_to]
+id = "org.aurora.core:registries/operations"
+
+[definitions.AGENTS]
+plugin = "runtime"
+id = "org.aurora.bot:state/agents"
+kind = "state_key"
+summary = "实例引导队列与接纳进度"
+
+[definitions.AGENTS.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[definitions.MESSAGES]
+plugin = "runtime"
+id = "org.aurora.bot:state/messages"
+kind = "state_key"
+summary = "实例交流上下文"
+
+[definitions.MESSAGES.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[definitions.RUN]
+plugin = "runtime"
+id = "org.aurora.bot:state/run"
+kind = "state_key"
+summary = "实例运行状态"
+
+[definitions.RUN.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[definitions.WORK]
+plugin = "runtime"
+id = "org.aurora.bot:state/react_work"
+kind = "state_key"
+summary = "按运行隔离的产品工作状态"
+
+[definitions.WORK.register_to]
+id = "org.aurora.core:registries/state_keys"
+
+[definitions.PREPARE]
+plugin = "runtime"
+id = "org.aurora.bot:handlers/runtime/prepare"
+kind = "hook_handler"
+summary = "将恢复的未完成状态标记为中断"
+
+[definitions.PREPARE.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.START]
+plugin = "runtime"
+id = "org.aurora.bot:handlers/runtime/start"
+kind = "hook_handler"
+summary = "启动自有调度器并绑定运行操作"
+
+[definitions.START.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.STOP]
+plugin = "runtime"
+id = "org.aurora.bot:handlers/runtime/stop"
+kind = "hook_handler"
+summary = "等待自有运行结束并裁剪工作状态"
+
+[definitions.STOP.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[definitions.CLEAN]
+plugin = "runtime"
+id = "org.aurora.bot:handlers/runtime/clean"
+kind = "hook_handler"
+summary = "解除本实例的运行操作绑定"
+
+[definitions.CLEAN.register_to]
+id = "org.aurora.core:registries/hook_handlers"
+
+[components.operations]
+inject = [
+    "registry",
+]
+plugs = []
+slots = []
+states = []
+optional_states = []
+inputs = []
+optional_inputs = []
+resources = [
+    "operations",
+]
+plugin = "runtime"
+
+[components.runtime]
+inject = [
+    "ctx",
+    "instance_id",
+    "states",
+    "options",
+]
+plugs = [
+    "PREPARE",
+    "START",
+    "STOP",
+    "CLEAN",
+]
+slots = []
+states = [
+    "context",
+    "model_output",
+    "tool_output",
+    "work",
+]
+optional_states = []
+inputs = [
+    "agent",
+    "operations",
+]
+optional_inputs = []
+resources = [
+    "runtime",
+    "owner",
+]
+options = "owner"
+plugin = "runtime"
+
+[contracts.owner]
+format = "json-schema"
+file = "owner.schema.json"
