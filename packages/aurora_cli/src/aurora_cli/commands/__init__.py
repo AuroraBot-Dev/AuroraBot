@@ -3,22 +3,20 @@
 from importlib import import_module
 from pkgutil import iter_modules
 
-from aurora_config import ConfigSchema, ConfigSpec, ConfigTemplate, config_entries
-from aurora_core.bootstrap import REGISTRY_DIRECTORY
+from aurora_config import ConfigSchema, ConfigSpec, ConfigTemplate
+from aurora_core.ctx import StateKey
 from aurora_core.discovery import Plugin
-from aurora_core.ids import Id
-from aurora_core.registry import DefinitionRegistry, RegistryEntry
+from aurora_core.registry import DefinitionRegistry
 
+from .._meta import COMMAND_SCHEMA, CONFIGURATION, HOST_DEFINITIONS
 from ..declarations import COMMANDS, CONFIG, CommandReceiver
 
 
 def install_commands(registry: DefinitionRegistry) -> None:
     """登记命令接收方、描述格式与配置状态。"""
     entries = [
-        RegistryEntry(COMMANDS, "registry", CommandReceiver(), "aurora_cli", register_to=REGISTRY_DIRECTORY),
-        RegistryEntry(
-            Id("org.aurora.cli:schemas/command"),
-            "schema",
+        HOST_DEFINITIONS[COMMANDS].bind(CommandReceiver()),
+        HOST_DEFINITIONS[COMMAND_SCHEMA].bind(
             {
                 "help": "string",
                 "operation": "完整操作 ID，与 executor 二选一",
@@ -27,14 +25,9 @@ def install_commands(registry: DefinitionRegistry) -> None:
                 "arguments": "name/type/option/required 参数列表",
                 "passthrough": "可选的非空透传帮助文本；执行器或 operation 接收原样字符串列表 passthrough",
             },
-            "aurora_cli",
-            register_to=Id("org.aurora.core:registries/schemas"),
         ),
-        *config_entries(
-            Id("org.aurora.cli:configs/default"),
-            ConfigSpec(CONFIG, ConfigTemplate("aurora_cli"), ConfigSchema({})),
-            provider="aurora_cli",
-        ),
+        HOST_DEFINITIONS[CONFIGURATION].bind(ConfigSpec(CONFIG, ConfigTemplate("aurora_cli"), ConfigSchema({}))),
+        HOST_DEFINITIONS[CONFIG].bind(StateKey(ConfigSchema({}).validate, persistent=False)),
     ]
     registry.register_many(entries)
 

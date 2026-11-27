@@ -9,18 +9,8 @@ from typing import Any, TextIO
 
 import tomlkit
 
-from ...declarations import CommandContext, command_plugin
+from ...declarations import CommandContext, builtin_commands
 from ...utils.process import run_process
-
-DEFINITIONS = {
-    f"donk/{name}": {"help": help_text}
-    for name, help_text in (
-        ("show", "显示 Python 工作区版本"),
-        ("major", "升级主版本号"),
-        ("minor", "升级次版本号"),
-        ("patch", "升级修订版本号"),
-    )
-}
 
 
 def _projects(root: Path) -> list[Path]:
@@ -112,7 +102,12 @@ def dispatch(action: str, context: CommandContext) -> int:
 
 
 def plugin():
-    return command_plugin(
+    return builtin_commands(
         __name__,
-        {name: {**spec, "executor": partial(dispatch, name.split("/")[1])} for name, spec in DEFINITIONS.items()},
+        {
+            "donk/show": partial(dispatch, "show"),
+            "donk/major": partial(dispatch, "major"),
+            "donk/minor": partial(dispatch, "minor"),
+            "donk/patch": partial(dispatch, "patch"),
+        },
     )

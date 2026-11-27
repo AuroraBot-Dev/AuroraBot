@@ -1,0 +1,19 @@
+{
+  "help": "以 JSON 整项替换状态",
+  "arguments": [
+    {
+      "name": "key",
+      "type": "id"
+    },
+    {
+      "name": "value",
+      "type": "json"
+    },
+    {
+      "name": "location",
+      "type": "location",
+      "option": true
+    }
+  ],
+  "operation": "org.aurora.core:operations/ctx/set"
+}

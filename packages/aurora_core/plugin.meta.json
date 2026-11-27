@@ -1,0 +1,195 @@
+{
+  "schema_version": 2,
+  "distribution": {
+    "name": "aurora-core",
+    "version": "0.1.0",
+    "description": "AuroraBot microkernel",
+    "requires-python": ">=3.12",
+    "dependencies": []
+  },
+  "manifests": {
+    "src/aurora_core/plugin.meta.toml": {
+      "schema_version": 2,
+      "host": {
+        "name": "aurora_core",
+        "title": "内核宿主目录",
+        "summary": "自举目录、生命周期和 ctx 操作，不作为可选插件启用"
+      },
+      "definitions": {
+        "REGISTRY_DIRECTORY": {
+          "id": "org.aurora.core:registries/registries",
+          "kind": "registry",
+          "summary": "内核分类接收方：registries"
+        },
+        "PLUGINS": {
+          "id": "org.aurora.core:registries/plugins",
+          "kind": "registry",
+          "summary": "内核分类接收方：plugins",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "OPERATIONS": {
+          "id": "org.aurora.core:registries/operations",
+          "kind": "registry",
+          "summary": "内核分类接收方：operations",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "HOOK_SLOTS": {
+          "id": "org.aurora.core:registries/hook_slots",
+          "kind": "registry",
+          "summary": "内核分类接收方：hook_slots",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "HOOK_HANDLERS": {
+          "id": "org.aurora.core:registries/hook_handlers",
+          "kind": "registry",
+          "summary": "内核分类接收方：hook_handlers",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "RESOURCES": {
+          "id": "org.aurora.core:registries/resources",
+          "kind": "registry",
+          "summary": "内核分类接收方：resources",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "SERVICES": {
+          "id": "org.aurora.core:registries/services",
+          "kind": "registry",
+          "summary": "内核分类接收方：services",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "SCHEMAS": {
+          "id": "org.aurora.core:registries/schemas",
+          "kind": "registry",
+          "summary": "内核分类接收方：schemas",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "STATE_KEYS": {
+          "id": "org.aurora.core:registries/state_keys",
+          "kind": "registry",
+          "summary": "内核分类接收方：state_keys",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "EVENTS": {
+          "id": "org.aurora.core:registries/events",
+          "kind": "registry",
+          "summary": "内核分类接收方：events",
+          "register_to": {
+            "id": "org.aurora.core:registries/registries"
+          }
+        },
+        "CONFIG": {
+          "id": "org.aurora.core:lifecycle/config",
+          "kind": "hook_slot",
+          "summary": "宿主生命周期：config",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "PREPARE": {
+          "id": "org.aurora.core:lifecycle/prepare",
+          "kind": "hook_slot",
+          "summary": "宿主生命周期：prepare",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "START": {
+          "id": "org.aurora.core:lifecycle/start",
+          "kind": "hook_slot",
+          "summary": "宿主生命周期：start",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "STOP": {
+          "id": "org.aurora.core:lifecycle/stop",
+          "kind": "hook_slot",
+          "summary": "宿主生命周期：stop",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "CLEAN": {
+          "id": "org.aurora.core:lifecycle/clean",
+          "kind": "hook_slot",
+          "summary": "宿主生命周期：clean",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "CTX_GET": {
+          "id": "org.aurora.core:operations/ctx/get",
+          "kind": "operation",
+          "summary": "共享状态操作：get",
+          "register_to": {
+            "id": "org.aurora.core:registries/operations"
+          }
+        },
+        "CTX_SET": {
+          "id": "org.aurora.core:operations/ctx/set",
+          "kind": "operation",
+          "summary": "共享状态操作：set",
+          "register_to": {
+            "id": "org.aurora.core:registries/operations"
+          }
+        },
+        "CTX_DELETE": {
+          "id": "org.aurora.core:operations/ctx/delete",
+          "kind": "operation",
+          "summary": "共享状态操作：delete",
+          "register_to": {
+            "id": "org.aurora.core:registries/operations"
+          }
+        },
+        "CTX_LIST": {
+          "id": "org.aurora.core:operations/ctx/list",
+          "kind": "operation",
+          "summary": "共享状态操作：list",
+          "register_to": {
+            "id": "org.aurora.core:registries/operations"
+          }
+        },
+        "CTX_SUBSCRIBE": {
+          "id": "org.aurora.core:operations/ctx/subscribe",
+          "kind": "operation",
+          "summary": "共享状态操作：subscribe",
+          "register_to": {
+            "id": "org.aurora.core:registries/operations"
+          }
+        },
+        "CTX_UNSUBSCRIBE": {
+          "id": "org.aurora.core:operations/ctx/unsubscribe",
+          "kind": "operation",
+          "summary": "共享状态操作：unsubscribe",
+          "register_to": {
+            "id": "org.aurora.core:registries/operations"
+          }
+        },
+        "CTX_CHANGED": {
+          "id": "org.aurora.core:events/ctx/changed",
+          "kind": "event",
+          "summary": "共享状态变化事件",
+          "register_to": {
+            "id": "org.aurora.core:registries/events"
+          }
+        }
+      }
+    }
+  }
+}

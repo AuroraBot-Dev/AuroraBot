@@ -1,0 +1,4 @@
+{
+  "help": "快速启动完整 Bot 后端，读取项目 .env 与 data",
+  "passthrough": "参数原样交给 scripts/bot.py；无参数使用项目默认配置"
+}

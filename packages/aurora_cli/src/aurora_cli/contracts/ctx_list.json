@@ -1,0 +1,16 @@
+{
+  "help": "枚举已赋值地址",
+  "arguments": [
+    {
+      "name": "key",
+      "type": "id",
+      "option": true
+    },
+    {
+      "name": "location",
+      "type": "location",
+      "option": true
+    }
+  ],
+  "runtime": true
+}

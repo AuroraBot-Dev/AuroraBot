@@ -10,9 +10,18 @@ from aurora_core.discovery import Plugin
 from aurora_core.ids import Id
 from aurora_core.registry import DefinitionRegistry, RegistryEntry
 
-COMMANDS = Id("org.aurora.cli:registries/commands")
-CONFIG = Id("org.aurora.cli:state/config")
+from ._meta import COMMANDS, CONFIG, HOST_DEFINITIONS
 
+__all__ = [
+    "COMMANDS",
+    "CONFIG",
+    "Command",
+    "CommandContext",
+    "CommandReceiver",
+    "builtin_commands",
+    "command_plugin",
+    "read_command",
+]
 
 ARGUMENT_TYPES = frozenset({"string", "integer", "json", "id", "location", "flag"})
 ALLOWED_SPEC_FIELDS = frozenset({"help", "operation", "arguments", "executor", "runtime", "passthrough"})
@@ -59,6 +68,25 @@ def command_plugin(
             for name, spec in definitions.items()
         ),
     )
+
+
+def builtin_commands(provider: str, executors: Mapping[str, Callable[..., object]]) -> Plugin:
+    """绑定宿主目录的命令定义与纯数据契约，执行函数由所属命令模块提供。"""
+    import json
+    from importlib.resources import files
+
+    entries = []
+    for identity, definition in HOST_DEFINITIONS.items():
+        if definition.kind != "command" or definition.provider != provider:
+            continue
+        name = identity.local_path
+        spec = json.loads(
+            files("aurora_cli").joinpath("contracts/" + name.replace("/", "_") + ".json").read_text(encoding="utf-8")
+        )
+        if name in executors:
+            spec["executor"] = executors[name]
+        entries.append(definition.bind(spec))
+    return Plugin(provider, tuple(entries))
 
 
 def read_command(entry: RegistryEntry) -> Command:

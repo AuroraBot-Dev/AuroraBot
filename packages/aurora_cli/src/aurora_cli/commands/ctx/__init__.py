@@ -7,20 +7,7 @@ from aurora_core.ids import Id
 from aurora_core.invocation import invoke_operation
 from aurora_core.json_data import encode_json
 
-from ...declarations import CommandContext, command_plugin
-
-KEY = {"name": "key", "type": "id"}
-WHERE = {"name": "location", "type": "location", "option": True}
-DEFINITIONS = {
-    "ctx/get": {"help": "读取精确状态地址", "arguments": [KEY, WHERE]},
-    "ctx/set": {"help": "以 JSON 整项替换状态", "arguments": [KEY, {"name": "value", "type": "json"}, WHERE]},
-    "ctx/delete": {"help": "删除精确状态地址", "arguments": [KEY, WHERE]},
-    "ctx/list": {"help": "枚举已赋值地址", "arguments": [{**KEY, "option": True}, WHERE]},
-    "ctx/watch": {"help": "观察当前宿主后续变化，Ctrl+C 退出", "arguments": [{**KEY, "option": True}, WHERE]},
-}
-for name, spec in DEFINITIONS.items():
-    if name != "ctx/watch":
-        spec["operation"] = f"org.aurora.core:operations/{name}"
+from ...declarations import CommandContext, builtin_commands
 
 
 def address_data(address: StateAddress) -> dict[str, object]:
@@ -51,8 +38,4 @@ async def watch_states(context: CommandContext, **filters: object) -> None:
 
 
 def plugin():
-    definitions = {name: dict(spec) for name, spec in DEFINITIONS.items()}
-    definitions["ctx/list"].pop("operation")
-    definitions["ctx/list"].update(executor=list_states, runtime=True)
-    definitions["ctx/watch"].update(executor=watch_states, runtime=True)
-    return command_plugin(__name__, definitions)
+    return builtin_commands(__name__, {"ctx/list": list_states, "ctx/watch": watch_states})

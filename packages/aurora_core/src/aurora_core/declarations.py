@@ -41,9 +41,9 @@ def _decorate(declaration: Declaration) -> Callable[[F], F]:
 
 def operation(identity: str | Id, *, interface: object | None = None) -> Callable[[F], F]:
     """为同步或异步函数附加 operation 声明，保留原函数与调用签名。"""
-    return _decorate(
-        Declaration(_identity(identity), "operation", Id("org.aurora.core:registries/operations"), interface=interface)
-    )
+    from ._meta import OPERATIONS
+
+    return _decorate(Declaration(_identity(identity), "operation", OPERATIONS, interface=interface))
 
 
 def hook_handler(identity: str | Id, *, slot: str | Id, interface: object | None = None) -> Callable[[F], F]:

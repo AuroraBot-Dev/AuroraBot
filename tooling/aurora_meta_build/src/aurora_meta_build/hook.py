@@ -5,7 +5,7 @@ from pathlib import Path
 
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
-from . import generate
+from . import generate, sources
 
 
 class MetadataBuildHook(BuildHookInterface):
@@ -15,7 +15,7 @@ class MetadataBuildHook(BuildHookInterface):
         if self.target_name == "wheel":
             metadata = {str(root / "plugin.meta.json"): "plugin.meta.json"}
             project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-            for source in project["tool"]["aurora-meta-build"]["plugins"]:
+            for source in sources(project):
                 path = root / source["manifest"]
                 metadata[str(path)] = source["manifest"]
                 manifest = tomllib.loads(path.read_text(encoding="utf-8"))

@@ -2,9 +2,7 @@
 
 import asyncio
 
-from ...declarations import CommandContext, command_plugin
-
-DEFINITIONS = {"run": {"help": "启动选定装配，Ctrl+C 停止"}}
+from ...declarations import CommandContext, builtin_commands
 
 
 async def wait_until_cancelled() -> None:
@@ -16,7 +14,4 @@ async def dispatch(context: CommandContext) -> None:
 
 
 def plugin():
-    return command_plugin(
-        __name__,
-        {"run": {**DEFINITIONS["run"], "executor": dispatch, "runtime": True}},
-    )
+    return builtin_commands(__name__, {"run": dispatch})

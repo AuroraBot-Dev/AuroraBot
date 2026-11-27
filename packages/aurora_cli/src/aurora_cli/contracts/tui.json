@@ -1,0 +1,4 @@
+{
+  "help": "快速启动 TUI，使用项目 .env 中的访问令牌",
+  "passthrough": "参数原样交给 scripts/tui.py；无参数使用项目默认配置"
+}

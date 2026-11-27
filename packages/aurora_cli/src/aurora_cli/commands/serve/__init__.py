@@ -5,7 +5,7 @@ import logging
 
 from aurora_core.ids import Id
 
-from ...declarations import CONFIG, CommandContext, command_plugin
+from ...declarations import CONFIG, CommandContext, builtin_commands
 
 
 async def dispatch(
@@ -56,22 +56,4 @@ async def dispatch(
 
 
 def plugin():
-    return command_plugin(
-        __name__,
-        {
-            "serve": {
-                "help": "启动本机 API；keys 为开放状态 ID 数组（默认 CLI config），endpoints 为显式开放的产品端点 ID 数组",
-                "executor": dispatch,
-                "runtime": True,
-                "arguments": [
-                    {"name": "port", "type": "integer", "option": True},
-                    {"name": "keys", "type": "json", "option": True},
-                    {"name": "read_only_keys", "type": "json", "option": True},
-                    {"name": "endpoints", "type": "json", "option": True},
-                    {"name": "token_env", "type": "string", "option": True},
-                    {"name": "allowed_origins", "type": "json", "option": True},
-                    {"name": "allowed_hosts", "type": "json", "option": True},
-                ],
-            }
-        },
-    )
+    return builtin_commands(__name__, {"serve": dispatch})

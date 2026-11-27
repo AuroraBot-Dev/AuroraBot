@@ -7,29 +7,22 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Literal
 
+from ._meta import CLEAN, CONFIG, HOST_DEFINITIONS, PREPARE, START, STOP
 from .ctx import Context
 from .hooks import HookConnection, HookConnections, HookSlot
 from .ids import Id
 from .invocation import invoke_callable
 from .persistence import ContextPersistence
-from .registry import DefinitionRegistry, RegistryEntry
+from .registry import DefinitionRegistry
 from .storage import StorageService
 
-CONFIG = Id("org.aurora.core:lifecycle/config")
-PREPARE = Id("org.aurora.core:lifecycle/prepare")
-START = Id("org.aurora.core:lifecycle/start")
-STOP = Id("org.aurora.core:lifecycle/stop")
-CLEAN = Id("org.aurora.core:lifecycle/clean")
 logger = logging.getLogger(__name__)
 
 
 def install_lifecycle_slots(registry: DefinitionRegistry) -> None:
     """登记 config、prepare、start、stop、clean 五个无参数生命周期插槽。"""
     registry.register_many(
-        RegistryEntry(
-            identity, "hook_slot", HookSlot(), "aurora_core", register_to=Id("org.aurora.core:registries/hook_slots")
-        )
-        for identity in (CONFIG, PREPARE, START, STOP, CLEAN)
+        HOST_DEFINITIONS[identity].bind(HookSlot()) for identity in (CONFIG, PREPARE, START, STOP, CLEAN)
     )
 
 

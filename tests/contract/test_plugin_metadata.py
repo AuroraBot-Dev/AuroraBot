@@ -33,12 +33,43 @@ def test_manifest_generated_catalog_and_runtime_definitions_agree():
         "aurora_memory",
         "aurora_bot",
         "aurora_api",
+        "aurora_core",
+        "aurora_cli",
     ):
         root = ROOT / "packages" / name
         generate(root, check=True)
         catalog = json.loads((root / "plugin.meta.json").read_text(encoding="utf-8"))
         assert catalog["schema_version"] == 2
         for manifest in catalog["manifests"].values():
+            if "host" in manifest:
+                from aurora_cli.commands import discover_commands, install_commands
+                from aurora_core.bootstrap import bootstrap
+                from aurora_core.ctx import install_context
+                from aurora_core.lifecycle import install_lifecycle_slots
+
+                registry = bootstrap()
+                if name == "aurora_core":
+                    install_lifecycle_slots(registry)
+                    ctx = install_context(registry)
+                    ctx.close()
+                else:
+                    install_commands(registry)
+                    registry.register_many(entry for plugin in discover_commands() for entry in plugin.entries)
+                actual = {
+                    str(entry.id): entry
+                    for entry in registry.entries()
+                    if entry.id.namespace == "org.aurora." + name.removeprefix("aurora_")
+                }
+                expected = {item["id"]: item for item in manifest["definitions"].values()}
+                assert actual.keys() == expected.keys()
+                for identity, entry in actual.items():
+                    assert entry.kind == expected[identity]["kind"]
+                    assert entry.provider == expected[identity].get("provider", manifest["host"]["name"])
+                    if entry.kind == "command":
+                        assert {k: v for k, v in cast(dict, entry.target).items() if k != "executor"} == manifest[
+                            "contracts"
+                        ][expected[identity]["contract"]]["content"]
+                continue
             (owner,) = manifest["plugins"].values()
             module, function = owner["factory"].split(":")
             exported = getattr(import_module(module), function)()

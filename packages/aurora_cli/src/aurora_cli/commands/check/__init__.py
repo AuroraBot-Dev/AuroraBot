@@ -3,16 +3,10 @@
 from pathlib import Path
 from typing import TextIO
 
-from ...declarations import CommandContext, command_plugin
+from ...declarations import CommandContext, builtin_commands
 from ...utils.process import run_process
 
 FLAGS = ("lint", "test", "full", "coverage", "fix", "unsafe_fixes", "check")
-DEFINITIONS = {
-    "check": {
-        "help": "默认运行静态检查与快速边界测试；--full 运行完整测试，--coverage 统计完整覆盖率",
-        "arguments": [{"name": name, "type": "flag", "option": True} for name in FLAGS],
-    }
-}
 
 
 def execute(root: Path, output: TextIO, **options: object) -> int:
@@ -27,4 +21,4 @@ def dispatch(context: CommandContext, **options: object) -> int:
 
 
 def plugin():
-    return command_plugin(__name__, {"check": {**DEFINITIONS["check"], "executor": dispatch}})
+    return builtin_commands(__name__, {"check": dispatch})

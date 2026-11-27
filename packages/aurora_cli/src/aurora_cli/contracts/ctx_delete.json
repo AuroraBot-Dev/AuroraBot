@@ -1,0 +1,15 @@
+{
+  "help": "删除精确状态地址",
+  "arguments": [
+    {
+      "name": "key",
+      "type": "id"
+    },
+    {
+      "name": "location",
+      "type": "location",
+      "option": true
+    }
+  ],
+  "operation": "org.aurora.core:operations/ctx/delete"
+}

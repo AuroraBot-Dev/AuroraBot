@@ -11,9 +11,9 @@ from pathlib import Path
 
 def _manifest(root: Path, path: Path, project: dict) -> dict:
     manifest = tomllib.loads(path.read_text(encoding="utf-8"))
-    if manifest["schema_version"] != 2 or len(manifest["plugins"]) != 1:
-        raise ValueError("版本 2 的每份清单须描述一个公开插件")
-    for plugin in manifest["plugins"].values():
+    if manifest["schema_version"] != 2 or (len(manifest.get("plugins", {})) + ("host" in manifest)) != 1:
+        raise ValueError("版本 2 的每份清单须描述一个公开插件或宿主目录")
+    for plugin in manifest.get("plugins", {}).values():
         plugin["factory"] = project["entry-points"]["aurora.plugins"][plugin["entry_point"]]
     for item in manifest["definitions"].values():
         if "slot" in item or "connect_to" in item:
@@ -27,6 +27,25 @@ def _manifest(root: Path, path: Path, project: dict) -> dict:
             module, function = contract["export"].split(":")
             contract["content"] = runpy.run_path(str(root / "src" / (module.replace(".", "/") + ".py")))[function]()
     return manifest
+
+
+def _host_module(manifest: dict) -> str:
+    lines = [
+        '"""由 aurora-meta 生成；宿主公共声明的来源为 plugin.meta.toml。"""',
+        "from aurora_core.components import Definition",
+        "from aurora_core.ids import Id",
+        "",
+    ]
+    definitions = manifest["definitions"]
+    lines.extend(f"{symbol} = Id({item['id']!r})" for symbol, item in definitions.items())
+    lines += ["", "HOST_DEFINITIONS = {"]
+    for symbol, item in definitions.items():
+        receiver = item.get("register_to")
+        reference = f"Id({receiver['id']!r})" if receiver else "None"
+        provider = item.get("provider", manifest["host"]["name"])
+        lines.append(f"    {symbol}: Definition({symbol}, {item['kind']!r}, {provider!r}, register_to={reference}),")
+    lines += ["}", ""]
+    return "\n".join(lines)
 
 
 def _module(manifest: dict) -> str:
@@ -95,6 +114,11 @@ def _module(manifest: dict) -> str:
     return "\n".join(lines)
 
 
+def sources(project: dict) -> list[dict]:
+    configuration = project["tool"]["aurora-meta-build"]
+    return [*configuration.get("plugins", []), *configuration.get("hosts", [])]
+
+
 def outputs(root: Path) -> dict[Path, str]:
     """每份清单使用自己的符号表；发行目录保留来源相对路径。"""
     pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
@@ -102,20 +126,20 @@ def outputs(root: Path) -> dict[Path, str]:
     catalog = {"schema_version": 2, "distribution": project, "manifests": {}}
     result = {}
     identities, names = set(), set()
-    for source in pyproject["tool"]["aurora-meta-build"]["plugins"]:
+    for source in sources(pyproject):
         manifest = _manifest(root, root / source["manifest"], project)
         for item in manifest["definitions"].values():
             identity = item["id"]
             if identity in identities:
                 raise ValueError(f"发行目录包含重复公共 ID：{identity}")
             identities.add(identity)
-        for plugin in manifest["plugins"].values():
+        for plugin in manifest.get("plugins", {}).values():
             name = plugin["entry_point"]
             if name in names:
                 raise ValueError(f"发行目录包含重复插件：{name}")
             names.add(name)
         catalog["manifests"][source["manifest"]] = manifest
-        result[root / source["module"]] = _module(manifest)
+        result[root / source["module"]] = _host_module(manifest) if "host" in manifest else _module(manifest)
     result[root / "plugin.meta.json"] = json.dumps(catalog, ensure_ascii=False, indent=2) + "\n"
     return result
 
