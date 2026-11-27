@@ -5,11 +5,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from types import MethodType
 from typing import Any, cast
 
 from aurora_core.ctx import Context
-from aurora_core.declarations import plug_id
 from aurora_core.discovery import Plugin
 from aurora_core.hooks import HookConnections
 from aurora_core.ids import Id
@@ -85,14 +83,14 @@ class AssemblyPlan:
         plugs = {}
         for name, spec in self.instances.items():
             export = enabled[spec["plugin"]].components[spec["component"]]
-            factory = export.factory
-            instance = factory.create(**{key: services[key] for key in export.inject})
-            plugs[name] = {plug_id(method): MethodType(method, instance) for method in factory.plugs}
+            component = export.create(services, instance_id=name)
+            component.bind({})
+            plugs[name] = component.exports.plugs
             components.append(
                 LifecycleComponent(
                     name,
                     tuple(spec["depends_on"]),
-                    MethodType(factory.stop_accepting, instance) if factory.stop_accepting is not None else None,
+                    component.exports.stop_accepting,
                 )
             )
         hooks: HookConnections = services["hooks"]

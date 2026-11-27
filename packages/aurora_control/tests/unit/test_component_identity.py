@@ -5,7 +5,7 @@ from uuid import UUID
 
 import pytest
 from aurora_agent.model import ModelCall
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_control import (
     CONTROL_STATE,
     Branch,

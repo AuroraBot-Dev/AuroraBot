@@ -96,7 +96,13 @@ def test_invalid_and_duplicate_declarations_fail_early():
 
 def test_plug_identity_binds_independent_methods_without_declaring_a_target_slot():
     from aurora_core import plug
-    from aurora_core.components import ComponentDeclaration, ComponentFactory, Definition, PluginDeclaration
+    from aurora_core.components import (
+        ComponentDeclaration,
+        ComponentFactory,
+        Definition,
+        InstanceExport,
+        PluginDeclaration,
+    )
     from aurora_core.declarations import plug_id
 
     identity = Id("dev.example:handlers/read")
@@ -116,11 +122,23 @@ def test_plug_identity_binds_independent_methods_without_declaring_a_target_slot
     declaration = PluginDeclaration(
         "example",
         (Definition(identity, "hook_handler", "example"),),
-        components={"service": ComponentDeclaration(plugs=(identity,))},
+        components={"service": ComponentDeclaration(inject=("value",), plugs=(identity,))},
     )
-    factory = ComponentFactory(Service, (Service.read,))
+    factory = ComponentFactory(
+        Service, lambda instance: InstanceExport(plugs={identity: instance.read}), (Service.read,)
+    )
     plugin = declaration.bind(targets={}, components={"service": factory})
     assert plugin.entries[0].target is Service.read
     assert plugin.entries[0].slot is None
+    first = plugin.components["service"].create({"value": 7}, instance_id="first")
+    second = plugin.components["service"].create({"value": 8}, instance_id="second")
+    assert asyncio.run(first.exports.plugs[identity]()) == 7
+    assert asyncio.run(second.exports.plugs[identity]()) == 8
+    incomplete = ComponentFactory(Service, lambda instance: InstanceExport(), (Service.read,))
+    incomplete_plugin = declaration.bind(targets={}, components={"service": incomplete})
+    with pytest.raises(ValueError, match="导出"):
+        incomplete_plugin.components["service"].create({"value": 1}, instance_id="incomplete")
     with pytest.raises(ValueError, match="插头导出"):
-        declaration.bind(targets={}, components={"service": ComponentFactory(Service)})
+        declaration.bind(
+            targets={}, components={"service": ComponentFactory(Service, lambda instance: InstanceExport())}
+        )

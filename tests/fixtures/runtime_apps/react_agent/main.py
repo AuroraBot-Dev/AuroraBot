@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from aurora_agent.model import ModelCall
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import ReActAgent
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import ReActContext, ReActDefaults
@@ -98,8 +98,9 @@ async def run(args: argparse.Namespace) -> None:
 
     client = FakeModel(respond, delay=0.01)
     model = ModelCall(
-        ctx, client, instance_id="model", request_state=transient("model_input"), output_state=transient("model_output")
+        ctx, instance_id="model", request_state=transient("model_input"), output_state=transient("model_output")
     )
+    model.bind(client)
     tools = ToolExecutor(
         ctx,
         registry,

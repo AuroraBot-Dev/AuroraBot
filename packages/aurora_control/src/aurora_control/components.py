@@ -2,11 +2,13 @@
 
 import asyncio
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 
+import aurora_core as aurora
 from aurora_core.ctx import Context
-from aurora_core.ids import Id
 
-from .execution import CONTROL_STATE, ExecutionLink, ExecutionPlug, ExecutionRequest, ExecutionSlot
+from ._meta import BRANCH, CONTROL, CONTROL_STATE, PARALLEL, SERIAL, SERIAL_EXECUTE, WHILE
+from .execution import ExecutionLink, ExecutionPlug, ExecutionRequest, ExecutionSlot
 
 
 class Controller:
@@ -16,7 +18,7 @@ class Controller:
     终态通过 ctx.subscribe 观察，随后删除本次状态；调用等待决定完成，不保留调用历史。
     """
 
-    definition_id = Id("org.aurora.control:handlers/control")
+    definition_id = CONTROL
 
     def __init__(self, ctx: Context, slot: ExecutionSlot) -> None:
         if slot.definition_id != self.definition_id:
@@ -45,6 +47,11 @@ class Controller:
         self.ctx.set(CONTROL_STATE, {**record, **changes}, location=location)
 
     async def execute(self, request: ExecutionRequest) -> None:
+        async with self._execution(request):
+            await self._run(request)
+
+    @asynccontextmanager
+    async def _execution(self, request: ExecutionRequest):
         """发布 running 与终态后清理本次状态；异常与取消继续传播给调用方。"""
         self.ctx.set(
             CONTROL_STATE,
@@ -52,7 +59,7 @@ class Controller:
             location=self._location(request),
         )
         try:
-            await self._run(request)
+            yield
         except asyncio.CancelledError:
             self._update(request, status="cancelled")
             raise
@@ -74,11 +81,13 @@ class Controller:
 class Serial(Controller):
     """按连接顺序等待子组件，失败或取消立即终止后续调用。"""
 
-    definition_id = Id("org.aurora.control:handlers/control/serial")
+    definition_id = SERIAL
 
-    async def _run(self, request: ExecutionRequest) -> None:
-        for link in self.slot.links():
-            await self._invoke(link, request)
+    @aurora.plug(SERIAL_EXECUTE)
+    async def execute(self, request: ExecutionRequest) -> None:
+        async with self._execution(request):
+            for link in self.slot.links():
+                await self._invoke(link, request)
 
 
 class Branch(Controller):
@@ -87,7 +96,7 @@ class Branch(Controller):
     选择结果仅为控制信息。返回未连接实例时明确失败，不默默回退。
     """
 
-    definition_id = Id("org.aurora.control:handlers/control/branch")
+    definition_id = BRANCH
 
     def __init__(self, ctx: Context, slot: ExecutionSlot, select: Callable[[ExecutionRequest], str | None]) -> None:
         super().__init__(ctx, slot)
@@ -115,7 +124,7 @@ class While(Controller):
     每次迭代完成后让出事件循环以接收取消。达到上限且仍需继续时抛出异常。
     """
 
-    definition_id = Id("org.aurora.control:handlers/control/while")
+    definition_id = WHILE
 
     def __init__(
         self,
@@ -153,7 +162,7 @@ class Parallel(Controller):
     并发指宿主事件循环中的异步工作，不将同步代码移到线程。
     """
 
-    definition_id = Id("org.aurora.control:handlers/control/parallel")
+    definition_id = PARALLEL
 
     def __init__(self, ctx: Context, slot: ExecutionSlot, *, concurrency: int) -> None:
         super().__init__(ctx, slot)

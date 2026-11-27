@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 from aurora_agent.model import ModelCall
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import ReActAgent
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import ReActContext, ReActDefaults
@@ -57,7 +57,8 @@ def factory():
             decision=transient("decision"),
             max_iterations=5,
         )
-        model = ModelCall(ctx, client, request_state=transient("request"), output_state=transient("response"))
+        model = ModelCall(ctx, request_state=transient("request"), output_state=transient("response"))
+        model.bind(client)
         tools = ToolExecutor(
             ctx,
             registry,

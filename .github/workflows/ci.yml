@@ -53,7 +53,8 @@ jobs:
       - name: 构建全部 wheel 与 Panel
         if: matrix.python == '3.12'
         run: |
-          uv build --all-packages --wheel --out-dir build/wheels
+          uv build --package aurora-meta-build --wheel --out-dir build/meta
+          UV_FIND_LINKS="$PWD/build/meta" uv build --all-packages --wheel --out-dir build/wheels
           pnpm --filter @aurorabot/panel build
       - name: 保存 Python 分发包
         if: matrix.python == '3.12'

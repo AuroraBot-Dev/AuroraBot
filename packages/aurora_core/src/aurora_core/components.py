@@ -13,20 +13,68 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class InstanceExport:
+    """实例显式导出的实际端口与资源；core 不解释执行端口的具体类型。"""
+
+    plugs: Mapping[Id, Callable[..., Any]] = field(default_factory=dict)
+    slots: Mapping[Id, object] = field(default_factory=dict)
+    resources: Mapping[str, object] = field(default_factory=dict)
+    stop_accepting: Callable[[], object] | None = None
+
+
+@dataclass(frozen=True)
 class ComponentFactory:
-    """同步创建组件；导出未绑定方法和组件自己的停止接收动作。"""
+    """创建、显式导出与资源绑定均由插件实现；plugs 提供静态方法定义。"""
 
     create: Callable[..., Any]
+    export: Callable[[Any], InstanceExport]
     plugs: tuple[Callable[..., Any], ...] = ()
-    stop_accepting: Callable[..., object] | None = None
+    bind: Callable[[Any, Mapping[str, Any]], None] | None = None
+
+
+@dataclass(frozen=True)
+class ComponentInstance:
+    """已创建和导出的组件；资源在全部实例创建后绑定。"""
+
+    instance: Any
+    exports: InstanceExport
+    factory: ComponentFactory
+    declaration: "ComponentDeclaration"
+
+    def bind(self, resources: Mapping[str, object]) -> None:
+        selected = {name: resources[name] for name in self.declaration.inputs}
+        if self.factory.bind is not None:
+            self.factory.bind(self.instance, selected)
 
 
 @dataclass(frozen=True)
 class ComponentExport:
-    """清单声明的注入服务与代码工厂。"""
+    """清单声明与代码工厂；构造入口只接收清单列出的服务和参数。"""
 
     factory: ComponentFactory
-    inject: tuple[str, ...] = ()
+    declaration: "ComponentDeclaration"
+
+    def create(
+        self,
+        services: Mapping[str, Any],
+        *,
+        instance_id: str,
+        options: Mapping[str, object] | None = None,
+        states: Mapping[str, object] | None = None,
+    ) -> ComponentInstance:
+        states = {} if states is None else states
+        for role in self.declaration.states:
+            states[role]
+        arguments = dict(services, instance_id=instance_id, options={} if options is None else options, states=states)
+        instance = self.factory.create(**{name: arguments[name] for name in self.declaration.inject})
+        exports = self.factory.export(instance)
+        if (
+            exports.plugs.keys() != set(self.declaration.plugs)
+            or exports.slots.keys() != set(self.declaration.slots)
+            or exports.resources.keys() != set(self.declaration.resources)
+        ):
+            raise ValueError("组件实例的插头、插槽或资源导出与清单不一致")
+        return ComponentInstance(instance, exports, self.factory, self.declaration)
 
 
 @dataclass(frozen=True)
@@ -47,10 +95,15 @@ class Definition:
 
 @dataclass(frozen=True)
 class ComponentDeclaration:
-    """组件导出的插头身份和所需宿主服务。"""
+    """组件端口、状态角色、资源输入/输出和构造参数契约。"""
 
     inject: tuple[str, ...] = ()
     plugs: tuple[Id, ...] = ()
+    slots: tuple[Id, ...] = ()
+    states: tuple[str, ...] = ()
+    resources: tuple[str, ...] = ()
+    inputs: tuple[str, ...] = ()
+    options: object | None = None
 
 
 @dataclass(frozen=True)
@@ -78,7 +131,9 @@ class PluginDeclaration:
                 if identity in implementations and implementations[identity] is not method:
                     raise ValueError(f"插头存在多个实现：{identity}")
                 implementations[identity] = method
-            exports[name] = ComponentExport(factory, declaration.inject)
+            if declaration.inputs and factory.bind is None:
+                raise ValueError(f"组件 {name} 声明了资源输入但没有 bind")
+            exports[name] = ComponentExport(factory, declaration)
         if implementations.keys() != {definition.id for definition in self.definitions}:
             raise ValueError(f"插件 {self.name} 的定义实现与清单不一致")
         return Plugin(

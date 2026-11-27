@@ -2,6 +2,15 @@
 
 ## 2026-11-27
 
+### 完成 W03 元信息生成器与真实实例导出
+
+- 提取独立 aurora-meta-build 构建工具，仅依赖标准库；支持多清单、各清单独立符号、版本 2 发行目录、生成与只读核对，以及不加载插件的已安装目录查询。删除 config 包内生成算法，各包构建钩子调用同一实现；CI 先构建工具 wheel，再构建运行包。
+- core 的 ComponentFactory 提供 create/export/bind；实例显式导出实际插头、槽、资源与停止接纳回调。清单记录宿主注入、状态角色、资源输入/输出和参数契约；不扫描方法、不补缺失导出、不在 core 引入 control 或模型依赖。
+- config 清单移至实现旁并导出配置服务；control 的公共定义归清单，Serial 导出 ExecutionPlug/ExecutionSlot；ModelCall 用 @aurora.plug 声明执行身份，创建后显式 bind 聊天资源。现有程序化消费者、插件工厂入口和配置宿主一起切换，不保留旧构造签名或转发入口；公开插件名、ID 和用户配置路径不变。W04 的宿主/装配格式切换尚未实施。
+- 复用并扩展元信息及装饰器测试：验证同发行两份清单的同名局部符号不冲突、产物过期检查、真实 Serial→ModelCall 状态握手、显式资源绑定和缺失导出。新增一条分发集成测试，从 config/control/agent 的 sdist 在工作区外隔离构建 wheel，并禁止运行包/SDK 导入后执行生成核对与静态读取；仅增加 3 项测试，无重复协议覆盖。
+- 验收：82 项针对性测试通过；Python 3.12 日常检查 12.97 秒、完整检查 36.93 秒，1225 项 Python、131 项前端、5 项原生终端测试通过，保留 1 项平台跳过及 38 条依赖警告。14 个 wheel 构建通过；工作区外复验 control/tools/agent 和 MCP 两个桥的独立安装与执行，构建工具不成为运行依赖；仅安装工具及三个无依赖插件 wheel 时也可查询目录，不需要 core/model/MCP/SDK。未调用真实模型供应商。
+- 按用户要求，README、AGENTS 和其他手写文档统一更新暂缓，本轮只保留这份变更与验收记录。生成的 _meta.py/plugin.meta.json 属于构建产物，不另维护实现细节清单。
+
 ### 完成 W02 模型与 MCP 发行边界拆分
 
 - 新增 aurora_model、aurora_mcp，删除 aurora_adapter 的发行声明、源码和旧入口。模型协议与中立目录由 aurora_model 提供，模型 TOML 声明由 aurora_model.configuration 提供，LiteLLM 工厂由 aurora_model.litellm 提供；config 与 litellm 为独立 extra。ModelAdapter/ADAPTERS 归 registry，不通过配置模块获取协议目录；基础导入和插件发现不加载供应商 SDK。

@@ -1,4 +1,4 @@
-"""由 build_meta.py 生成；公共定义的唯一编辑来源为 plugin.meta.toml。"""
+"""由 aurora-meta 生成；公共声明的编辑来源为同目录 plugin.meta.toml。"""
 
 from aurora_core.components import ComponentDeclaration, Definition, PluginDeclaration
 from aurora_core.ids import Id
@@ -34,6 +34,14 @@ configuration_plugin = PluginDeclaration(
     ),
     requires=(),
     components={
-        "configuration": ComponentDeclaration(inject=("registry", "ctx", "storage"), plugs=(LOAD,)),
+        "configuration": ComponentDeclaration(
+            plugs=(LOAD,),
+            slots=(),
+            inject=("registry", "ctx", "storage"),
+            states=(),
+            resources=("configuration",),
+            inputs=(),
+            options=None,
+        ),
     },
 ).bind

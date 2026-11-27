@@ -10,7 +10,6 @@ from aurora_core.hooks import HookConnection, HookConnections, HookSlot
 from aurora_core.ids import Id
 from aurora_core.registry import RegistryEntry
 
-CONTROL_STATE = Id("org.aurora.control:state/control")
 _logger = logging.getLogger(__name__)
 
 
@@ -129,9 +128,11 @@ class ExecutionPlug:
     def __post_init__(self) -> None:
         _check_identity(self.definition_id, self.instance_id)
 
+    port_id: Id | None = field(default=None, kw_only=True)
+
     @property
     def execute_id(self) -> Id:
-        return Id(f"{self.definition_id}/execute")
+        return self.port_id if self.port_id is not None else Id(f"{self.definition_id}/execute")
 
     @property
     def reference(self) -> str:

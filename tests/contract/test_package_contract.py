@@ -26,7 +26,8 @@ def test_agent_and_tools_distributions_own_their_plugins_and_definitions():
         names.append(f"aurora_agent.{module}")
         matches = [point for point in entries if point.name == names[-1]]
         assert len(matches) == 1
-        assert matches[0].value == f"aurora_agent.{module}:plugin"
+        path = "aurora_agent.plugins.model" if module == "model" else f"aurora_agent.{module}"
+        assert matches[0].value == f"{path}:plugin"
     tools = load_plugins(enabled=["aurora_tools"])[0]
     assert all(entry.id.namespace == "org.aurora.tools" and entry.provider == "aurora_tools" for entry in tools.entries)
     assert {point.name for point in metadata.distribution("aurora-tools").entry_points} == {"aurora_tools"}

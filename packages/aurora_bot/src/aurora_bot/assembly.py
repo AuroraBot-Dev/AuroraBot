@@ -391,12 +391,12 @@ class DefaultAssembly:
         )
         model = ModelCall(
             self.ctx,
-            self.client,
             instance_id=f"{identity}/model",
             request_state=self._work("model_input"),
             output_state=self._work("model_output"),
             streaming=self.config["streaming"],
         )
+        model.bind(self.client)
         tools = ToolExecutor(
             self.ctx,
             self.registry,

@@ -1,0 +1,36 @@
+schema_version = 2
+
+[plugins.model]
+entry_point = "aurora_agent.model"
+provider = "aurora_agent"
+title = "模型调用"
+summary = "读取请求状态，调用绑定的模型资源并更新输出状态"
+requires = []
+
+[definitions.MODEL_CALL]
+plugin = "model"
+id = "org.aurora.agent:handlers/model_call"
+kind = "component"
+summary = "模型调用组件"
+
+[definitions.EXECUTE]
+plugin = "model"
+id = "org.aurora.agent:handlers/model_call/execute"
+kind = "hook_handler"
+summary = "模型执行插头"
+register_to = { id = "org.aurora.core:registries/hook_handlers" }
+interface = { definition = { local = "MODEL_CALL" } }
+
+[components.model_call]
+plugin = "model"
+summary = "模型客户端由资源绑定提供，组件不关闭借用的客户端"
+inject = ["ctx", "instance_id", "states", "options"]
+plugs = ["EXECUTE"]
+slots = []
+states = ["input", "output"]
+inputs = ["chat"]
+options = "model_options"
+
+[contracts.model_options]
+format = "json-schema"
+file = "options.schema.json"

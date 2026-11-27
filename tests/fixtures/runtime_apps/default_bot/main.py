@@ -7,7 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import tomli_w
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import plugin as defaults_plugin
 from aurora_bot.assembly import DefaultAssembly

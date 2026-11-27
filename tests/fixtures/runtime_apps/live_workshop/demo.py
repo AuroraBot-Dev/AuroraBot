@@ -10,7 +10,7 @@ from functools import partial
 from typing import cast
 from uuid import uuid4
 
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import plugin as react_plugin
 from aurora_agent.react_defaults import ReActContext
 from aurora_agent.react_defaults import plugin as defaults_plugin

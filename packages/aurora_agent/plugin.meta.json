@@ -1,0 +1,82 @@
+{
+  "schema_version": 2,
+  "distribution": {
+    "name": "aurora-agent",
+    "version": "0.1.0",
+    "description": "Aurora agent execution, model calls and default phases",
+    "requires-python": ">=3.12",
+    "dependencies": ["aurora-core>=0.1.0", "aurora-control>=0.1.0", "aurora-model>=0.1.0", "aurora-tools>=0.1.0"],
+    "entry-points": {
+      "aurora.plugins": {
+        "aurora_agent.model": "aurora_agent.plugins.model:plugin",
+        "aurora_agent.react": "aurora_agent.react:plugin",
+        "aurora_agent.react_defaults": "aurora_agent.react_defaults:plugin"
+      }
+    }
+  },
+  "manifests": {
+    "src/aurora_agent/plugins/model/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "model": {
+          "entry_point": "aurora_agent.model",
+          "provider": "aurora_agent",
+          "title": "模型调用",
+          "summary": "读取请求状态，调用绑定的模型资源并更新输出状态",
+          "requires": [],
+          "factory": "aurora_agent.plugins.model:plugin"
+        }
+      },
+      "definitions": {
+        "MODEL_CALL": {
+          "plugin": "model",
+          "id": "org.aurora.agent:handlers/model_call",
+          "kind": "component",
+          "summary": "模型调用组件"
+        },
+        "EXECUTE": {
+          "plugin": "model",
+          "id": "org.aurora.agent:handlers/model_call/execute",
+          "kind": "hook_handler",
+          "summary": "模型执行插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "local": "MODEL_CALL"
+            }
+          }
+        }
+      },
+      "components": {
+        "model_call": {
+          "plugin": "model",
+          "summary": "模型客户端由资源绑定提供，组件不关闭借用的客户端",
+          "inject": ["ctx", "instance_id", "states", "options"],
+          "plugs": ["EXECUTE"],
+          "slots": [],
+          "states": ["input", "output"],
+          "inputs": ["chat"],
+          "options": "model_options"
+        }
+      },
+      "contracts": {
+        "model_options": {
+          "format": "json-schema",
+          "file": "options.schema.json",
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "streaming": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "streaming": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,194 @@
+{
+  "schema_version": 2,
+  "distribution": {
+    "name": "aurora-control",
+    "version": "0.1.0",
+    "description": "Aurora execution contracts and control components",
+    "requires-python": ">=3.12",
+    "dependencies": ["aurora-core>=0.1.0"],
+    "entry-points": {
+      "aurora.plugins": {
+        "aurora_control": "aurora_control:plugin"
+      }
+    }
+  },
+  "manifests": {
+    "src/aurora_control/plugin.meta.toml": {
+      "schema_version": 2,
+      "plugins": {
+        "control": {
+          "entry_point": "aurora_control",
+          "title": "执行控制组件",
+          "summary": "通过实例端口和状态绑定组合执行",
+          "requires": [],
+          "factory": "aurora_control:plugin"
+        }
+      },
+      "definitions": {
+        "CONTROL": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control",
+          "kind": "component",
+          "summary": "通用控制组件"
+        },
+        "CONTROL_EXECUTE": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/execute",
+          "kind": "hook_handler",
+          "summary": "通用控制执行插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "local": "CONTROL"
+            }
+          }
+        },
+        "CONTROL_CHILDREN": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/children",
+          "kind": "hook_slot",
+          "summary": "通用控制子组件槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "SERIAL": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/serial",
+          "kind": "component",
+          "summary": "串行组件"
+        },
+        "SERIAL_EXECUTE": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/serial/execute",
+          "kind": "hook_handler",
+          "summary": "串行执行插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "local": "SERIAL"
+            }
+          }
+        },
+        "SERIAL_CHILDREN": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/serial/children",
+          "kind": "hook_slot",
+          "summary": "串行子组件槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "BRANCH": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/branch",
+          "kind": "component",
+          "summary": "分支组件"
+        },
+        "BRANCH_EXECUTE": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/branch/execute",
+          "kind": "hook_handler",
+          "summary": "分支执行插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "local": "BRANCH"
+            }
+          }
+        },
+        "BRANCH_CHILDREN": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/branch/children",
+          "kind": "hook_slot",
+          "summary": "分支子组件槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "WHILE": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/while",
+          "kind": "component",
+          "summary": "循环组件"
+        },
+        "WHILE_EXECUTE": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/while/execute",
+          "kind": "hook_handler",
+          "summary": "循环执行插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "local": "WHILE"
+            }
+          }
+        },
+        "WHILE_CHILDREN": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/while/children",
+          "kind": "hook_slot",
+          "summary": "循环子组件槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "PARALLEL": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/parallel",
+          "kind": "component",
+          "summary": "并行组件"
+        },
+        "PARALLEL_EXECUTE": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/parallel/execute",
+          "kind": "hook_handler",
+          "summary": "并行执行插头",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_handlers"
+          },
+          "interface": {
+            "definition": {
+              "local": "PARALLEL"
+            }
+          }
+        },
+        "PARALLEL_CHILDREN": {
+          "plugin": "control",
+          "id": "org.aurora.control:handlers/control/parallel/children",
+          "kind": "hook_slot",
+          "summary": "并行子组件槽",
+          "register_to": {
+            "id": "org.aurora.core:registries/hook_slots"
+          }
+        },
+        "CONTROL_STATE": {
+          "plugin": "control",
+          "id": "org.aurora.control:state/control",
+          "kind": "state_key",
+          "summary": "在途执行状态",
+          "register_to": {
+            "id": "org.aurora.core:registries/state_keys"
+          }
+        }
+      },
+      "components": {
+        "serial": {
+          "plugin": "control",
+          "summary": "串行等待显式连接的子组件",
+          "inject": ["ctx", "hooks", "instance_id", "states"],
+          "plugs": ["SERIAL_EXECUTE"],
+          "slots": ["SERIAL_CHILDREN"]
+        }
+      }
+    }
+  }
+}

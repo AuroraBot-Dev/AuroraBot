@@ -20,6 +20,8 @@ packages = []
 
 [dependency-groups]
 dev = [
+    "aurora-meta-build==0.1.0",
+    "hatchling",
     "pytest>=8",
     "pytest-cov>=6",
     "pytest-xdist>=3.8.0",
@@ -57,6 +59,7 @@ venvPath = "."
 venv = ".venv"
 include = [
     "packages/*/src",
+    "tooling/aurora_meta_build/src",
     "packages/*/tests",
     "tests",
     "conftest.py",
@@ -65,6 +68,7 @@ include = [
 ]
 exclude = ["**/__pycache__", "**/node_modules", ".venv", "build", "dist"]
 extraPaths = [
+    "tooling/aurora_meta_build/src",
     "packages/aurora_model/src",
     "packages/aurora_mcp/src",
     "packages/aurora_config/src",
@@ -81,6 +85,7 @@ extraPaths = [
 
 [tool.uv.workspace]
 members = [
+    "tooling/aurora_meta_build",
     "packages/aurora_model",
     "packages/aurora_mcp",
     "packages/aurora_config",
@@ -96,6 +101,7 @@ members = [
 ]
 
 [tool.uv.sources]
+aurora-meta-build = { workspace = true }
 aurora-model = { workspace = true }
 aurora-mcp = { workspace = true }
 aurora-config = { workspace = true }

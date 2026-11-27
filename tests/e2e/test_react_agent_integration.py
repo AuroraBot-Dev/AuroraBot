@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 from aurora_agent.model import ModelCall, ModelCallState
-from aurora_agent.model import plugin as model_plugin
+from aurora_agent.plugins.model import plugin as model_plugin
 from aurora_agent.react import Guidance, ReActAgent
 from aurora_agent.react import plugin as react_plugin
 from aurora_control import ExecutionPlug, ExecutionRequest, InstanceStateBinding, StateBinding, component_entries
@@ -73,7 +73,8 @@ def assemble(data_dir, *, fail_tool=False, fail_model=False):
         return FakeReply(("准备计算",), tool_calls=({"id": "add-1", "name": "add", "arguments": {"a": 2, "b": 3}},))
 
     client = FakeModel(respond)
-    model = ModelCall(ctx, client, request_state=model_input, output_state=model_output, instance_id="model")
+    model = ModelCall(ctx, request_state=model_input, output_state=model_output, instance_id="model")
+    model.bind(client)
 
     def messages(request) -> list[Message]:
         try:
